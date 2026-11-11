@@ -2,7 +2,22 @@
 -- Run with: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-set search_path = public, extensions;
+-- pgTAP may live in a different schema (the CLI installs it itself on hosted
+-- projects), so find it rather than assume.
+do $$
+begin
+  perform set_config(
+    'search_path',
+    'public, extensions, ' || (
+      select quote_ident(n.nspname)
+      from pg_extension e
+      join pg_namespace n on n.oid = e.extnamespace
+      where e.extname = 'pgtap'
+    ),
+    true
+  );
+end
+$$;
 
 select plan(22);
 

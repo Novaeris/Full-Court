@@ -32,3 +32,6 @@ Thumbs.db
 *.pem
 *.log
 .vercel
+
+# editor settings
+.vscode/
