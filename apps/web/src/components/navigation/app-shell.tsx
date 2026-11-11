@@ -3,6 +3,7 @@ import { Suspense, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Icon } from "@/components/ui/icon";
 import { Sheet } from "@/components/ui/sheet";
+import { SignedInOnly, SignOutButton } from "@/components/auth/sign-out";
 import { AccountSlot } from "./account-slot";
 import { Brand, SkipLink } from "./brand";
 import { APP_NAV, SECONDARY_NAV } from "./nav-config";
@@ -69,6 +70,12 @@ export function AppShell({
             </Sheet>
           </div>
           {accountSlot}
+          {/* Tablet uses the More sheet; desktop gets a row here. */}
+          <div className="hidden w-full desktop:block">
+            <SignedInOnly>
+              <SignOutButton look="sidebar" />
+            </SignedInOnly>
+          </div>
         </div>
       </aside>
 
@@ -137,6 +144,11 @@ function MoreSheetContent() {
         <p className="mb-2 text-sm font-semibold text-text-muted">Theme</p>
         <ThemeToggle />
       </div>
+      <SignedInOnly>
+        <div className="border-t border-border pt-4">
+          <SignOutButton look="row" />
+        </div>
+      </SignedInOnly>
     </div>
   );
 }

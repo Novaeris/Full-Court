@@ -19,6 +19,7 @@ const PATHS = {
   calendar: "M3 5h18v16H3zM16 3v4M8 3v4M3 10h18",
   swap: "M7 7h13l-3-3M17 17H4l3 3",
   arrowRight: "M5 12h14M13 6l6 6-6 6",
+  signOut: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   palette:
     "M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.4 3.4A2 2 0 0 1 12 22ZM7.5 11h.01M10.5 7h.01M15.5 8h.01",
 } as const;

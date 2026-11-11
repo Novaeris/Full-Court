@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { SignOutButton } from "@/components/auth/sign-out";
 import { ButtonLink } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { getCurrentUser } from "@/server/auth/session";
@@ -52,9 +53,12 @@ function Actions({
 
   if (placement === "menu") {
     return signedIn ? (
-      <ButtonLink href="/leagues" className="w-full">
-        Open the app
-      </ButtonLink>
+      <div className="flex flex-col gap-3">
+        <ButtonLink href="/leagues" className="w-full">
+          Open the app
+        </ButtonLink>
+        <SignOutButton look="row" />
+      </div>
     ) : (
       <div className="flex flex-col gap-3">
         <ButtonLink href="/signup" className="w-full">
@@ -68,7 +72,10 @@ function Actions({
   }
 
   return signedIn ? (
-    <ButtonLink href="/leagues">Open the app</ButtonLink>
+    <div className="flex items-center gap-1">
+      <SignOutButton look="header" />
+      <ButtonLink href="/leagues">Open the app</ButtonLink>
+    </div>
   ) : (
     <div className="flex items-center gap-1">
       <Link

@@ -118,7 +118,10 @@ test("sign in, return to the requested page, then sign out", async ({
   await expect(page).toHaveURL(/\/leagues$/);
 
   await page.goto("/account");
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page
+    .getByRole("region", { name: "Sign out" })
+    .getByRole("button", { name: "Sign out" })
+    .click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/account");
   await expect(page).toHaveURL(/\/login/);

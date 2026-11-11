@@ -112,6 +112,9 @@ export async function signInThroughUi(
 
 export async function signOutThroughUi(page: Page): Promise<void> {
   await page.goto("/account");
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page
+    .getByRole("region", { name: "Sign out" })
+    .getByRole("button", { name: "Sign out" })
+    .click();
   await expect(page).toHaveURL(/\/$/);
 }
