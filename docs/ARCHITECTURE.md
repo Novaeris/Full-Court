@@ -36,6 +36,7 @@ packages/
 supabase/         config.toml, migrations/, tests/ (pgTAP)
 e2e/              Playwright specs for the web app
 scripts/          verify, boundary check, secret scan
+.github/          CI workflow that runs pnpm verify
 docs/             this file, DESIGN, MOBILE, DESKTOP, operations
 ```
 
@@ -215,4 +216,4 @@ The website must work well on phones, tablets and desktops. Layouts change shape
 
 ## 7. Verification
 
-`pnpm verify` is the gate before every push. It runs the secret scan, boundary check, tooling tests, typecheck, lint, format check and unit tests. Before a phase ends, `pnpm test:e2e` also runs. From Phase 2, `supabase db reset` and `supabase test db` run too.
+`pnpm verify` is the gate before every push. It runs the secret scan, boundary check, tooling tests, typecheck, lint, format check and unit tests. GitHub Actions (`.github/workflows/verify.yml`) runs `pnpm verify` again on every pull request and every push to `main`, using no secrets. E2E tests stay local for now because they need a local Supabase. Before a phase ends, `pnpm test:e2e` also runs. From Phase 2, `supabase db reset` and `supabase test db` run too.
