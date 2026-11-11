@@ -1,0 +1,22 @@
+{
+  "name": "@fullcourt/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed, platform-neutral client for the Full Court application API.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fullcourt/validation": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

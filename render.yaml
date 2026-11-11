@@ -1,0 +1,33 @@
+# Render Blueprint for Full Court (docs/ARCHITECTURE.md, "Deployment").
+# Staging only for now. Secrets are set in the Render dashboard (sync: false),
+# never in this public file.
+services:
+  - type: web
+    name: full-court-staging
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm exec turbo run build --filter=@fullcourt/web...
+    startCommand: pnpm --filter @fullcourt/web start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - apps/web/**
+        - packages/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - turbo.json
+        - tsconfig.base.json
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false

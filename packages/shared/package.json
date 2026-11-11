@@ -1,0 +1,20 @@
+{
+  "name": "@fullcourt/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tiny platform-free utilities shared by every package and app.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

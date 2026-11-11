@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Native build scripts that are allowed to run on install.
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver
+  - esbuild
