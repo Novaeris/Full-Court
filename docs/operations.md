@@ -2,11 +2,11 @@
 
 ## Environments
 
-| Environment | Database                                 | Web                                | Notes                            |
-| ----------- | ---------------------------------------- | ---------------------------------- | -------------------------------- |
-| Local       | `supabase start` (Docker)                | `pnpm dev` (http://localhost:3000) | Studio at http://127.0.0.1:54323 |
-| Staging     | Supabase project (Free plan)             | Render `full-court-staging`        | Deploys from `main`              |
-| Production  | Added at the launch gates (Supabase Pro) | Added at the launch gates          |                                  |
+| Environment | Database                                            | Web                                                                   | Notes                            |
+| ----------- | --------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
+| Local       | `supabase start` (Docker)                           | `pnpm dev` (http://localhost:3000)                                    | Studio at http://127.0.0.1:54323 |
+| Staging     | Supabase `kxstopoecleaozqtjtmz` (Free, N. Virginia) | Render `full-court-staging` (https://full-court-staging.onrender.com) | Deploys from `main`              |
+| Production  | Added at the launch gates (Supabase Pro)            | Added at the launch gates                                             |                                  |
 
 ## Secrets inventory
 
@@ -21,10 +21,10 @@ The repository is public. Secrets live only in the Render dashboard and in git-i
 
 ## Supabase redirect allowlist
 
-| Environment | Site URL               | Additional redirect URLs     |
-| ----------- | ---------------------- | ---------------------------- |
-| Local       | http://127.0.0.1:3000  | http://localhost:3000/**     |
-| Staging     | the Render staging URL | the Render staging URL `/**` |
+| Environment | Site URL                                | Additional redirect URLs                   |
+| ----------- | --------------------------------------- | ------------------------------------------ |
+| Local       | http://127.0.0.1:3000                   | http://localhost:3000/**                   |
+| Staging     | https://full-court-staging.onrender.com | https://full-court-staging.onrender.com/** |
 
 Mobile and desktop schemes (`fullcourt://…`) are added when those apps start.
 
