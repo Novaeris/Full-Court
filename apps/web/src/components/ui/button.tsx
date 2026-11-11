@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const base =
   "inline-flex min-h-touch items-center justify-center gap-2 rounded-md px-5 text-base font-semibold transition-colors duration-(--fc-duration-fast) disabled:cursor-not-allowed disabled:opacity-60";
@@ -10,6 +10,7 @@ const variants: Record<Variant, string> = {
   primary: "bg-accent text-on-accent hover:bg-accent-strong",
   secondary: "border border-border bg-surface text-text hover:bg-surface-muted",
   ghost: "text-text hover:bg-surface-muted",
+  danger: "bg-danger text-surface hover:opacity-90",
 };
 
 export function buttonClasses(variant: Variant = "primary", extra = "") {

@@ -8,3 +8,5 @@ test-results/
 supabase/.temp/
 apps/web/AGENTS.md
 apps/web/src/styles/tokens.css
+packages/api-client/src/database.types.ts
+supabase/templates/

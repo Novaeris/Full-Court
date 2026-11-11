@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
  * Visual baselines for review. After an intended UI change, regenerate with
  * `pnpm test:e2e:update` and look at every changed image before committing.
  */
-const SHOTS = ["/", "/leagues", "/styleguide"] as const;
+const SHOTS = ["/", "/login", "/styleguide"] as const;
 
 for (const path of SHOTS) {
   for (const scheme of ["light", "dark"] as const) {

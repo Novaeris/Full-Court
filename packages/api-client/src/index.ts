@@ -1,14 +1,21 @@
 import {
   ApiErrorSchema,
+  DeleteAccountResponseSchema,
   HealthResponseSchema,
+  ProfileSchema,
+  type DeleteAccountRequest,
   type HealthResponse,
+  type Profile,
+  type UpdateProfileRequest,
 } from "@fullcourt/validation";
+
+export type { Database, Json } from "./database.types";
 
 /**
  * Typed client for the Full Court application API (/api/v1).
  *
- * Platform-neutral: the caller supplies `fetch` and, once accounts exist, a
- * way to read the current access token. Web, mobile and desktop all use it.
+ * Platform-neutral: the caller supplies `fetch` and a way to read the
+ * current Supabase access token. Web, mobile and desktop all use it.
  */
 export interface ApiClientOptions {
   /** Origin of the web service, e.g. "https://fullcourt.example". */
@@ -30,22 +37,31 @@ export class ApiRequestError extends Error {
   }
 }
 
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
+
 export function createApiClient(options: ApiClientOptions) {
   const base = options.baseUrl.replace(/\/+$/, "");
 
   async function request<T>(
+    method: Method,
     path: string,
     parse: (body: unknown) => T,
+    body?: unknown,
   ): Promise<T> {
     const headers: Record<string, string> = { accept: "application/json" };
     const token = await options.getAccessToken?.();
     if (token) {
       headers.authorization = `Bearer ${token}`;
     }
-    const response = await options.fetch(`${base}/api/v1${path}`, { headers });
-    const body: unknown = await response.json().catch(() => null);
+    const init: RequestInit = { method, headers };
+    if (body !== undefined) {
+      headers["content-type"] = "application/json";
+      init.body = JSON.stringify(body);
+    }
+    const response = await options.fetch(`${base}/api/v1${path}`, init);
+    const json: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const parsed = ApiErrorSchema.safeParse(body);
+      const parsed = ApiErrorSchema.safeParse(json);
       throw parsed.success
         ? new ApiRequestError(
             response.status,
@@ -58,12 +74,28 @@ export function createApiClient(options: ApiClientOptions) {
             `Request failed with ${response.status}`,
           );
     }
-    return parse(body);
+    return parse(json);
   }
 
   return {
     health: (): Promise<HealthResponse> =>
-      request("/health", (body) => HealthResponseSchema.parse(body)),
+      request("GET", "/health", (b) => HealthResponseSchema.parse(b)),
+
+    /** The signed-in user's profile. */
+    me: (): Promise<Profile> =>
+      request("GET", "/me", (b) => ProfileSchema.parse(b)),
+
+    updateMe: (input: UpdateProfileRequest): Promise<Profile> =>
+      request("PATCH", "/me", (b) => ProfileSchema.parse(b), input),
+
+    /** Permanently deletes the account and all of its data. */
+    deleteMe: (input: DeleteAccountRequest): Promise<{ deleted: true }> =>
+      request(
+        "DELETE",
+        "/me",
+        (b) => DeleteAccountResponseSchema.parse(b),
+        input,
+      ),
   };
 }
 

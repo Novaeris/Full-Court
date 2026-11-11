@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:24px;background:#f6f4f1;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#1b1d22">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #d6d0c7;border-radius:16px;padding:32px">
+      <h1 style="margin:0 0 16px;font-size:24px">Reset your password</h1>
+      <p style="margin:0 0 24px;font-size:16px;line-height:24px">
+        Someone asked to reset the password for your Full Court account. Use the button below to choose a new one.
+      </p>
+      <p style="margin:0 0 24px">
+        <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery"
+           style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px">
+          Choose a new password
+        </a>
+      </p>
+      <p style="margin:0;font-size:14px;line-height:20px;color:#545a68">
+        If you didn't ask for this, ignore this email. Your password stays the same.
+      </p>
+    </div>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { PAGES } from "./pages";
+import { PAGES, PROTECTED } from "./pages";
 
 async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(
@@ -47,6 +47,17 @@ for (const { path, heading } of PAGES) {
       await page.goto(path);
       expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
     });
+  });
+}
+
+for (const path of PROTECTED) {
+  test(`${path} sends visitors to sign in and back`, async ({ page }) => {
+    await page.goto(path);
+    // The check runs while the page streams, so the redirect lands after load.
+    await expect(page).toHaveURL(/\/login\?/);
+    const url = new URL(page.url());
+    expect(url.pathname).toBe("/login");
+    expect(url.searchParams.get("next")).toBe(path);
   });
 }
 

@@ -20,7 +20,9 @@
     "boundaries": "node scripts/check-boundaries.mjs",
     "secrets": "node scripts/scan-secrets.mjs",
     "verify": "node scripts/verify.mjs",
-    "test:e2e:update": "playwright test --update-snapshots"
+    "test:e2e:update": "playwright test --update-snapshots",
+    "db:types": "supabase gen types typescript --local --schema public > packages/api-client/src/database.types.ts",
+    "scan:bundle": "node scripts/scan-bundle.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
@@ -28,6 +30,7 @@
     "@fullcourt/api-client": "workspace:*",
     "@next/eslint-plugin-next": "16.4.6",
     "@playwright/test": "1.65.0",
+    "@supabase/supabase-js": "2.119.0",
     "@types/node": "24.19.2",
     "eslint": "10.14.0",
     "eslint-config-next": "16.4.6",

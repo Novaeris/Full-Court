@@ -146,3 +146,37 @@ describe("scan-secrets", () => {
     ).toEqual([]);
   });
 });
+
+describe("scan-bundle", () => {
+  const b64 = (value) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const jwt = (payload) =>
+    `${b64({ alg: "HS256" })}.${b64(payload)}.abcdefghijklmnop`;
+
+  it("flags a service_role JWT but not an anon one", async () => {
+    const { findBundleSecrets } = await import("./scan-bundle.mjs");
+    const pad = { iss: "supabase-demo", exp: 1983812996 };
+    expect(
+      findBundleSecrets(`x="${jwt({ ...pad, role: "service_role" })}"`),
+    ).toEqual(["service_role JWT"]);
+    expect(findBundleSecrets(`x="${jwt({ ...pad, role: "anon" })}"`)).toEqual(
+      [],
+    );
+  });
+
+  it("flags secret keys and the configured secret value", async () => {
+    const { findBundleSecrets } = await import("./scan-bundle.mjs");
+    expect(
+      findBundleSecrets("k='sb_" + "secret_abcdefghijklmnop'"),
+    ).toHaveLength(1);
+    expect(
+      findBundleSecrets(
+        "k='my-very-long-secret-value'",
+        "my-very-long-secret-value",
+      ),
+    ).toHaveLength(1);
+    expect(findBundleSecrets("k='sb_publishable_abcdefghijklmnop'")).toEqual(
+      [],
+    );
+  });
+});

@@ -224,6 +224,7 @@ export function checkWorkspace(rootDir) {
       [
         "pnpm-lock.yaml",
         "scripts/check-boundaries.mjs",
+        "scripts/scan-bundle.mjs",
         "scripts/tooling.test.mjs",
       ].includes(rel)
     )

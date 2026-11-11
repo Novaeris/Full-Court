@@ -15,3 +15,5 @@ export const HealthResponseSchema = z.object({
   version: z.string(),
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+export * from "./account";

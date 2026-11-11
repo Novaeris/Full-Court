@@ -104,6 +104,8 @@ export const contrastRequirements: readonly {
   { fg: "loss", bg: "surface", min: 4.5 },
   { fg: "warning", bg: "surface", min: 4.5 },
   { fg: "danger", bg: "surface", min: 4.5 },
+  // Destructive buttons: surface-colored text on danger.
+  { fg: "surface", bg: "danger", min: 4.5 },
   { fg: "focus", bg: "canvas", min: 3 },
   { fg: "focus", bg: "surface", min: 3 },
 ];

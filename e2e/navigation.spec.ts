@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createConfirmedUser, signInThroughUi } from "./support/auth";
 
 /**
  * Navigation changes form with the screen (docs/ARCHITECTURE.md §5):
@@ -11,7 +12,8 @@ const sidebar = (page: Page) => page.locator("aside nav[aria-label=Main]");
 test("app navigation takes the right form for the screen", async ({
   page,
 }, testInfo) => {
-  await page.goto("/leagues");
+  const { email, password } = await createConfirmedUser("nav");
+  await signInThroughUi(page, email, password);
   const isPhone = testInfo.project.name === "phone";
 
   if (isPhone) {
@@ -42,7 +44,8 @@ test("phone: the More sheet opens, links work and Escape closes it", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "phone", "phone layout only");
-  await page.goto("/leagues");
+  const { email, password } = await createConfirmedUser("more");
+  await signInThroughUi(page, email, password);
 
   const more = page.getByRole("button", { name: "More" });
   const sheet = page.getByRole("dialog", { name: "More" });
@@ -81,7 +84,7 @@ test("site header: menu sheet on phones, inline links on larger screens", async 
 
 test("skip link jumps to the main content", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === "phone", "needs a keyboard");
-  await page.goto("/leagues");
+  await page.goto("/about");
   await page.keyboard.press("Tab");
   const skip = page.getByRole("link", { name: "Skip to content" });
   await expect(skip).toBeFocused();

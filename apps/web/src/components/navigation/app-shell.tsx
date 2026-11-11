@@ -3,6 +3,7 @@ import { Suspense, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Icon } from "@/components/ui/icon";
 import { Sheet } from "@/components/ui/sheet";
+import { AccountSlot } from "./account-slot";
 import { Brand, SkipLink } from "./brand";
 import { APP_NAV, SECONDARY_NAV } from "./nav-config";
 import { NavLinks, NavLinksFallback } from "./nav-links";
@@ -19,10 +20,10 @@ export function AppShell({
   account,
 }: {
   children: ReactNode;
-  /** Account menu slot. Phase 2 fills it; signed-out until then. */
+  /** Overrides the account area (tests, previews). Defaults to the signed-in user. */
   account?: ReactNode;
 }) {
-  const accountSlot = account ?? <SignedOutAccount />;
+  const accountSlot = account ?? <AccountSlot />;
   return (
     <div className="min-h-dvh tablet:grid tablet:grid-cols-[var(--spacing-rail)_minmax(0,1fr)] desktop:grid-cols-[var(--spacing-sidebar)_minmax(0,1fr)]">
       <SkipLink />
@@ -137,18 +138,5 @@ function MoreSheetContent() {
         <ThemeToggle />
       </div>
     </div>
-  );
-}
-
-/** Signed-out account slot until accounts exist (Phase 2). */
-function SignedOutAccount() {
-  return (
-    <Link
-      href="/account"
-      className="inline-flex min-h-touch items-center gap-2 rounded-full px-3 text-sm font-semibold text-text-muted hover:bg-surface-muted hover:text-text"
-    >
-      <Icon name="user" className="size-5" />
-      <span className="tablet:sr-only desktop:not-sr-only">Sign in</span>
-    </Link>
   );
 }
