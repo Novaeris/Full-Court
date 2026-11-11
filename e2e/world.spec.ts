@@ -8,6 +8,8 @@ import {
 } from "./support/auth";
 
 async function expectAccessible(page: Page) {
+  // Streamed pages send <title> with the streamed content; wait for it.
+  await expect(page).toHaveTitle(/\S/);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();

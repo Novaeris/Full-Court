@@ -20,6 +20,8 @@ test.describe("signed-in account page", () => {
     for (const scheme of ["light", "dark"] as const) {
       // Reduced motion turns colour transitions off, so axe sees final colours.
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+      // Streamed pages send <title> with the streamed content; wait for it.
+      await expect(page).toHaveTitle(/\S/);
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
         .analyze();
