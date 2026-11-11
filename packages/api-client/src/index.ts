@@ -1,5 +1,12 @@
 import {
   ApiErrorSchema,
+  DeleteLeagueResponseSchema,
+  LeagueListSchema,
+  LeagueSchema,
+  type CreateLeagueRequest,
+  type League,
+  type LeagueList,
+  type RenameLeagueRequest,
   DeleteAccountResponseSchema,
   HealthResponseSchema,
   ProfileSchema,
@@ -87,6 +94,29 @@ export function createApiClient(options: ApiClientOptions) {
 
     updateMe: (input: UpdateProfileRequest): Promise<Profile> =>
       request("PATCH", "/me", (b) => ProfileSchema.parse(b), input),
+
+    /** Saved leagues (save slots). */
+    leagues: {
+      list: (): Promise<LeagueList> =>
+        request("GET", "/leagues", (b) => LeagueListSchema.parse(b)),
+      create: (input: CreateLeagueRequest): Promise<League> =>
+        request("POST", "/leagues", (b) => LeagueSchema.parse(b), input),
+      get: (id: string): Promise<League> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}`, (b) =>
+          LeagueSchema.parse(b),
+        ),
+      rename: (id: string, input: RenameLeagueRequest): Promise<League> =>
+        request(
+          "PATCH",
+          `/leagues/${encodeURIComponent(id)}`,
+          (b) => LeagueSchema.parse(b),
+          input,
+        ),
+      delete: (id: string): Promise<{ deleted: true }> =>
+        request("DELETE", `/leagues/${encodeURIComponent(id)}`, (b) =>
+          DeleteLeagueResponseSchema.parse(b),
+        ),
+    },
 
     /** Permanently deletes the account and all of its data. */
     deleteMe: (input: DeleteAccountRequest): Promise<{ deleted: true }> =>

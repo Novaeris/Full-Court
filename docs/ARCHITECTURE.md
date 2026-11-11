@@ -123,6 +123,17 @@ Rule: if a write needs game rules or touches more than one aggregate, it goes th
 - **No client access by default.** The baseline migration revokes the grants Supabase normally gives `anon` and `authenticated` on new objects in `public`. A migration that adds a table must enable RLS, write policies, and grant only what clients need. pgTAP tests prove one user can't read or change another user's data.
 - **Internal tables** (job queue internals, audit logs) live in a schema the Data API doesn't expose.
 
+### Current tables
+
+| Table      | Owner check             | Client grants                 | Writes that must go through a function                                                               |
+| ---------- | ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `profiles` | `id = auth.uid()`       | select; update `display_name` | Created by the sign-up trigger; removed by `delete_own_account()`                                    |
+| `leagues`  | `owner_id = auth.uid()` | select, delete; update `name` | Created only by `create_league(name)`, which enforces the 5-per-account limit under an advisory lock |
+
+- **Not found, not forbidden.** Another user's row isn't visible under RLS, so the services report `404 league_not_found` rather than revealing that it exists.
+- **Cascades.** Deleting the auth user cascades to profiles and leagues. Every future table hangs off `league_id` with `on delete cascade`, so deleting a league deletes everything in it.
+- **Pages and the API share one service layer.** `/leagues`, `/leagues/new` and `/leagues/[leagueId]/…` use Server Actions, and `GET`/`POST /api/v1/leagues` plus `GET`/`PATCH`/`DELETE /api/v1/leagues/:leagueId` serve other clients. Both call `apps/web/src/server/services/leagues.ts`.
+
 ### Secrets and the service role
 
 - The Supabase **publishable (anon) key** is public by design and may go to browsers and apps. RLS protects the data.

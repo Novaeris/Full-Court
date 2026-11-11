@@ -59,7 +59,17 @@ function describeIssues(
     .join("; ");
 }
 
-type HandlerContext<Body> = { request: Request; body: Body };
+type Params = Record<string, string | string[] | undefined>;
+
+type HandlerContext<Body> = {
+  request: Request;
+  body: Body;
+  /** Dynamic route segments, e.g. { leagueId } for /leagues/[leagueId]. */
+  params: Params;
+};
+
+/** The second argument Next passes to route handlers. */
+type RouteHandlerContext = { params: Promise<Params> };
 
 /**
  * Wraps a route handler. Always runs at request time (never prerendered),
@@ -71,8 +81,8 @@ export function apiRoute<Res, Body = undefined>(options: {
   body?: Schema<Body>;
   status?: number;
   handler: (context: HandlerContext<Body>) => Res | Promise<Res>;
-}): (request: Request) => Promise<Response> {
-  return async (request) => {
+}): (request: Request, context?: RouteHandlerContext) => Promise<Response> {
+  return async (request, context) => {
     await connection();
     try {
       let body = undefined as Body;
@@ -98,7 +108,8 @@ export function apiRoute<Res, Body = undefined>(options: {
         body = parsed.data;
       }
 
-      const result = await options.handler({ request, body });
+      const params = (await context?.params) ?? {};
+      const result = await options.handler({ request, body, params });
       const checked = options.response.safeParse(result);
       if (!checked.success) {
         // A server bug: the handler broke the shared contract.

@@ -14,7 +14,7 @@ import type { AuthError } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import type { FormState } from "@/components/forms/form";
 import { createCookieClient } from "@/lib/supabase/server";
-import { ApiError } from "@/server/api/handler";
+import { invalid, serviceMessage, text } from "@/server/forms";
 import {
   deleteAccount,
   requirePassword,
@@ -28,33 +28,6 @@ import { getUserContext } from "./session";
  * Server Actions behind the account forms. Each one validates its input with
  * the shared schemas and checks the session itself; nothing trusts the form.
  */
-
-type Issues = {
-  issues: readonly { path: readonly PropertyKey[]; message: string }[];
-};
-
-function fieldErrors(error: Issues): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const key = String(issue.path[0] ?? "form");
-    out[key] ??= issue.message;
-  }
-  return out;
-}
-
-function invalid(error: Issues, values?: Record<string, string>): FormState {
-  return {
-    status: "error",
-    message: "Check the highlighted fields.",
-    fieldErrors: fieldErrors(error),
-    ...(values ? { values } : {}),
-  };
-}
-
-const text = (form: FormData, name: string) => {
-  const value = form.get(name);
-  return typeof value === "string" ? value : "";
-};
 
 /** Plain-language messages for Supabase Auth errors. */
 function authMessage(error: AuthError): string {
@@ -77,12 +50,6 @@ function authMessage(error: AuthError): string {
     default:
       return "Something went wrong. Please try again.";
   }
-}
-
-function serviceMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  console.error(error);
-  return "Something went wrong. Please try again.";
 }
 
 // Signing up and in --------------------------------------------------------------

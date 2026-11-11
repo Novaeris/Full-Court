@@ -9,6 +9,33 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      leagues: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -35,7 +62,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_league: {
+        Args: { league_name: string }
+        Returns: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       delete_own_account: { Args: never; Returns: undefined }
+      league_limit: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never
