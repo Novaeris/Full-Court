@@ -19,10 +19,13 @@
     "format:check": "prettier --check .",
     "boundaries": "node scripts/check-boundaries.mjs",
     "secrets": "node scripts/scan-secrets.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "test:e2e:update": "playwright test --update-snapshots"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
+    "@fullcourt/api-client": "workspace:*",
     "@next/eslint-plugin-next": "16.4.6",
     "@playwright/test": "1.65.0",
     "@types/node": "24.19.2",

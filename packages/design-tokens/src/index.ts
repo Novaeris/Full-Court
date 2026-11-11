@@ -1,12 +1,25 @@
 /**
- * Design tokens shared by every platform. Phase 1 adds the full semantic
- * palette, type scale and the generator that writes web CSS variables.
+ * Design tokens shared by every platform: the web app consumes them as CSS
+ * variables (see renderWebCss), React Native will consume the objects.
  */
-export const breakpoints = {
-  /** Phones are everything below `tablet`. */
-  tablet: 640,
-  desktop: 1024,
-  wide: 1440,
-} as const;
-
-export type Breakpoint = keyof typeof breakpoints;
+export {
+  colorTokenNames,
+  colors,
+  contrastRatio,
+  contrastRequirements,
+  relativeLuminance,
+  type ColorTheme,
+  type ColorToken,
+  type ThemeName,
+} from "./color";
+export {
+  breakpoints,
+  fontSize,
+  fontWeight,
+  layout,
+  motion,
+  radius,
+  zIndex,
+  type Breakpoint,
+} from "./scale";
+export { renderWebCss } from "./web-css";

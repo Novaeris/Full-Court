@@ -1,10 +1,9 @@
-import { connection } from "next/server";
-import { healthResponse } from "@/server/health";
+import { HealthResponseSchema } from "@fullcourt/validation";
+import { apiRoute } from "@/server/api/handler";
+import { buildVersion } from "@/server/health";
 
 /** Render's health check. Always answered at request time, never prerendered. */
-export async function GET() {
-  await connection();
-  return Response.json(healthResponse(), {
-    headers: { "cache-control": "no-store" },
-  });
-}
+export const GET = apiRoute({
+  response: HealthResponseSchema,
+  handler: () => ({ status: "ok" as const, version: buildVersion() }),
+});

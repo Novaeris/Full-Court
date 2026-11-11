@@ -1,0 +1,135 @@
+/* Generated from @fullcourt/design-tokens. Do not edit by hand. */
+/* Regenerate with: pnpm --filter @fullcourt/web tokens */
+
+:root {
+  color-scheme: light;
+  --fc-color-canvas: #f6f4f1;
+  --fc-color-surface: #ffffff;
+  --fc-color-surface-muted: #efece7;
+  --fc-color-border: #d6d0c7;
+  --fc-color-text: #1b1d22;
+  --fc-color-text-muted: #545a68;
+  --fc-color-accent: #c2410c;
+  --fc-color-accent-strong: #9a3412;
+  --fc-color-on-accent: #ffffff;
+  --fc-color-accent-soft: #fdebdd;
+  --fc-color-on-accent-soft: #7c2d12;
+  --fc-color-focus: #2563eb;
+  --fc-color-win: #15803d;
+  --fc-color-loss: #b91c1c;
+  --fc-color-warning: #8a5a00;
+  --fc-color-danger: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --fc-color-canvas: #0e1116;
+    --fc-color-surface: #161a21;
+    --fc-color-surface-muted: #1f242d;
+    --fc-color-border: #323946;
+    --fc-color-text: #eceef2;
+    --fc-color-text-muted: #a3a9b6;
+    --fc-color-accent: #f97316;
+    --fc-color-accent-strong: #fb923c;
+    --fc-color-on-accent: #111317;
+    --fc-color-accent-soft: #3a2416;
+    --fc-color-on-accent-soft: #fed7aa;
+    --fc-color-focus: #60a5fa;
+    --fc-color-win: #4ade80;
+    --fc-color-loss: #f87171;
+    --fc-color-warning: #facc15;
+    --fc-color-danger: #f87171;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fc-color-canvas: #0e1116;
+  --fc-color-surface: #161a21;
+  --fc-color-surface-muted: #1f242d;
+  --fc-color-border: #323946;
+  --fc-color-text: #eceef2;
+  --fc-color-text-muted: #a3a9b6;
+  --fc-color-accent: #f97316;
+  --fc-color-accent-strong: #fb923c;
+  --fc-color-on-accent: #111317;
+  --fc-color-accent-soft: #3a2416;
+  --fc-color-on-accent-soft: #fed7aa;
+  --fc-color-focus: #60a5fa;
+  --fc-color-win: #4ade80;
+  --fc-color-loss: #f87171;
+  --fc-color-warning: #facc15;
+  --fc-color-danger: #f87171;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-canvas: var(--fc-color-canvas);
+  --color-surface: var(--fc-color-surface);
+  --color-surface-muted: var(--fc-color-surface-muted);
+  --color-border: var(--fc-color-border);
+  --color-text: var(--fc-color-text);
+  --color-text-muted: var(--fc-color-text-muted);
+  --color-accent: var(--fc-color-accent);
+  --color-accent-strong: var(--fc-color-accent-strong);
+  --color-on-accent: var(--fc-color-on-accent);
+  --color-accent-soft: var(--fc-color-accent-soft);
+  --color-on-accent-soft: var(--fc-color-on-accent-soft);
+  --color-focus: var(--fc-color-focus);
+  --color-win: var(--fc-color-win);
+  --color-loss: var(--fc-color-loss);
+  --color-warning: var(--fc-color-warning);
+  --color-danger: var(--fc-color-danger);
+
+  --breakpoint-*: initial;
+  --breakpoint-tablet: 40rem;
+  --breakpoint-desktop: 64rem;
+  --breakpoint-wide: 90rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-full: 9999px;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 3.25rem;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-black: 800;
+
+  --fc-duration-fast: 120ms;
+  --fc-duration-base: 200ms;
+  --fc-duration-slow: 320ms;
+  --fc-z-nav: 40;
+  --fc-z-overlay: 50;
+  --fc-z-toast: 60;
+
+  --spacing-touch: 2.75rem;
+  --spacing-sidebar: 15rem;
+  --spacing-rail: 5rem;
+  --spacing-tab-bar: 4rem;
+  --container-content: 75rem;
+  --container-prose: 42.5rem;
+}

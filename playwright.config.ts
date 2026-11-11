@@ -10,6 +10,9 @@ export default defineConfig({
   testDir: "e2e",
   fullyParallel: true,
   reporter: "list",
+  expect: {
+    toHaveScreenshot: { maxDiffPixelRatio: 0.01 },
+  },
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
@@ -26,9 +29,10 @@ export default defineConfig({
     { name: "desktop", use: { viewport: { width: 1440, height: 900 } } },
   ],
   webServer: {
-    command: `pnpm --filter @fullcourt/web exec next dev --port ${PORT}`,
+    // A production build, so tests see what users get (no dev overlay).
+    command: `pnpm exec turbo run build --filter=@fullcourt/web... --output-logs=errors-only && pnpm --filter @fullcourt/web exec next start --port ${PORT}`,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 300_000,
   },
 });

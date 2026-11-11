@@ -1,10 +1,9 @@
-import { connection } from "next/server";
-import { healthResponse } from "@/server/health";
+import { HealthResponseSchema } from "@fullcourt/validation";
+import { apiRoute } from "@/server/api/handler";
+import { buildVersion } from "@/server/health";
 
 /** GET /api/v1/health: the versioned API's liveness check, used by api-client. */
-export async function GET() {
-  await connection();
-  return Response.json(healthResponse(), {
-    headers: { "cache-control": "no-store" },
-  });
-}
+export const GET = apiRoute({
+  response: HealthResponseSchema,
+  handler: () => ({ status: "ok" as const, version: buildVersion() }),
+});

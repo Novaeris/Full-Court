@@ -7,3 +7,4 @@ playwright-report/
 test-results/
 supabase/.temp/
 apps/web/AGENTS.md
+apps/web/src/styles/tokens.css

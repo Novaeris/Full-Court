@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "tokens": "tsx scripts/generate-tokens.ts"
   },
   "dependencies": {
     "@fullcourt/api-client": "workspace:*",
@@ -29,6 +30,7 @@
     "@types/react-dom": "19.3.0",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "tsx": "4.23.15"
   }
 }
