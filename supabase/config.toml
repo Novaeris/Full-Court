@@ -428,9 +428,23 @@ site_url = "https://full-court-staging.onrender.com"
 additional_redirect_urls = ["https://full-court-staging.onrender.com/**"]
 
 [remotes.staging.auth.rate_limit]
+# Emails per hour through custom SMTP.
+email_sent = 30
 token_refresh = 150
 sign_in_sign_ups = 30
 token_verifications = 30
 
 [remotes.staging.auth.email]
 max_frequency = "60s"
+
+# Staging sends through Resend. Values come from supabase/.env (git-ignored;
+# see supabase/.env.example). The Supabase free plan only allows custom email
+# templates when custom SMTP is configured.
+[remotes.staging.auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "env(STAGING_EMAIL_FROM)"
+sender_name = "Full Court"
