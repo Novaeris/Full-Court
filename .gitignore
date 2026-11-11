@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output and caches
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+# testing
+playwright-report/
+test-results/
+blob-report/
+
+# env files: never commit secrets (the repo is public). .env.example is the only exception.
+.env
+.env.*
+!.env.example
+
+# supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# misc
+.DS_Store
+Thumbs.db
+*.pem
+*.log
+.vercel
