@@ -157,21 +157,33 @@ export type Database = {
       }
       profiles: {
         Row: {
+          alpha_notice_acknowledged_at: string | null
+          alpha_notice_version: number | null
           created_at: string
           display_name: string
           id: string
+          terms_accepted_at: string | null
+          terms_version: number | null
           updated_at: string
         }
         Insert: {
+          alpha_notice_acknowledged_at?: string | null
+          alpha_notice_version?: number | null
           created_at?: string
           display_name: string
           id: string
+          terms_accepted_at?: string | null
+          terms_version?: number | null
           updated_at?: string
         }
         Update: {
+          alpha_notice_acknowledged_at?: string | null
+          alpha_notice_version?: number | null
           created_at?: string
           display_name?: string
           id?: string
+          terms_accepted_at?: string | null
+          terms_version?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -225,6 +237,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_terms: { Args: { accepted_version: number }; Returns: undefined }
+      acknowledge_alpha_notice: {
+        Args: { acknowledged_version: number }
+        Returns: undefined
+      }
       admin_create_league: {
         Args: {
           league_name: string
@@ -253,6 +270,22 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_record_event: {
+        Args: { event_name: string; event_path?: string }
+        Returns: undefined
+      }
+      admin_submit_support_request: {
+        Args: {
+          request_category: string
+          request_message: string
+          request_subject: string
+          sender_email: string
+          sender_key: string
+          sender_name: string
+          sender_user: string
+        }
+        Returns: string
       }
       choose_team: {
         Args: { target_league: string; target_team: string }

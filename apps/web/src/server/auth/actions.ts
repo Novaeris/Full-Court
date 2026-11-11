@@ -20,6 +20,8 @@ import {
   requirePassword,
   updateDisplayName,
 } from "@/server/services/account";
+import { TERMS } from "@/content/policies";
+import { trackEvent } from "@/server/analytics/track";
 import { DELETE_CONFIRMATION } from "./constants";
 import { confirmUrl, safeNextPath } from "./redirects";
 import { getUserContext } from "./session";
@@ -65,6 +67,7 @@ export async function signUpAction(
   const parsed = SignUpRequestSchema.safeParse({
     ...values,
     password: text(form, "password"),
+    acceptTerms: text(form, "acceptTerms") === "on",
   });
   if (!parsed.success) return invalid(parsed.error, values);
 
@@ -74,7 +77,11 @@ export async function signUpAction(
     password: parsed.data.password,
     options: {
       emailRedirectTo: confirmUrl("/leagues"),
-      data: { display_name: parsed.data.displayName },
+      // Recorded on the profile with the sign-up time (profiles trigger).
+      data: {
+        display_name: parsed.data.displayName,
+        terms_version: String(TERMS.version),
+      },
     },
   });
   if (error) {
@@ -82,6 +89,7 @@ export async function signUpAction(
   }
   if (data.session) {
     // Email confirmation is switched off in this environment.
+    await trackEvent("registration_completed");
     redirect("/leagues");
   }
   // Same message whether or not the address already had an account, so the

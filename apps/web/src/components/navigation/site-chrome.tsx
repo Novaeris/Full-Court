@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Sheet } from "@/components/ui/sheet";
 import { Brand, SkipLink } from "./brand";
-import { MARKETING_NAV, SECONDARY_NAV } from "./nav-config";
+import { CURRENT_VERSION } from "@/content/changelog";
+import { AlphaBadge } from "./alpha-badge";
+import { FOOTER_NAV, MARKETING_NAV } from "./nav-config";
 import { SiteAuthActions } from "./site-auth-actions";
 
 /** Public site frame: header, content, footer. */
@@ -13,7 +15,10 @@ export function SiteChrome({ children }: { children: ReactNode }) {
       <SkipLink />
       <header className="sticky top-0 z-(--fc-z-nav) border-b border-border bg-canvas/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="mx-auto flex max-w-content items-center justify-between gap-4 px-4 py-2 tablet:px-6 desktop:px-8">
-          <Brand />
+          <div className="flex items-center gap-1">
+            <Brand />
+            <AlphaBadge />
+          </div>
           <nav aria-label="Site" className="hidden tablet:block">
             <ul className="flex items-center gap-1">
               {MARKETING_NAV.map((item) => (
@@ -65,29 +70,46 @@ export function SiteChrome({ children }: { children: ReactNode }) {
       </main>
 
       <footer className="border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto flex max-w-content flex-col gap-6 px-4 py-8 tablet:flex-row tablet:items-center tablet:justify-between tablet:px-6 desktop:px-8">
-          <div className="flex flex-col gap-2">
+        <div className="mx-auto flex max-w-content flex-col gap-8 px-4 py-8 tablet:px-6 desktop:flex-row desktop:justify-between desktop:px-8">
+          <div className="flex max-w-sm flex-col gap-2">
             <Brand />
             <p className="text-sm text-text-muted">
               A fictional basketball league. Any resemblance to real teams or
               players is coincidental.
             </p>
+            <p className="text-sm text-text-muted">
+              Open alpha ·{" "}
+              <Link
+                href="/changelog"
+                className="inline-flex min-h-touch items-center font-mono underline underline-offset-4 hover:text-text"
+              >
+                {CURRENT_VERSION}
+              </Link>
+            </p>
           </div>
-          <div className="flex flex-col gap-4 tablet:items-end">
-            <nav aria-label="Footer">
-              <ul className="flex flex-wrap gap-1">
-                {SECONDARY_NAV.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="inline-flex min-h-touch items-center rounded-md px-3 text-sm text-text-muted hover:bg-surface-muted hover:text-text"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+          <nav
+            aria-label="Footer"
+            className="grid grid-cols-2 gap-6 tablet:grid-cols-3 desktop:grid-cols-[repeat(3,max-content)] desktop:gap-10"
+          >
+            {FOOTER_NAV.map((group) => (
+              <div key={group.title}>
+                <h2 className="px-3 text-sm font-semibold">{group.title}</h2>
+                <ul className="mt-1 flex flex-col">
+                  {group.items.map((item) => (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className="inline-flex min-h-touch items-center rounded-md px-3 text-sm text-text-muted hover:bg-surface-muted hover:text-text desktop:whitespace-nowrap"
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
+          <div>
             <ThemeToggle />
           </div>
         </div>

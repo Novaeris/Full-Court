@@ -1,15 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  maintenanceEnabled,
+  maintenanceResponse,
+} from "@/server/maintenance/maintenance";
 
 /**
  * Keeps the Supabase session fresh: refreshes an expiring access token and
  * writes the new cookies to both the request (for this render) and the
  * response (for the browser).
  *
+ * Also serves the maintenance page when MAINTENANCE_MODE=on.
+ *
  * This is not the access check. Pages, Server Actions and API routes each
  * verify the user themselves (src/server/auth/session.ts).
  */
 export async function proxy(request: NextRequest) {
+  if (maintenanceEnabled()) {
+    return maintenanceResponse(request.nextUrl.pathname);
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !publishableKey) {

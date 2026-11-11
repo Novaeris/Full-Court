@@ -19,9 +19,13 @@ test.beforeEach(({ browserName: _ }, testInfo) => {
 test("sign up, confirm by email and land signed in", async ({ page }) => {
   const email = uniqueEmail("signup");
   await page.goto("/signup");
+  await expect(page.getByRole("note", { name: "Open alpha" })).toContainText(
+    "Saves and leagues may be reset",
+  );
   await page.getByLabel("Display name").fill("Rookie Coach");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("checkbox", { name: /I agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("status")).toContainText(email);
   await expect(page.getByRole("note")).toContainText("junk or spam folder");
@@ -35,6 +39,23 @@ test("sign up, confirm by email and land signed in", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "Account: Rookie Coach" }).first(),
   ).toBeVisible();
+
+  // First sign-in: the alpha introduction, once. The Terms were accepted at
+  // sign-up, so it doesn't ask again.
+  const intro = page.getByRole("dialog", {
+    name: "Welcome to the Full Court open alpha",
+  });
+  await expect(intro).toBeVisible();
+  await expect(intro.getByRole("checkbox")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(intro).toBeVisible();
+  await intro.getByRole("button", { name: "I understand, let's play" }).click();
+  await expect(intro).toBeHidden();
+  await page.reload();
+  await expect(
+    page.getByRole("link", { name: "Account: Rookie Coach" }).first(),
+  ).toBeVisible();
+  await expect(intro).toHaveCount(0);
 
   // Signed in, the home page offers the app instead of sign-in.
   await page.goto("/");
@@ -66,6 +87,9 @@ test("sign-up form explains invalid input", async ({ page }) => {
   await expect(page.getByText("Enter a display name.")).toBeVisible();
   await expect(page.getByText("Enter a valid email address.")).toBeVisible();
   await expect(page.getByText("Use at least 10 characters.")).toBeVisible();
+  await expect(
+    page.getByText("Agree to the Terms and confirm you've read"),
+  ).toBeVisible();
   await expect(page.getByLabel("Email")).toHaveValue("not-an-email");
 });
 
@@ -77,6 +101,7 @@ test("an unconfirmed account can't sign in and can resend the link", async ({
   await page.getByLabel("Display name").fill("Waiting");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("checkbox", { name: /I agree to the Terms/ }).check();
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("status")).toBeVisible();
 

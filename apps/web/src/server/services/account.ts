@@ -91,3 +91,45 @@ export async function deleteAccount(
   const { error } = await ctx.supabase.rpc("delete_own_account");
   if (error) throw error;
 }
+
+// Policy acknowledgments ---------------------------------------------------------
+
+export type Acknowledgments = {
+  termsVersion: number | null;
+  alphaNoticeVersion: number | null;
+};
+
+/** Which Terms and alpha-notice versions the caller has accepted. */
+export async function getAcknowledgments(
+  ctx: UserContext,
+): Promise<Acknowledgments> {
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .select("terms_version, alpha_notice_version")
+    .eq("id", ctx.user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    termsVersion: data?.terms_version ?? null,
+    alphaNoticeVersion: data?.alpha_notice_version ?? null,
+  };
+}
+
+/** Records acceptance of the Terms and/or the alpha notice (stamped now() by the database). */
+export async function acknowledge(
+  ctx: UserContext,
+  input: { termsVersion?: number; alphaNoticeVersion?: number },
+): Promise<void> {
+  if (input.termsVersion !== undefined) {
+    const { error } = await ctx.supabase.rpc("accept_terms", {
+      accepted_version: input.termsVersion,
+    });
+    if (error) throw error;
+  }
+  if (input.alphaNoticeVersion !== undefined) {
+    const { error } = await ctx.supabase.rpc("acknowledge_alpha_notice", {
+      acknowledged_version: input.alphaNoticeVersion,
+    });
+    if (error) throw error;
+  }
+}

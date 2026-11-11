@@ -8,6 +8,7 @@ import {
 } from "@/components/auth/account-forms";
 import { FormSkeleton } from "@/components/forms/form-skeleton";
 import { Page, PageHeader } from "@/components/layout/primitives";
+import { TextLink } from "@/components/legal/legal-page";
 import { buttonClasses } from "@/components/ui/button";
 import { signOutAction } from "@/server/auth/actions";
 import { requireUserContext } from "@/server/auth/session";
@@ -81,7 +82,15 @@ async function AccountSettings({
 
       <SettingsCard
         title="Delete account"
-        description="Permanently deletes your account, profile and every league you own. This can't be undone."
+        description={
+          <>
+            Permanently and immediately deletes your account, your profile,
+            every league you own and any support requests you sent while signed
+            in. This can&apos;t be undone. Copies kept by our service providers
+            (backups, logs, the support inbox) expire on the schedules in the{" "}
+            <TextLink href="/privacy#retention">Privacy Policy</TextLink>.
+          </>
+        }
         danger
       >
         <DeleteAccountForm />

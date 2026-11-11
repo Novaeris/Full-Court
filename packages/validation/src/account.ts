@@ -31,6 +31,11 @@ export const SignUpRequestSchema = z.object({
   displayName: DisplayNameSchema,
   email: EmailSchema,
   password: PasswordSchema,
+  /** The Terms, Privacy Policy and Alpha Disclaimer checkbox. */
+  acceptTerms: z.literal(true, {
+    message:
+      "Agree to the Terms and confirm you've read the Alpha Disclaimer and Privacy Policy to continue.",
+  }),
 });
 export type SignUpRequest = z.infer<typeof SignUpRequestSchema>;
 

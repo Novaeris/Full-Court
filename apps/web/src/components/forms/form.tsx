@@ -109,3 +109,142 @@ export function FormMessage({ state }: { state: FormState }) {
     </p>
   );
 }
+
+const CONTROL =
+  "w-full rounded-md border bg-surface px-3 text-base text-text placeholder:text-text-muted";
+
+/** Hint and error text under a control, wired to it for screen readers. */
+function useDescription(hint?: string, error?: string) {
+  const id = useId();
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy =
+    [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") ||
+    undefined;
+  const notes = (
+    <>
+      {hint ? (
+        <p id={hintId} className="text-sm text-text-muted">
+          {hint}
+        </p>
+      ) : null}
+      {error ? (
+        <p id={errorId} className="text-sm font-medium text-danger">
+          {error}
+        </p>
+      ) : null}
+    </>
+  );
+  return { id, describedBy, notes };
+}
+
+/** Labelled native <select>. */
+export function SelectField({
+  label,
+  name,
+  hint,
+  error,
+  options,
+  placeholder,
+  ...select
+}: {
+  label: string;
+  name: string;
+  hint?: string;
+  error?: string | undefined;
+  options: readonly { value: string; label: string }[];
+  /** Shown first with an empty value, so nothing is chosen by accident. */
+  placeholder?: string;
+} & Omit<ComponentProps<"select">, "name" | "id" | "children">) {
+  const { id, describedBy, notes } = useDescription(hint, error);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="font-semibold">
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={`${CONTROL} min-h-touch ${error ? "border-danger" : "border-text-muted"}`}
+        {...select}
+      >
+        {placeholder !== undefined ? (
+          <option value="">{placeholder}</option>
+        ) : null}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {notes}
+    </div>
+  );
+}
+
+/** Labelled multi-line text input. */
+export function TextAreaField({
+  label,
+  name,
+  hint,
+  error,
+  ...textarea
+}: {
+  label: string;
+  name: string;
+  hint?: string;
+  error?: string | undefined;
+} & Omit<ComponentProps<"textarea">, "name" | "id">) {
+  const { id, describedBy, notes } = useDescription(hint, error);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="font-semibold">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        name={name}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={`${CONTROL} py-2 ${error ? "border-danger" : "border-text-muted"}`}
+        {...textarea}
+      />
+      {notes}
+    </div>
+  );
+}
+
+/** Checkbox with a rich label (links allowed). The whole row is the touch target. */
+export function CheckboxField({
+  label,
+  name,
+  error,
+  ...input
+}: {
+  label: ReactNode;
+  name: string;
+  error?: string | undefined;
+} & Omit<ComponentProps<"input">, "name" | "id" | "type">) {
+  const { id, describedBy, notes } = useDescription(undefined, error);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-start gap-3">
+        <input
+          id={id}
+          name={name}
+          type="checkbox"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          className="mt-0.5 size-6 shrink-0 accent-accent"
+          {...input}
+        />
+        <label htmlFor={id} className="min-h-touch">
+          {label}
+        </label>
+      </div>
+      {notes}
+    </div>
+  );
+}
