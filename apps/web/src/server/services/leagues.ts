@@ -1,13 +1,16 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { Database } from "@fullcourt/api-client";
+import { generateWorld } from "@fullcourt/game-engine";
 import {
   LEAGUE_LIMIT,
   LeagueIdSchema,
-  type CreateLeagueRequest,
+  type CreateLeagueInput,
   type League,
   type LeagueList,
   type RenameLeagueRequest,
 } from "@fullcourt/validation";
+import { insertLeagueWithWorld } from "@/server/admin/league-world";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 
@@ -19,15 +22,27 @@ import type { UserContext } from "@/server/auth/session";
 
 type LeagueRow = Database["public"]["Tables"]["leagues"]["Row"];
 
-const COLUMNS = "id, name, status, created_at, updated_at";
+const COLUMNS =
+  "id, name, status, size, user_team_id, created_at, updated_at" as const;
 
 function toLeague(
-  row: Pick<LeagueRow, "id" | "name" | "status" | "created_at" | "updated_at">,
+  row: Pick<
+    LeagueRow,
+    | "id"
+    | "name"
+    | "status"
+    | "size"
+    | "user_team_id"
+    | "created_at"
+    | "updated_at"
+  >,
 ): League {
   return {
     id: row.id,
     name: row.name,
     status: row.status as League["status"],
+    size: row.size as League["size"],
+    userTeamId: row.user_team_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -37,7 +52,7 @@ const notFound = () =>
   new ApiError(404, "league_not_found", "That league doesn't exist.");
 
 /** Rejects malformed ids before they reach the database. */
-function parseId(id: string): string {
+export function parseLeagueId(id: string): string {
   const parsed = LeagueIdSchema.safeParse(id);
   if (!parsed.success) throw notFound();
   return parsed.data;
@@ -57,22 +72,39 @@ export async function getLeague(ctx: UserContext, id: string): Promise<League> {
   const { data, error } = await ctx.supabase
     .from("leagues")
     .select(COLUMNS)
-    .eq("id", parseId(id))
+    .eq("id", parseLeagueId(id))
     .maybeSingle();
   if (error) throw error;
   if (!data) throw notFound();
   return toLeague(data);
 }
 
+/**
+ * Creates a league for the signed-in user with a freshly generated world.
+ * The world is generated here on the server from a random seed and written
+ * with the admin client, so no client can supply its own roster.
+ */
 export async function createLeague(
   ctx: UserContext,
-  input: CreateLeagueRequest,
+  input: CreateLeagueInput,
 ): Promise<League> {
-  const { data, error } = await ctx.supabase.rpc("create_league", {
-    league_name: input.name,
-  });
-  if (error) {
-    if (error.message === "league_limit_reached") {
+  const seed = randomUUID();
+  const world = generateWorld({ seed, size: input.size });
+  try {
+    const row = await insertLeagueWithWorld({
+      ownerId: ctx.user.id,
+      name: input.name,
+      size: input.size,
+      seed,
+      world,
+    });
+    return toLeague(row);
+  } catch (error) {
+    if (
+      error instanceof Object &&
+      "message" in error &&
+      error.message === "league_limit_reached"
+    ) {
       throw new ApiError(
         409,
         "league_limit_reached",
@@ -81,7 +113,6 @@ export async function createLeague(
     }
     throw error;
   }
-  return toLeague(data);
 }
 
 export async function renameLeague(
@@ -92,7 +123,7 @@ export async function renameLeague(
   const { data, error } = await ctx.supabase
     .from("leagues")
     .update({ name: input.name })
-    .eq("id", parseId(id))
+    .eq("id", parseLeagueId(id))
     .select(COLUMNS)
     .maybeSingle();
   if (error) throw error;
@@ -107,7 +138,7 @@ export async function deleteLeague(
   const { data, error } = await ctx.supabase
     .from("leagues")
     .delete()
-    .eq("id", parseId(id))
+    .eq("id", parseLeagueId(id))
     .select("id");
   if (error) throw error;
   if (data.length === 0) throw notFound();

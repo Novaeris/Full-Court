@@ -55,7 +55,7 @@ test("create a league and move between its tabs", async ({ page }) => {
   await noOverflow(page);
   await expectAccessible(page);
 
-  for (const tab of ["Roster", "Schedule", "Standings", "Settings"]) {
+  for (const tab of ["Roster", "Teams", "Schedule", "Standings", "Settings"]) {
     await tabs.getByRole("link", { name: tab }).click();
     await expect(tabs.getByRole("link", { name: tab })).toHaveAttribute(
       "aria-current",
@@ -133,7 +133,7 @@ test("the five-league limit shows in the UI and the API", async ({
     getAccessToken: async () => token,
   });
   for (let i = 1; i <= 5; i++) {
-    await api.leagues.create({ name: `League ${i}` });
+    await api.leagues.create({ name: `League ${i}`, size: "compact" });
   }
   await expect(api.leagues.create({ name: "Six" })).rejects.toMatchObject({
     status: 409,

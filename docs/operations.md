@@ -18,13 +18,13 @@
 
 The repository is public. Secrets live only in the Render dashboard and in git-ignored local files (`apps/web/.env.local`).
 
-| Name                                   | Where                   | Notes                                                                 |
-| -------------------------------------- | ----------------------- | --------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Render web, local       | Public                                                                |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Render web, local       | Public by design; RLS protects data                                   |
-| `SITE_URL`                             | Local only              | Origin for auth email links. On Render, `RENDER_EXTERNAL_URL` is used |
-| `SUPABASE_SECRET_KEY`                  | Render worker (Phase 6) | Bypasses RLS. Never in the web client, never `NEXT_PUBLIC_`           |
-| Supabase database password             | Your password manager   | Needed only for direct database connections                           |
+| Name                                   | Where                 | Notes                                                                                                         |
+| -------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Render web, local     | Public                                                                                                        |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Render web, local     | Public by design; RLS protects data                                                                           |
+| `SITE_URL`                             | Local only            | Origin for auth email links. On Render, `RENDER_EXTERNAL_URL` is used                                         |
+| `SUPABASE_SECRET_KEY`                  | Render web, local     | Bypasses RLS. Used only by `apps/web/src/server/admin` to write generated league worlds. Never `NEXT_PUBLIC_` |
+| Supabase database password             | Your password manager | Needed only for direct database connections                                                                   |
 
 ## Auth configuration
 

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { segment: "", label: "Overview" },
   { segment: "roster", label: "Roster" },
+  { segment: "teams", label: "Teams" },
   { segment: "schedule", label: "Schedule" },
   { segment: "standings", label: "Standings" },
   { segment: "settings", label: "Settings" },
@@ -23,7 +24,10 @@ export function LeagueTabs({ leagueId }: { leagueId: string }) {
       <ul className="flex gap-1 overflow-x-auto border-b border-border px-4 tablet:px-0">
         {TABS.map((tab) => {
           const href = tab.segment ? `${base}/${tab.segment}` : base;
-          const active = pathname === href;
+          // Sections own their sub-pages (a team page sits under Teams).
+          const active =
+            pathname === href ||
+            (tab.segment !== "" && pathname.startsWith(`${href}/`));
           return (
             <li key={tab.label} className="shrink-0">
               <Link

@@ -1,0 +1,70 @@
+-- Shared helpers for pgTAP tests. Not a test file itself (no .test.sql
+-- suffix); test files include it with \ir helpers.psql.
+
+-- pgTAP may live in a different schema (the CLI installs it itself on hosted
+-- projects), so find it rather than assume.
+create extension if not exists pgtap with schema extensions;
+do $$
+begin
+  perform set_config(
+    'search_path',
+    'public, extensions, ' || (
+      select quote_ident(n.nspname)
+      from pg_extension e
+      join pg_namespace n on n.oid = e.extnamespace
+      where e.extname = 'pgtap'
+    ),
+    true
+  );
+end
+$$;
+
+-- Act as a signed-in user, the way PostgREST does.
+create function pg_temp.act_as(user_id uuid) returns void language sql as $$
+  select set_config('request.jwt.claims',
+    json_build_object('sub', user_id, 'role', 'authenticated')::text, true);
+$$;
+-- The baseline migration withholds EXECUTE on new functions; grant it here.
+grant execute on function pg_temp.act_as(uuid) to authenticated;
+
+-- A minimal valid compact world (12 teams × 15 players) as the server would send it.
+create function pg_temp.world_teams() returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object(
+    'abbreviation', 'T' || lpad(n::text, 2, '0'),
+    'city', 'City ' || n,
+    'nickname', 'Team ' || n,
+    'conference', case when n <= 6 then 'East' else 'West' end,
+    'division', 'Division ' || ((n - 1) / 3),
+    'primary_color', '#1d4ed8',
+    'secondary_color', '#facc15'
+  ) order by n)
+  from generate_series(1, 12) as n;
+$$;
+
+create function pg_temp.world_players() returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object(
+    'team', 'T' || lpad(t::text, 2, '0'),
+    'first_name', 'Player', 'last_name', t || '-' || s,
+    'position', (array['PG','SG','SF','PF','C'])[1 + (s % 5)],
+    'age', 25, 'height_inches', 78, 'weight_pounds', 215, 'jersey', s,
+    'overall', 60, 'potential', 65,
+    'inside', 60, 'mid_range', 60, 'three_point', 60, 'free_throw', 60,
+    'passing', 60, 'ball_handling', 60, 'off_rebound', 60, 'def_rebound', 60,
+    'perimeter_d', 60, 'interior_d', 60, 'speed', 60, 'strength', 60,
+    'stamina', 60
+  ))
+  from generate_series(1, 12) as t, generate_series(1, 15) as s;
+$$;
+
+-- Creates a compact league for `owner` through the server-only function.
+-- Must be called while acting as service_role.
+create function pg_temp.make_league(owner uuid, league_name text)
+returns public.leagues language sql as $$
+  select public.admin_create_league(
+    owner, league_name, 'compact', 'seed-' || league_name,
+    array[1, 2, 3, 4]::bigint[], pg_temp.world_teams(), pg_temp.world_players()
+  );
+$$;
+grant execute on function pg_temp.make_league(uuid, text) to service_role;
+grant execute on function pg_temp.world_teams() to service_role;
+grant execute on function pg_temp.world_players() to service_role;

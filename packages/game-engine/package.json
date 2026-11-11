@@ -12,11 +12,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fullcourt/game-rules": "workspace:*",
+    "@fullcourt/game-types": "workspace:*",
     "@fullcourt/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "typescript": "6.0.3",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "@fullcourt/design-tokens": "workspace:*"
   }
 }

@@ -62,7 +62,7 @@ export function Sheet({
             close();
         }}
         className={[
-          "fixed m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto bg-surface p-0 text-text shadow-2xl backdrop:bg-black/50",
+          "fixed m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto bg-surface p-0 text-text shadow-2xl backdrop:bg-[rgb(0_0_0/0.55)]",
           "inset-x-0 top-auto bottom-0 rounded-t-lg pb-[env(safe-area-inset-bottom)]",
           side === "right"
             ? "tablet:inset-y-0 tablet:right-0 tablet:left-auto tablet:h-dvh tablet:max-h-none tablet:w-96 tablet:rounded-none tablet:rounded-l-lg"

@@ -12,7 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@fullcourt/game-types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

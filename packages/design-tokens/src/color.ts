@@ -49,7 +49,7 @@ export const colors: Record<ThemeName, ColorTheme> = {
     border: "#d6d0c7",
     text: "#1b1d22",
     "text-muted": "#545a68",
-    accent: "#c2410c",
+    accent: "#b53b0a",
     "accent-strong": "#9a3412",
     "on-accent": "#ffffff",
     "accent-soft": "#fdebdd",
@@ -97,6 +97,8 @@ export const contrastRequirements: readonly {
   { fg: "text-muted", bg: "surface-muted", min: 4.5 },
   { fg: "accent", bg: "canvas", min: 4.5 },
   { fg: "accent", bg: "surface", min: 4.5 },
+  // Links in striped table rows.
+  { fg: "accent", bg: "surface-muted", min: 4.5 },
   { fg: "on-accent", bg: "accent", min: 4.5 },
   { fg: "on-accent", bg: "accent-strong", min: 4.5 },
   { fg: "on-accent-soft", bg: "accent-soft", min: 4.5 },

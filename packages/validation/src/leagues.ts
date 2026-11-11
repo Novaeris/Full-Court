@@ -1,3 +1,4 @@
+import { LEAGUE_SIZES } from "@fullcourt/game-types";
 import { z } from "zod";
 
 /**
@@ -18,10 +19,15 @@ export const LeagueIdSchema = z.uuid("That league id isn't valid.");
 export const LeagueStatusSchema = z.enum(["setup", "active", "archived"]);
 export type LeagueStatus = z.infer<typeof LeagueStatusSchema>;
 
+export const LeagueSizeSchema = z.enum(LEAGUE_SIZES);
+
 export const LeagueSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   status: LeagueStatusSchema,
+  size: LeagueSizeSchema,
+  /** The player's own team, once chosen. */
+  userTeamId: z.uuid().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -35,8 +41,14 @@ export const LeagueListSchema = z.object({
 export type LeagueList = z.infer<typeof LeagueListSchema>;
 
 /** POST /api/v1/leagues */
-export const CreateLeagueRequestSchema = z.object({ name: LeagueNameSchema });
-export type CreateLeagueRequest = z.infer<typeof CreateLeagueRequestSchema>;
+export const CreateLeagueRequestSchema = z.object({
+  name: LeagueNameSchema,
+  size: LeagueSizeSchema.default("standard"),
+});
+/** What clients send (size is optional and defaults to "standard"). */
+export type CreateLeagueRequest = z.input<typeof CreateLeagueRequestSchema>;
+/** What the server works with after validation. */
+export type CreateLeagueInput = z.output<typeof CreateLeagueRequestSchema>;
 
 /** PATCH /api/v1/leagues/:id */
 export const RenameLeagueRequestSchema = z.object({ name: LeagueNameSchema });

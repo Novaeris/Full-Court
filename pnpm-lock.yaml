@@ -151,10 +151,19 @@ importers:
 
   packages/game-engine:
     dependencies:
+      '@fullcourt/game-rules':
+        specifier: workspace:*
+        version: link:../game-rules
+      '@fullcourt/game-types':
+        specifier: workspace:*
+        version: link:../game-types
       '@fullcourt/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      '@fullcourt/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
@@ -207,6 +216,9 @@ importers:
 
   packages/validation:
     dependencies:
+      '@fullcourt/game-types':
+        specifier: workspace:*
+        version: link:../game-types
       zod:
         specifier: 4.6.7
         version: 4.6.7

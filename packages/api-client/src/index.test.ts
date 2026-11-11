@@ -58,6 +58,8 @@ describe("api-client leagues", () => {
       id: "6f1d2c3b-4a5e-4f60-8a71-b2c3d4e5f607",
       name: "Dynasty",
       status: "setup",
+      size: "standard",
+      userTeamId: null,
       createdAt: "2026-11-11T00:00:00Z",
       updatedAt: "2026-11-11T00:00:00Z",
     };

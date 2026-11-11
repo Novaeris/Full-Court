@@ -185,6 +185,8 @@ export default defineConfig([
   // Platform-neutral packages: no Node, React or Next.
   {
     files: [...PURE_PACKAGES, ...CLIENT_PACKAGES],
+    // Tests always run in Node and may use it (e.g. hashing a pinned world).
+    ignores: ["**/*.test.ts"],
     rules: {
       "no-restricted-imports": ["error", platformImportBans],
     },

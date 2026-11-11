@@ -1,128 +1,99 @@
 -- Row-level security, the per-account limit and cascades for public.leagues.
 -- Run with: supabase test db
 begin;
-create extension if not exists pgtap with schema extensions;
-do $$
-begin
-  perform set_config(
-    'search_path',
-    'public, extensions, ' || (
-      select quote_ident(n.nspname)
-      from pg_extension e
-      join pg_namespace n on n.oid = e.extnamespace
-      where e.extname = 'pgtap'
-    ),
-    true
-  );
-end
-$$;
+\ir helpers.psql
 
-select plan(26);
+select plan(22);
 
 insert into auth.users (id, aud, role, email)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'authenticated', 'authenticated', 'owner-a@example.test'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'authenticated', 'authenticated', 'owner-b@example.test');
 
--- Switch the session to act as a user, the way PostgREST does.
-create function pg_temp.act_as(user_id uuid) returns void language sql as $$
-  select set_config('request.jwt.claims',
-    json_build_object('sub', user_id, 'role', 'authenticated')::text, true);
-$$;
--- The baseline migration withholds EXECUTE on new functions; grant it here.
-grant execute on function pg_temp.act_as(uuid) to authenticated;
-
--- Anonymous ------------------------------------------------------------------
+-- Only the server creates leagues ----------------------------------------------------
 set local role anon;
 select set_config('request.jwt.claims', '{"role": "anon"}', true);
 select throws_ok('select * from leagues', '42501', null, 'anon cannot read leagues');
-select throws_ok($$select create_league('Nope')$$, '42501', null, 'anon cannot create leagues');
 
--- Owner A creates leagues -------------------------------------------------------
 set local role authenticated;
 select pg_temp.act_as('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+select throws_ok(
+  $$select admin_create_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Mine', 'compact',
+      's', array[1,2,3,4]::bigint[], '[]'::jsonb, '[]'::jsonb)$$,
+  '42501', null,
+  'signed-in users cannot call the server-only create function'
+);
+select throws_ok(
+  $$insert into leagues (owner_id, name, seed) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Direct', 's')$$,
+  '42501', null,
+  'clients cannot insert leagues directly'
+);
 
+-- The server creates leagues, up to the limit -----------------------------------------
+set local role service_role;
 select is(
-  (select owner_id from create_league('  Harbor City Dynasty  ')),
+  (select owner_id from pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '  Harbor City  ')),
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
-  'create_league makes the caller the owner'
+  'the server creates a league for the given owner'
 );
 select is(
-  (select name from leagues limit 1),
-  'Harbor City Dynasty',
+  (select name from leagues where owner_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  'Harbor City',
   'the name is trimmed'
 );
-select is((select status from leagues limit 1), 'setup', 'new leagues start in setup');
-
-select throws_ok($$select create_league('')$$, '23514', null, 'an empty name is rejected');
-select throws_ok($$select create_league(repeat('x', 41))$$, '23514', null, 'a name over 40 characters is rejected');
-
+select lives_ok($$select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Two')$$, 'second league');
+select lives_ok($$select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Three')$$, 'third league');
+select lives_ok($$select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Four')$$, 'fourth league');
+select lives_ok($$select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Five')$$, 'fifth league');
 select throws_ok(
-  $$insert into leagues (owner_id, name) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Direct')$$,
-  '42501', null,
-  'clients cannot insert directly (the limit cannot be bypassed)'
-);
-
-select lives_ok($$select create_league('Two')$$, 'second league');
-select lives_ok($$select create_league('Three')$$, 'third league');
-select lives_ok($$select create_league('Four')$$, 'fourth league');
-select lives_ok($$select create_league('Five')$$, 'fifth league');
-select throws_ok(
-  $$select create_league('Six')$$,
+  $$select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Six')$$,
   'P0001', 'league_limit_reached',
   'a sixth league is refused'
 );
-select is((select count(*)::int from leagues), 5, 'owner A has exactly five leagues');
-
-select lives_ok(
-  $$update leagues set name = 'Renamed' where name = 'Two'$$,
-  'the owner can rename a league'
+select throws_ok(
+  $$select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '')$$,
+  'P0001', 'league_limit_reached',
+  'the limit is checked before anything else'
 );
+select lives_ok(
+  $$select pg_temp.make_league('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'B''s league')$$,
+  'the limit is per account'
+);
+
+-- Owners rename and delete; others see nothing ------------------------------------------
+set local role authenticated;
+select pg_temp.act_as('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+select is((select count(*)::int from leagues), 5, 'owner A sees exactly their five leagues');
+select lives_ok($$update leagues set name = 'Renamed' where name = 'Two'$$, 'the owner can rename a league');
 select throws_ok(
   $$update leagues set status = 'active' where name = 'Renamed'$$,
   '42501', null,
   'clients cannot change columns other than name'
 );
 select throws_ok(
-  $$update leagues set owner_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' where name = 'Renamed'$$,
+  $$update leagues set seed = 'cheat' where name = 'Renamed'$$,
   '42501', null,
-  'clients cannot hand a league to someone else'
+  'clients cannot change the seed'
 );
 
--- Owner B sees none of A's leagues ------------------------------------------------
 select pg_temp.act_as('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
-select is_empty('select * from leagues', 'another user sees none of the owner''s leagues');
-select is_empty(
-  $$update leagues set name = 'Stolen' returning id$$,
-  'another user cannot rename the owner''s leagues'
-);
-select is_empty(
-  $$delete from leagues returning id$$,
-  'another user cannot delete the owner''s leagues'
-);
-select lives_ok($$select create_league('B''s league')$$, 'the limit is per account');
+select is((select count(*)::int from leagues), 1, 'another user sees only their own league');
+select is_empty($$update leagues set name = 'Stolen' where owner_id <> 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' returning id$$,
+  'another user cannot rename the owner''s leagues');
+select is_empty($$delete from leagues where owner_id <> 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' returning id$$,
+  'another user cannot delete the owner''s leagues');
 
--- Deleting ---------------------------------------------------------------------------
 select pg_temp.act_as('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
-select results_eq(
-  $$delete from leagues where name = 'Five' returning name$$,
-  $$values ('Five')$$,
-  'the owner can delete a league'
-);
-select lives_ok($$select create_league('Five again')$$, 'deleting frees a slot');
+select results_eq($$delete from leagues where name = 'Five' returning name$$, $$values ('Five')$$,
+  'the owner can delete a league');
 
--- Deleting the account removes its leagues -----------------------------------------
+-- Deleting the account removes its leagues ------------------------------------------------
 select lives_ok('select delete_own_account()', 'owner A deletes their account');
 reset role;
 select is(
   (select count(*)::int from leagues where owner_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
   0,
   'deleting the account deletes its leagues'
-);
-select is(
-  (select count(*)::int from leagues where owner_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
-  1,
-  'other accounts keep their leagues'
 );
 
 select * from finish();

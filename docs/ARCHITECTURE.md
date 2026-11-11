@@ -125,11 +125,13 @@ Rule: if a write needs game rules or touches more than one aggregate, it goes th
 
 ### Current tables
 
-| Table      | Owner check             | Client grants                 | Writes that must go through a function                                                               |
-| ---------- | ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `profiles` | `id = auth.uid()`       | select; update `display_name` | Created by the sign-up trigger; removed by `delete_own_account()`                                    |
-| `leagues`  | `owner_id = auth.uid()` | select, delete; update `name` | Created only by `create_league(name)`, which enforces the 5-per-account limit under an advisory lock |
+| Table              | Owner check             | Client grants                 | Writes that must go through a function                                                                                                                                                                    |
+| ------------------ | ----------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`         | `id = auth.uid()`       | select; update `display_name` | Created by the sign-up trigger; removed by `delete_own_account()`                                                                                                                                         |
+| `leagues`          | `owner_id = auth.uid()` | select, delete; update `name` | Created only by `admin_create_league(...)` (service role), together with its world; enforces the 5-per-account limit under an advisory lock. The user's team is set once with `choose_team(league, team)` |
+| `teams`, `players` | owner of `league_id`    | select                        | Written only by `admin_create_league`, so no client can forge a roster                                                                                                                                    |
 
+- **Server-generated worlds.** `createLeague` generates the world with `@fullcourt/game-engine` from a random seed on the server, then calls `admin_create_league` through the admin client in `apps/web/src/server/admin/`, the only code allowed to use the secret key. The league stores its seed and the RNG state after generation, so later simulation continues deterministically.
 - **Not found, not forbidden.** Another user's row isn't visible under RLS, so the services report `404 league_not_found` rather than revealing that it exists.
 - **Cascades.** Deleting the auth user cascades to profiles and leagues. Every future table hangs off `league_id` with `on delete cascade`, so deleting a league deletes everything in it.
 - **Pages and the API share one service layer.** `/leagues`, `/leagues/new` and `/leagues/[leagueId]/…` use Server Actions, and `GET`/`POST /api/v1/leagues` plus `GET`/`PATCH`/`DELETE /api/v1/leagues/:leagueId` serve other clients. Both call `apps/web/src/server/services/leagues.ts`.

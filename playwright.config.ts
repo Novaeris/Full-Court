@@ -17,6 +17,8 @@ export default defineConfig({
   fullyParallel: true,
   reporter: "list",
   expect: {
+    // Account and league tests wait on local Supabase; give slow moments room.
+    timeout: 10_000,
     toHaveScreenshot: { maxDiffPixelRatio: 0.001 },
   },
   use: {

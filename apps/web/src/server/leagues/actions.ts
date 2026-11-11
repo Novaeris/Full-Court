@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import type { FormState } from "@/components/forms/form";
 import { getUserContext } from "@/server/auth/session";
 import { invalid, serviceMessage, text } from "@/server/forms";
+import { chooseTeam } from "@/server/services/world";
 import {
   createLeague,
   deleteLeague,
@@ -24,8 +25,11 @@ export async function createLeagueAction(
   _prev: FormState,
   form: FormData,
 ): Promise<FormState> {
-  const values = { name: text(form, "name") };
-  const parsed = CreateLeagueRequestSchema.safeParse(values);
+  const values = { name: text(form, "name"), size: text(form, "size") };
+  const parsed = CreateLeagueRequestSchema.safeParse({
+    name: values.name,
+    size: values.size || undefined,
+  });
   if (!parsed.success) return invalid(parsed.error, values);
 
   const ctx = await getUserContext();
@@ -83,4 +87,13 @@ export async function deleteLeagueAction(
     return { status: "error", message: serviceMessage(error) };
   }
   redirect("/leagues?notice=league-deleted");
+}
+
+/** Picks the team the user runs, then shows the league overview. */
+export async function chooseTeamAction(form: FormData): Promise<void> {
+  const leagueId = text(form, "leagueId");
+  const ctx = await getUserContext();
+  if (!ctx) redirect(`/login?next=/leagues/${encodeURIComponent(leagueId)}`);
+  await chooseTeam(ctx, leagueId, { teamId: text(form, "teamId") });
+  redirect(`/leagues/${encodeURIComponent(leagueId)}?notice=team-chosen`);
 }

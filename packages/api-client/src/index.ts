@@ -3,6 +3,11 @@ import {
   DeleteLeagueResponseSchema,
   LeagueListSchema,
   LeagueSchema,
+  TeamDetailSchema,
+  TeamListSchema,
+  type ChooseTeamRequest,
+  type TeamDetail,
+  type Team,
   type CreateLeagueRequest,
   type League,
   type LeagueList,
@@ -109,6 +114,26 @@ export function createApiClient(options: ApiClientOptions) {
         request(
           "PATCH",
           `/leagues/${encodeURIComponent(id)}`,
+          (b) => LeagueSchema.parse(b),
+          input,
+        ),
+      /** All teams in a league, by conference and division. */
+      teams: (id: string): Promise<{ teams: Team[] }> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/teams`, (b) =>
+          TeamListSchema.parse(b),
+        ),
+      /** One team and its roster. */
+      team: (id: string, teamId: string): Promise<TeamDetail> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}`,
+          (b) => TeamDetailSchema.parse(b),
+        ),
+      /** Picks the team you run. Only possible once, while the league is set up. */
+      chooseTeam: (id: string, input: ChooseTeamRequest): Promise<League> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/team`,
           (b) => LeagueSchema.parse(b),
           input,
         ),

@@ -6,10 +6,18 @@ import {
 } from "./leagues";
 
 describe("league schemas", () => {
-  it("trims and accepts a league name", () => {
+  it("trims the name and defaults to a standard league", () => {
     expect(CreateLeagueRequestSchema.parse({ name: "  Dynasty  " })).toEqual({
       name: "Dynasty",
+      size: "standard",
     });
+    expect(
+      CreateLeagueRequestSchema.parse({ name: "Mini", size: "compact" }).size,
+    ).toBe("compact");
+    expect(
+      CreateLeagueRequestSchema.safeParse({ name: "Huge", size: "giant" })
+        .success,
+    ).toBe(false);
   });
 
   it("rejects blank and overlong names", () => {
@@ -37,6 +45,8 @@ describe("league schemas", () => {
             id: "6f1d2c3b-4a5e-4f60-8a71-b2c3d4e5f607",
             name: "A",
             status: "setup",
+            size: "standard",
+            userTeamId: null,
             createdAt: "2026-11-11T00:00:00Z",
             updatedAt: "2026-11-11T00:00:00Z",
           },

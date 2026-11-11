@@ -53,6 +53,11 @@ const SECRET_KEY_ALLOWED = [
   /^docs\//,
   /^\.env\.example$/,
   /^render\.yaml$/,
+  // SQL that grants to the service_role database role (not the key itself).
+  /^supabase\/(migrations|tests)\//,
+  // Git-ignored local secret files.
+  /^apps\/web\/\.env\.local$/,
+  /^supabase\/\.env$/,
 ];
 const SECRET_KEY_NAMES =
   /\b(SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|service_role)\b/;
