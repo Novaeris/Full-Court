@@ -24,6 +24,7 @@ test("sign up, confirm by email and land signed in", async ({ page }) => {
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("status")).toContainText(email);
+  await expect(page.getByRole("note")).toContainText("junk or spam folder");
 
   // Not signed in until the email is confirmed.
   await page.goto("/leagues");
@@ -34,6 +35,27 @@ test("sign up, confirm by email and land signed in", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "Account: Rookie Coach" }).first(),
   ).toBeVisible();
+
+  // Signed in, the home page offers the app instead of sign-in.
+  await page.goto("/");
+  const hero = page.locator("#main");
+  await expect(hero.getByRole("link", { name: "Open the app" })).toBeVisible();
+  await expect(hero.getByRole("link", { name: "Sign in" })).toHaveCount(0);
+});
+
+test("visitors can sign up or sign in from the home page", async ({ page }) => {
+  await page.goto("/");
+  const hero = page.locator("#main");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Site" })
+      .getByRole("link", { name: "Sign up" }),
+  ).toBeVisible();
+  await hero.getByRole("link", { name: "Create a free account" }).click();
+  await expect(page).toHaveURL(/\/signup$/);
+  await page.goto("/");
+  await hero.getByRole("link", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("sign-up form explains invalid input", async ({ page }) => {

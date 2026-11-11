@@ -1,10 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { ButtonLink } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { Brand, SkipLink } from "./brand";
 import { MARKETING_NAV, SECONDARY_NAV } from "./nav-config";
+import { SiteAuthActions } from "./site-auth-actions";
 
 /** Public site frame: header, content, footer. */
 export function SiteChrome({ children }: { children: ReactNode }) {
@@ -27,7 +27,7 @@ export function SiteChrome({ children }: { children: ReactNode }) {
                 </li>
               ))}
               <li className="ml-2">
-                <ButtonLink href="/leagues">Open the app</ButtonLink>
+                <SiteAuthActions placement="header" />
               </li>
             </ul>
           </nav>
@@ -51,9 +51,9 @@ export function SiteChrome({ children }: { children: ReactNode }) {
                     </li>
                   ))}
                 </ul>
-                <ButtonLink href="/leagues" className="mt-4 w-full">
-                  Open the app
-                </ButtonLink>
+                <div className="mt-4">
+                  <SiteAuthActions placement="menu" />
+                </div>
               </nav>
             </Sheet>
           </div>

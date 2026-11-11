@@ -17,7 +17,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: "list",
   expect: {
-    toHaveScreenshot: { maxDiffPixelRatio: 0.01 },
+    toHaveScreenshot: { maxDiffPixelRatio: 0.001 },
   },
   use: {
     baseURL: `http://localhost:${PORT}`,

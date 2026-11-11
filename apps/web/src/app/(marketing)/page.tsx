@@ -1,6 +1,7 @@
 import { Card, Page, Section } from "@/components/layout/primitives";
 import { ButtonLink } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { SiteAuthActions } from "@/components/navigation/site-auth-actions";
 
 const FEATURES: readonly { icon: IconName; title: string; body: string }[] = [
   {
@@ -43,13 +44,7 @@ export default function HomePage() {
               championship.
             </p>
             <div className="mt-8 flex flex-col gap-3 tablet:flex-row">
-              <ButtonLink href="/leagues">
-                Open the app
-                <Icon name="arrowRight" className="size-5" />
-              </ButtonLink>
-              <ButtonLink href="/about" variant="secondary">
-                Learn more
-              </ButtonLink>
+              <SiteAuthActions placement="hero" />
             </div>
           </div>
           <ScreenshotPlaceholder />

@@ -87,9 +87,10 @@ export function SignUpForm() {
     return (
       <div className="flex flex-col gap-4">
         <FormMessage state={state} />
+        <JunkFolderNote />
         <p className="text-text-muted">
-          The link expires in an hour. Didn&apos;t get it? Check your spam
-          folder, or send it again.
+          The link expires in an hour. Still nothing after a few minutes? Send
+          it again.
         </p>
         <ResendConfirmation email={state.values?.email ?? ""} />
       </div>
@@ -140,7 +141,9 @@ export function ForgotPasswordForm() {
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
       <FormMessage state={state} />
-      {state.status === "success" ? null : (
+      {state.status === "success" ? (
+        <JunkFolderNote />
+      ) : (
         <>
           <Field
             label="Email"
@@ -183,5 +186,21 @@ export function NewPasswordForm() {
         Save new password
       </SubmitButton>
     </form>
+  );
+}
+
+/** Shown wherever we've just sent an email: new domains often land in junk. */
+export function JunkFolderNote() {
+  return (
+    <div
+      role="note"
+      className="rounded-md border border-border bg-accent-soft px-4 py-3 text-on-accent-soft"
+    >
+      <p className="font-semibold">Can&apos;t find the email?</p>
+      <p className="mt-1">
+        Look in your junk or spam folder. If it&apos;s there, mark it as
+        &quot;Not junk&quot; so future emails from Full Court reach your inbox.
+      </p>
+    </div>
   );
 }
