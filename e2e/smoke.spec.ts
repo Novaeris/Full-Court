@@ -20,3 +20,13 @@ test("health endpoints answer", async ({ request }) => {
     expect(await response.json()).toMatchObject({ status: "ok" });
   }
 });
+
+test("pre-launch pages ask search engines not to index them", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    "noindex, nofollow",
+  );
+});
