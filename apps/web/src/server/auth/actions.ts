@@ -23,7 +23,7 @@ import {
 import { TERMS } from "@/content/policies";
 import { trackEvent } from "@/server/analytics/track";
 import { DELETE_CONFIRMATION } from "./constants";
-import { confirmUrl, safeNextPath } from "./redirects";
+import { confirmUrl, DEFAULT_AFTER_SIGN_IN, safeNextPath } from "./redirects";
 import { getUserContext } from "./session";
 
 /*
@@ -76,7 +76,7 @@ export async function signUpAction(
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      emailRedirectTo: confirmUrl("/leagues"),
+      emailRedirectTo: confirmUrl(DEFAULT_AFTER_SIGN_IN),
       // Recorded on the profile with the sign-up time (profiles trigger).
       data: {
         display_name: parsed.data.displayName,
@@ -90,7 +90,7 @@ export async function signUpAction(
   if (data.session) {
     // Email confirmation is switched off in this environment.
     await trackEvent("registration_completed");
-    redirect("/leagues");
+    redirect(DEFAULT_AFTER_SIGN_IN);
   }
   // Same message whether or not the address already had an account, so the
   // form can't be used to find out who has signed up.
@@ -113,7 +113,7 @@ export async function resendConfirmationAction(
   const { error } = await supabase.auth.resend({
     type: "signup",
     email: parsed.data.email,
-    options: { emailRedirectTo: confirmUrl("/leagues") },
+    options: { emailRedirectTo: confirmUrl(DEFAULT_AFTER_SIGN_IN) },
   });
   if (error && error.code?.startsWith("over_")) {
     return { status: "error", message: authMessage(error) };

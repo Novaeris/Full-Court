@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { SignOutButton } from "@/components/auth/sign-out";
 import { ButtonLink } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { DEFAULT_AFTER_SIGN_IN } from "@/server/auth/redirects";
 import { getCurrentUser } from "@/server/auth/session";
 
 type Placement = "header" | "menu" | "hero";
@@ -34,7 +35,7 @@ function Actions({
 }) {
   if (placement === "hero") {
     return signedIn ? (
-      <ButtonLink href="/leagues">
+      <ButtonLink href={DEFAULT_AFTER_SIGN_IN}>
         Open the app
         <Icon name="arrowRight" className="size-5" />
       </ButtonLink>
@@ -54,7 +55,7 @@ function Actions({
   if (placement === "menu") {
     return signedIn ? (
       <div className="flex flex-col gap-3">
-        <ButtonLink href="/leagues" className="w-full">
+        <ButtonLink href={DEFAULT_AFTER_SIGN_IN} className="w-full">
           Open the app
         </ButtonLink>
         <SignOutButton look="row" />
@@ -74,7 +75,7 @@ function Actions({
   return signedIn ? (
     <div className="flex items-center gap-1">
       <SignOutButton look="header" />
-      <ButtonLink href="/leagues">Open the app</ButtonLink>
+      <ButtonLink href={DEFAULT_AFTER_SIGN_IN}>Open the app</ButtonLink>
     </div>
   ) : (
     <div className="flex items-center gap-1">

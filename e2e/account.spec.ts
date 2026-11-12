@@ -58,7 +58,7 @@ test.describe("account settings", () => {
     await page.reload();
     await expect(page.getByLabel("Display name")).toHaveValue("New Name");
     await expect(
-      page.getByRole("link", { name: "Account: New Name" }).first(),
+      page.getByRole("button", { name: "Account: New Name" }),
     ).toBeVisible();
   });
 

@@ -18,7 +18,7 @@ describe("safeNextPath", () => {
     "javascript:alert(1)",
     "/\nnext",
   ])("rejects %j", (value) => {
-    expect(safeNextPath(value as string)).toBe("/leagues");
+    expect(safeNextPath(value as string)).toBe("/modes");
   });
 
   it("uses the given fallback", () => {
@@ -43,7 +43,7 @@ describe("siteUrl and confirmUrl", () => {
       "https://fc.example/auth/confirm?next=%2Faccount",
     );
     expect(confirmUrl("https://evil.test")).toBe(
-      "https://fc.example/auth/confirm?next=%2Fleagues",
+      "https://fc.example/auth/confirm?next=%2Fmodes",
     );
   });
 });

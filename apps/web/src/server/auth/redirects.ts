@@ -1,5 +1,8 @@
-/** Where people land after signing in when no destination was requested. */
-export const DEFAULT_AFTER_SIGN_IN = "/leagues";
+/**
+ * Where people land after signing in when no destination was requested: the
+ * Game Mode Selection screen, the gateway to Owner, Career and Dynasty Mode.
+ */
+export const DEFAULT_AFTER_SIGN_IN = "/modes";
 
 /**
  * Accepts only same-site relative paths ("/leagues", "/account?x=1"). Anything

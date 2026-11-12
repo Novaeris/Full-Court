@@ -8,15 +8,25 @@ import { AccountSlot } from "./account-slot";
 import { Brand, SkipLink } from "./brand";
 import { AlphaGate } from "@/components/alpha/alpha-gate";
 import { AlphaBadge } from "./alpha-badge";
-import { APP_NAV, LEGAL_NAV, SECONDARY_NAV, type NavItem } from "./nav-config";
+import { AccountMenu } from "./account-menu";
+import {
+  ACCOUNT_LINK,
+  APP_NAV,
+  LEGAL_NAV,
+  SECONDARY_NAV,
+  type NavItem,
+} from "./nav-config";
 import { NavLinks, NavLinksFallback } from "./nav-links";
 
 /**
  * Signed-in application frame. Navigation changes form with the screen:
  *
- * - desktop (≥1024px): sidebar with labels
- * - tablet (640–1023px): icon rail with small labels
+ * - desktop (≥1024px): sidebar with labels, account menu at its foot
+ * - tablet (640–1023px): icon rail with small labels, account menu at its foot
  * - phone (<640px): top bar + bottom tab bar with a "More" sheet
+ *
+ * Settings, theme, help, legal and sign out live in the account menu on
+ * desktop and tablet, and in the "More" sheet on phones.
  */
 export function AppShell({
   children,
@@ -34,7 +44,7 @@ export function AppShell({
       {/* Tablet rail / desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto border-r border-border bg-surface px-2 py-4 tablet:flex desktop:px-4">
         <div className="flex flex-col items-center desktop:flex-row desktop:gap-1">
-          <Brand href="/leagues" compact />
+          <Brand href="/modes" compact />
           <AlphaBadge />
         </div>
         <nav aria-label="Main" className="mt-6 flex-1">
@@ -44,44 +54,8 @@ export function AppShell({
             <NavLinks items={APP_NAV} form="sidebar" />
           </Suspense>
         </nav>
-        <div className="flex flex-col items-center gap-3 border-t border-border pt-4 desktop:items-stretch">
-          <div className="hidden flex-col desktop:flex">
-            <SidebarLinks items={SECONDARY_NAV} />
-            <details className="group">
-              <summary className="flex min-h-touch cursor-pointer list-none items-center justify-between rounded-md px-3 text-sm text-text-muted hover:bg-surface-muted hover:text-text">
-                Legal
-                <span
-                  aria-hidden="true"
-                  className="transition-transform group-open:rotate-90"
-                >
-                  ›
-                </span>
-              </summary>
-              <SidebarLinks items={LEGAL_NAV} />
-            </details>
-          </div>
-          <div className="hidden desktop:block">
-            <ThemeToggle compact />
-          </div>
-          {/* Tablet rail: secondary links and theme live in a sheet. */}
-          <div className="flex w-full desktop:hidden">
-            <Sheet
-              title="More"
-              triggerLabel="More"
-              triggerIcon="more"
-              side="left"
-              triggerClassName={MORE_TRIGGER}
-            >
-              <MoreSheetContent />
-            </Sheet>
-          </div>
-          {accountSlot}
-          {/* Tablet uses the More sheet; desktop gets a row here. */}
-          <div className="hidden w-full desktop:block">
-            <SignedInOnly>
-              <SignOutButton look="sidebar" />
-            </SignedInOnly>
-          </div>
+        <div className="border-t border-border pt-3">
+          {account ?? <AccountMenu />}
         </div>
       </aside>
 
@@ -89,7 +63,7 @@ export function AppShell({
         {/* Phone top bar */}
         <header className="sticky top-0 z-(--fc-z-nav) flex items-center justify-between border-b border-border bg-surface/95 px-4 pt-[env(safe-area-inset-top)] backdrop-blur tablet:hidden">
           <div className="flex items-center gap-1">
-            <Brand href="/leagues" />
+            <Brand href="/modes" />
             <AlphaBadge />
           </div>
           {accountSlot}
@@ -134,23 +108,6 @@ export function AppShell({
 const MORE_TRIGGER =
   "flex min-h-touch flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-muted hover:text-text";
 
-function SidebarLinks({ items }: { items: readonly NavItem[] }) {
-  return (
-    <ul className="flex flex-col gap-1">
-      {items.map((item) => (
-        <li key={item.href}>
-          <Link
-            href={item.href}
-            className="flex min-h-touch items-center rounded-md px-3 text-sm text-text-muted hover:bg-surface-muted hover:text-text"
-          >
-            {item.label}
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function MoreLinks({ items }: { items: readonly NavItem[] }) {
   return (
     <ul className="flex flex-col">
@@ -172,7 +129,7 @@ function MoreLinks({ items }: { items: readonly NavItem[] }) {
 function MoreSheetContent() {
   return (
     <div className="flex flex-col gap-6">
-      <MoreLinks items={SECONDARY_NAV} />
+      <MoreLinks items={[ACCOUNT_LINK, ...SECONDARY_NAV]} />
       <div>
         <p className="mb-1 text-sm font-semibold text-text-muted">Legal</p>
         <MoreLinks items={LEGAL_NAV} />

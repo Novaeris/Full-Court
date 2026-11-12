@@ -1,7 +1,7 @@
-import type { League } from "@fullcourt/validation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { LeagueGrid } from "@/components/leagues/league-card";
 import { Page, PageHeader } from "@/components/layout/primitives";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,23 +14,19 @@ export const metadata: Metadata = { title: "Leagues" };
 export default function LeaguesPage({ searchParams }: PageProps<"/leagues">) {
   return (
     <Page>
+      <Link
+        href="/owner"
+        className="-ml-2 inline-flex min-h-touch items-center gap-1 rounded-md px-2 font-semibold text-text-muted hover:text-text"
+      >
+        <Icon name="arrowRight" className="size-4 rotate-180" />
+        Owner Mode
+      </Link>
       <Suspense fallback={<ListSkeleton />}>
         <Leagues searchParams={searchParams} />
       </Suspense>
     </Page>
   );
 }
-
-const STATUS_LABEL: Record<League["status"], string> = {
-  setup: "Setting up",
-  active: "In season",
-  archived: "Archived",
-};
-
-const dateFormat = new Intl.DateTimeFormat("en", {
-  dateStyle: "medium",
-  timeZone: "UTC",
-});
 
 async function Leagues({
   searchParams,
@@ -78,32 +74,7 @@ async function Leagues({
         />
       ) : (
         <>
-          <ul className="grid gap-4 tablet:grid-cols-2 desktop:grid-cols-3">
-            {leagues.map((league) => (
-              <li key={league.id}>
-                <Link
-                  href={`/leagues/${league.id}`}
-                  className="flex h-full flex-col gap-3 rounded-lg border border-border bg-surface p-5 transition-colors duration-(--fc-duration-fast) hover:border-accent"
-                >
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="text-lg font-bold break-words">
-                      {league.name}
-                    </span>
-                    <Icon
-                      name="arrowRight"
-                      className="mt-1 size-5 shrink-0 text-text-muted"
-                    />
-                  </span>
-                  <span className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
-                    <span className="rounded-full bg-accent-soft px-2.5 py-0.5 font-semibold text-on-accent-soft">
-                      {STATUS_LABEL[league.status]}
-                    </span>
-                    Created {dateFormat.format(new Date(league.createdAt))}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <LeagueGrid leagues={leagues} />
           {atLimit ? (
             <p className="mt-6 text-text-muted">
               You&apos;ve used all {limit} league slots. Delete a league in its
