@@ -1,16 +1,33 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@fullcourt/api-client";
-import { generateWorld } from "@fullcourt/game-engine";
+import { contrastRatio } from "@fullcourt/design-tokens";
+import {
+  findCity,
+  generateOwnerWorld,
+  generateWorld,
+} from "@fullcourt/game-engine";
+import {
+  equalStructure,
+  legacySettings,
+  validateOwnerModeSetup,
+  validateSupportedStructure,
+} from "@fullcourt/game-rules";
 import {
   LEAGUE_LIMIT,
+  LeagueConfigSchema,
   LeagueIdSchema,
   type CreateLeagueInput,
   type League,
   type LeagueList,
+  type LeagueSettings,
+  type OwnerSetupInput,
   type RenameLeagueRequest,
 } from "@fullcourt/validation";
-import { insertLeagueWithWorld } from "@/server/admin/league-world";
+import {
+  insertLeagueWithWorld,
+  insertOwnerLeagueWithWorld,
+} from "@/server/admin/league-world";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 
@@ -23,7 +40,7 @@ import type { UserContext } from "@/server/auth/session";
 type LeagueRow = Database["public"]["Tables"]["leagues"]["Row"];
 
 const COLUMNS =
-  "id, name, status, size, user_team_id, created_at, updated_at" as const;
+  "id, name, status, size, user_team_id, created_at, updated_at, league_local_players(count)" as const;
 
 function toLeague(
   row: Pick<
@@ -35,7 +52,8 @@ function toLeague(
     | "user_team_id"
     | "created_at"
     | "updated_at"
-  >,
+  > & { league_local_players?: { count: number }[] },
+  localPlayerCount: number = row.league_local_players?.[0]?.count ?? 0,
 ): League {
   return {
     id: row.id,
@@ -43,6 +61,7 @@ function toLeague(
     status: row.status as League["status"],
     size: row.size as League["size"],
     userTeamId: row.user_team_id,
+    localPlayerCount,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -65,7 +84,7 @@ export async function listLeagues(ctx: UserContext): Promise<LeagueList> {
     .eq("owner_id", ctx.user.id)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return { leagues: data.map(toLeague), limit: LEAGUE_LIMIT };
+  return { leagues: data.map((row) => toLeague(row)), limit: LEAGUE_LIMIT };
 }
 
 export async function getLeague(ctx: UserContext, id: string): Promise<League> {
@@ -80,14 +99,67 @@ export async function getLeague(ctx: UserContext, id: string): Promise<League> {
 }
 
 /**
+ * The rules a league was created with: its stored config, or for leagues made
+ * before Owner Mode (which store none) a view derived from their size. Nothing
+ * is ever written back to old leagues.
+ */
+export async function getSettings(
+  ctx: UserContext,
+  id: string,
+): Promise<LeagueSettings> {
+  const { data, error } = await ctx.supabase
+    .from("leagues")
+    .select("size, config")
+    .eq("id", parseLeagueId(id))
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound();
+  if (data.config === null) {
+    const { legacy, preset, region, fantasyDraft, playoffs } = legacySettings(
+      data.size === "standard" ? "standard" : "compact",
+    );
+    return { legacy, preset, region, fantasyDraft, playoffs };
+  }
+  const config = LeagueConfigSchema.parse(data.config);
+  return {
+    legacy: false,
+    preset: config.preset,
+    region: config.region,
+    fantasyDraft: config.fantasyDraft,
+    playoffs: config.playoffs,
+  };
+}
+
+const limitReached = () =>
+  new ApiError(
+    409,
+    "league_limit_reached",
+    `You can keep up to ${LEAGUE_LIMIT} leagues. Delete one to make room.`,
+  );
+
+function isLimitError(error: unknown): boolean {
+  return (
+    error instanceof Object &&
+    "message" in error &&
+    error.message === "league_limit_reached"
+  );
+}
+
+const invalidSetup = (message: string) =>
+  new ApiError(400, "invalid_setup", message);
+
+/**
  * Creates a league for the signed-in user with a freshly generated world.
  * The world is generated here on the server from a random seed and written
- * with the admin client, so no client can supply its own roster.
+ * with the admin client, so no client can supply its own roster. Requests
+ * with `setup` create an Owner Mode league; without it, the original kind.
  */
 export async function createLeague(
   ctx: UserContext,
   input: CreateLeagueInput,
 ): Promise<League> {
+  if (input.setup) return createOwnerLeague(ctx, input.name, input.setup);
+
   const seed = randomUUID();
   const world = generateWorld({ seed, size: input.size });
   try {
@@ -98,19 +170,99 @@ export async function createLeague(
       seed,
       world,
     });
-    return toLeague(row);
+    return toLeague(row, 0);
   } catch (error) {
-    if (
-      error instanceof Object &&
-      "message" in error &&
-      error.message === "league_limit_reached"
-    ) {
-      throw new ApiError(
-        409,
-        "league_limit_reached",
-        `You can keep up to ${LEAGUE_LIMIT} leagues. Delete one to make room.`,
+    if (isLimitError(error)) throw limitReached();
+    throw error;
+  }
+}
+
+/**
+ * Owner Mode creation. Checks the request against the game rules, generates
+ * the league (real cities in geographic divisions, a franchise identity for
+ * every team, full rosters), checks the generated league against the rules
+ * again, and writes it in one transaction.
+ */
+async function createOwnerLeague(
+  ctx: UserContext,
+  name: string,
+  setup: OwnerSetupInput,
+): Promise<League> {
+  const { config, shape: sizes, franchises } = setup;
+  const shape = equalStructure(
+    sizes.conferences,
+    sizes.divisionsPerConference,
+    sizes.teamsPerDivision,
+  );
+  const structureIssue = validateSupportedStructure(shape)[0];
+  if (structureIssue) throw invalidSetup(structureIssue.message);
+
+  const cities = new Set<string>();
+  for (const f of franchises) {
+    if (findCity(f.cityId)?.region !== config.region) {
+      throw invalidSetup("Choose cities from the region of play.");
+    }
+    if (cities.has(f.cityId)) {
+      throw invalidSetup("Two franchises can't share a city.");
+    }
+    cities.add(f.cityId);
+    if (f.primaryColor && contrastRatio(f.primaryColor, "#ffffff") < 4.5) {
+      throw invalidSetup(
+        "Choose a darker primary colour so names stay readable.",
       );
     }
+  }
+
+  const seed = randomUUID();
+  let world: ReturnType<typeof generateOwnerWorld>;
+  try {
+    world = generateOwnerWorld({
+      seed,
+      identitySeed: setup.identitySeed,
+      region: config.region,
+      shape,
+      localPlayers: setup.localPlayers,
+      franchises,
+      names: setup.names,
+    });
+  } catch (error) {
+    throw invalidSetup(
+      error instanceof Error ? error.message : "That setup can't be generated.",
+    );
+  }
+
+  const issue = validateOwnerModeSetup({
+    config,
+    structure: world.structure,
+    localPlayers: world.localPlayers,
+    franchises: world.teams
+      .filter((t) => t.localPlayerSlot !== null)
+      .map((t) => ({
+        cityId: t.cityId,
+        nickname: t.nickname,
+        primaryColor: t.primaryColor,
+        secondaryColor: t.secondaryColor,
+        logoId: t.logoId,
+        conferenceId: t.conferenceId,
+        divisionId: t.divisionId,
+        localPlayerSlot: t.localPlayerSlot,
+        aiAssist: t.aiAssist,
+      })),
+  })[0];
+  if (issue) throw invalidSetup(issue.message);
+
+  try {
+    const row = await insertOwnerLeagueWithWorld({
+      ownerId: ctx.user.id,
+      name,
+      size: config.preset,
+      config,
+      seed,
+      world,
+    });
+    return toLeague(row, world.localPlayers.length);
+  } catch (error) {
+    if (isLimitError(error)) throw limitReached();
     throw error;
   }
 }

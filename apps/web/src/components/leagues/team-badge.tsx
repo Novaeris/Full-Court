@@ -1,14 +1,17 @@
 import type { Team } from "@fullcourt/validation";
+import { TeamLogo } from "./team-logo";
 
 /**
- * A team's abbreviation on its primary colour. Every generated primary colour
- * keeps white text at WCAG AA contrast (tested in the game engine).
+ * A team's logo, or its abbreviation when it has none, on its primary colour.
+ * Every primary colour keeps white at WCAG AA contrast (generated ones are
+ * tested in the game engine, chosen ones are checked when they are picked).
  */
 export function TeamBadge({
   team,
   size = "md",
 }: {
-  team: Pick<Team, "abbreviation" | "primaryColor" | "secondaryColor">;
+  team: Pick<Team, "abbreviation" | "primaryColor" | "secondaryColor"> &
+    Partial<Pick<Team, "logoId">>;
   size?: "sm" | "md" | "lg";
 }) {
   const sizes = {
@@ -16,6 +19,7 @@ export function TeamBadge({
     md: "h-9 w-12 text-sm",
     lg: "h-14 w-20 text-xl",
   } as const;
+  const logoSizes = { sm: "size-4", md: "size-5", lg: "size-9" } as const;
   return (
     <span
       aria-hidden="true"
@@ -28,7 +32,11 @@ export function TeamBadge({
         borderBottomColor: team.secondaryColor,
       }}
     >
-      {team.abbreviation}
+      {team.logoId ? (
+        <TeamLogo logoId={team.logoId} className={logoSizes[size]} />
+      ) : (
+        team.abbreviation
+      )}
     </span>
   );
 }

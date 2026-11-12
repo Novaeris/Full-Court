@@ -1,5 +1,6 @@
 import { LEAGUE_SIZES } from "@fullcourt/game-types";
 import { z } from "zod";
+import { OwnerSetupRequestSchema } from "./owner-mode";
 
 /**
  * League (save slot) rules shared by every client and the server. The
@@ -19,15 +20,20 @@ export const LeagueIdSchema = z.uuid("That league id isn't valid.");
 export const LeagueStatusSchema = z.enum(["setup", "active", "archived"]);
 export type LeagueStatus = z.infer<typeof LeagueStatusSchema>;
 
+/** Sizes a request can ask for: the original layouts. */
 export const LeagueSizeSchema = z.enum(LEAGUE_SIZES);
+/** Sizes a stored league can have: the original ones, and Owner Mode's custom. */
+export const StoredLeagueSizeSchema = z.enum([...LEAGUE_SIZES, "custom"]);
 
 export const LeagueSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   status: LeagueStatusSchema,
-  size: LeagueSizeSchema,
+  size: StoredLeagueSizeSchema,
   /** The player's own team, once chosen. */
   userTeamId: z.uuid().nullable(),
+  /** How many local players share this league; 0 until a team is chosen in a league made the original way. */
+  localPlayerCount: z.number().int().min(0),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -44,6 +50,11 @@ export type LeagueList = z.infer<typeof LeagueListSchema>;
 export const CreateLeagueRequestSchema = z.object({
   name: LeagueNameSchema,
   size: LeagueSizeSchema.default("standard"),
+  /**
+   * Owner Mode settings. Without them the request creates a league of the
+   * given size the original way (fictional cities, choose a team afterwards).
+   */
+  setup: OwnerSetupRequestSchema.optional(),
 });
 /** What clients send (size is optional and defaults to "standard"). */
 export type CreateLeagueRequest = z.input<typeof CreateLeagueRequestSchema>;

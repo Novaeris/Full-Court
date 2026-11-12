@@ -304,3 +304,17 @@ export const TEAM_COLORS: readonly (readonly [string, string])[] = [
   ["#b45309", "#1e293b"],
   ["#57534e", "#22d3ee"],
 ];
+
+/**
+ * More colour pairs for Owner Mode leagues of up to 32 teams. Kept separate
+ * from TEAM_COLORS so the original world generation stays exactly as it was.
+ * Every primary colour keeps white text at WCAG AA contrast (tested).
+ */
+export const EXTRA_TEAM_COLORS: readonly (readonly [string, string])[] = [
+  ["#0f766e", "#fde68a"],
+  ["#6d28d9", "#fbcfe8"],
+  ["#be123c", "#e5e7eb"],
+  ["#0e7490", "#fcd34d"],
+  ["#4d7c0f", "#f5f5f4"],
+  ["#334155", "#f97316"],
+];

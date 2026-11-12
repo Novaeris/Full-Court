@@ -28,11 +28,5 @@ async function Teams({
   const { leagueId } = await params;
   const { ctx, league } = await loadLeague(leagueId);
   const teams = await listTeams(ctx, league.id);
-  return (
-    <TeamGroups
-      leagueId={league.id}
-      teams={teams}
-      highlightTeamId={league.userTeamId}
-    />
-  );
+  return <TeamGroups leagueId={league.id} teams={teams} />;
 }

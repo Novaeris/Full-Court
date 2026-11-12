@@ -7,36 +7,12 @@ import {
   IDLE,
   SubmitButton,
 } from "@/components/forms/form";
+import type { LeagueStructure } from "@fullcourt/validation";
 import {
-  createLeagueAction,
   deleteLeagueAction,
   renameLeagueAction,
+  renameStructureAction,
 } from "@/server/leagues/actions";
-
-export function CreateLeagueForm() {
-  const [state, action] = useActionState(createLeagueAction, IDLE);
-  return (
-    <form action={action} className="flex flex-col gap-4" noValidate>
-      <FormMessage state={state} />
-      <Field
-        label="League name"
-        name="name"
-        required
-        maxLength={40}
-        autoComplete="off"
-        hint="Up to 40 characters. You can rename it later."
-        defaultValue={state.values?.name}
-        error={state.fieldErrors?.name}
-      />
-      <LeagueSizeChoice selected={state.values?.size ?? "standard"} />
-      <div>
-        <SubmitButton pendingLabel="Generating your league…">
-          Create league
-        </SubmitButton>
-      </div>
-    </form>
-  );
-}
 
 export function RenameLeagueForm({
   leagueId,
@@ -94,42 +70,57 @@ export function DeleteLeagueForm({
   );
 }
 
-const SIZES = [
-  {
-    value: "standard",
-    label: "Standard",
-    detail:
-      "30 teams in two conferences of three divisions. The full experience.",
-  },
-  {
-    value: "compact",
-    label: "Compact",
-    detail: "12 teams in two conferences of two divisions. Quicker seasons.",
-  },
-] as const;
-
-function LeagueSizeChoice({ selected }: { selected: string }) {
+/** Rename conferences and divisions. Ids never change, so nothing breaks. */
+export function RenameStructureForm({
+  leagueId,
+  structure,
+}: {
+  leagueId: string;
+  structure: LeagueStructure;
+}) {
+  const [state, action] = useActionState(renameStructureAction, IDLE);
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-1.5 font-semibold">League size</legend>
-      {SIZES.map((size) => (
-        <label
-          key={size.value}
-          className="flex min-h-touch cursor-pointer items-start gap-3 rounded-md border border-border bg-surface p-3 has-checked:border-accent has-checked:bg-accent-soft"
+    <form action={action} className="flex flex-col gap-5" noValidate>
+      <input type="hidden" name="leagueId" value={leagueId} />
+      <FormMessage state={state} />
+      {structure.conferences.map((conference) => (
+        <fieldset
+          key={conference.id}
+          className="flex flex-col gap-3 rounded-lg border border-border p-4"
         >
-          <input
-            type="radio"
-            name="size"
-            value={size.value}
-            defaultChecked={selected === size.value}
-            className="mt-1 size-5 accent-(--color-accent)"
+          <legend className="px-1 font-bold">
+            {conference.name} Conference
+          </legend>
+          <Field
+            label="Conference name"
+            name={`conference:${conference.id}`}
+            required
+            maxLength={40}
+            autoComplete="off"
+            defaultValue={
+              state.values?.[`conference:${conference.id}`] ?? conference.name
+            }
+            error={state.fieldErrors?.[`conference:${conference.id}`]}
           />
-          <span>
-            <span className="block font-semibold">{size.label}</span>
-            <span className="block text-sm text-text-muted">{size.detail}</span>
-          </span>
-        </label>
+          {conference.divisions.map((division) => (
+            <Field
+              key={division.id}
+              label={`Division name (${division.teamCount} teams)`}
+              name={`division:${division.id}`}
+              required
+              maxLength={40}
+              autoComplete="off"
+              defaultValue={
+                state.values?.[`division:${division.id}`] ?? division.name
+              }
+              error={state.fieldErrors?.[`division:${division.id}`]}
+            />
+          ))}
+        </fieldset>
       ))}
-    </fieldset>
+      <div>
+        <SubmitButton pendingLabel="Saving…">Save names</SubmitButton>
+      </div>
+    </form>
   );
 }

@@ -22,6 +22,7 @@
     "verify": "node scripts/verify.mjs",
     "test:e2e:update": "playwright test --update-snapshots",
     "db:types": "supabase gen types typescript --local --schema public > packages/api-client/src/database.types.ts",
+    "check:legacy-upgrade": "node scripts/check-legacy-upgrade.mjs",
     "scan:bundle": "node scripts/scan-bundle.mjs"
   },
   "devDependencies": {

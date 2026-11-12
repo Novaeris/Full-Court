@@ -75,3 +75,7 @@ supabase config push         # apply auth settings and templates to staging
 
 - Commits in this repository are authored as **Novaeris** with the GitHub noreply address. This is set in the repository's local git config, so other repositories on the machine are unaffected.
 - The pre-commit hook (`.githooks/pre-commit`) scans staged changes for secrets. `pnpm install` turns it on with `git config core.hooksPath .githooks`.
+
+## Checking that old leagues survive a migration
+
+`pnpm check:legacy-upgrade` resets the **local** Supabase database to the last migration before Owner Mode, creates an old-style league the way the old server did, applies the newer migrations, and checks what the old data became (config left empty, stable conference and division ids with the same display names, the chosen team as Player 1's, every player still on a team). It then resets the local database to the latest migrations. It needs Docker and `supabase start`, and never touches a hosted project. Run it whenever a migration changes how existing leagues are stored.

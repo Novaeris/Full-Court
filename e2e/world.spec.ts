@@ -6,6 +6,7 @@ import {
   createConfirmedUser,
   signInThroughUi,
 } from "./support/auth";
+import { standardSetup } from "./support/league";
 
 async function expectAccessible(page: Page) {
   // Streamed pages send <title> with the streamed content; wait for it.
@@ -34,12 +35,20 @@ test("generate a compact league, scout, choose a team and view players", async (
   page,
 }) => {
   const { email, password } = await createConfirmedUser("world");
-  await signInThroughUi(page, email, password, "/leagues/new");
+  await signInThroughUi(page, email, password);
 
-  await page.getByLabel("League name").fill("Scouting Trip");
-  await page.getByLabel(/Compact/).check();
-  await page.getByRole("button", { name: "Create league" }).click();
-  await expect(page).toHaveURL(/\/leagues\/[0-9a-f-]{36}$/);
+  // Leagues made through the API without Owner Mode settings start with no
+  // team chosen: you scout, then choose.
+  const api = createApiClient({
+    baseUrl: new URL(page.url()).origin,
+    fetch,
+    getAccessToken: async () => accessToken(email, password),
+  });
+  const created = await api.leagues.create({
+    name: "Scouting Trip",
+    size: "compact",
+  });
+  await page.goto(`/leagues/${created.id}`);
   const leagueUrl = page.url();
 
   // 12 teams to choose from, in two conferences.
@@ -221,5 +230,280 @@ test.describe("world API", () => {
     await expect(
       asOther.leagues.chooseTeam(otherLeague.id, { teamId: teams[0]!.id }),
     ).rejects.toMatchObject({ status: 404, code: "team_not_found" });
+  });
+
+  test("create an Owner Mode league", async ({ baseURL }) => {
+    const user = await createConfirmedUser("ownerapi");
+    const api = createApiClient({
+      baseUrl: baseURL ?? "",
+      fetch,
+      getAccessToken: async () => accessToken(user.email, user.password),
+    });
+    const setup = {
+      config: {
+        schemaVersion: 1 as const,
+        preset: "standard" as const,
+        region: "europe" as const,
+        fantasyDraft: false,
+        playoffs: {
+          teams: 16,
+          seeding: "conference" as const,
+          autoQualifyDivisionLeaders: true,
+          divisionLeaderTopSeeds: 4,
+          roundSeriesLengths: [7, 7, 7, 7] as (3 | 5 | 7)[],
+        },
+      },
+      shape: { conferences: 2, divisionsPerConference: 3, teamsPerDivision: 5 },
+      localPlayers: [
+        { slot: 1, label: null },
+        { slot: 2, label: "Sam" },
+      ],
+      franchises: [
+        {
+          localPlayerSlot: 1,
+          cityId: "eu-gb-london",
+          aiAssist: {
+            trades: true,
+            rosterCoverage: false,
+            rosterManagement: true,
+            scouting: false,
+            drafting: false,
+          },
+        },
+        { localPlayerSlot: 1, cityId: "eu-fr-paris" },
+        { localPlayerSlot: 2, cityId: "eu-de-berlin" },
+      ],
+      identitySeed: "test-identity-seed",
+    };
+
+    const league = await api.leagues.create({ name: "Euro League", setup });
+    expect(league).toMatchObject({ size: "standard", status: "active" });
+    expect(league.userTeamId).not.toBeNull();
+
+    const { teams } = await api.leagues.teams(league.id);
+    expect(teams).toHaveLength(30);
+    const cities = teams.map((t) => t.city);
+    expect(new Set(cities).size).toBe(30);
+    expect(cities).toEqual(
+      expect.arrayContaining(["London", "Paris", "Berlin"]),
+    );
+    expect(new Set(teams.map((t) => t.conferenceId)).size).toBe(2);
+    expect(new Set(teams.map((t) => t.divisionId)).size).toBe(6);
+    // Every division has five teams.
+    const perDivision = Object.values(
+      Object.groupBy(teams, (t) => t.divisionId),
+    ).map((group) => group?.length);
+    expect(perDivision).toEqual([5, 5, 5, 5, 5, 5]);
+    const mine = teams.find((t) => t.id === league.userTeamId);
+    expect(["London", "Paris"]).toContain(mine?.city);
+
+    // AI Assist is saved per franchise; AI-run teams never have any.
+    const flags = (city: string) => teams.find((t) => t.city === city);
+    expect(flags("London")?.aiAssist).toEqual({
+      trades: true,
+      rosterCoverage: false,
+      rosterManagement: true,
+      scouting: false,
+      drafting: false,
+    });
+    expect(Object.values(flags("Paris")?.aiAssist ?? {})).not.toContain(true);
+    expect(flags("Berlin")?.localPlayerSlot).toBe(2);
+    for (const t of teams.filter((t) => t.localPlayerSlot === null)) {
+      expect(Object.values(t.aiAssist)).not.toContain(true);
+    }
+
+    // The same identity seed gives the same franchises; rosters differ.
+    const again = await api.leagues.create({ name: "Euro League 2", setup });
+    const second = await api.leagues.teams(again.id);
+    expect(
+      second.teams.map((t) => [t.city, t.nickname, t.primaryColor]),
+    ).toEqual(teams.map((t) => [t.city, t.nickname, t.primaryColor]));
+  });
+
+  test("Owner Mode setups are checked by the server", async ({ baseURL }) => {
+    const user = await createConfirmedUser("ownerbad");
+    const api = createApiClient({
+      baseUrl: baseURL ?? "",
+      fetch,
+      getAccessToken: async () => accessToken(user.email, user.password),
+    });
+    const good = {
+      config: {
+        schemaVersion: 1 as const,
+        preset: "custom" as const,
+        region: "asia" as const,
+        fantasyDraft: false,
+        playoffs: {
+          teams: 4,
+          seeding: "conference" as const,
+          autoQualifyDivisionLeaders: true,
+          divisionLeaderTopSeeds: 2,
+          roundSeriesLengths: [7, 7] as (3 | 5 | 7)[],
+        },
+      },
+      shape: { conferences: 2, divisionsPerConference: 2, teamsPerDivision: 3 },
+      localPlayers: [{ slot: 1, label: null }],
+      franchises: [{ localPlayerSlot: 1, cityId: "as-jp-tokyo" }],
+      identitySeed: "another-seed-1",
+    };
+    const bad = (name: string, setup: typeof good) =>
+      expect(api.leagues.create({ name, setup })).rejects.toMatchObject({
+        status: 400,
+      });
+
+    await bad("Wrong region", {
+      ...good,
+      franchises: [{ localPlayerSlot: 1, cityId: "eu-fr-paris" }],
+    });
+    await bad("Same city", {
+      ...good,
+      localPlayers: [
+        { slot: 1, label: null },
+        { slot: 2, label: null },
+      ],
+      franchises: [
+        { localPlayerSlot: 1, cityId: "as-jp-tokyo" },
+        { localPlayerSlot: 2, cityId: "as-jp-tokyo" },
+      ],
+    });
+    await bad("Idle player", {
+      ...good,
+      localPlayers: [
+        { slot: 1, label: null },
+        { slot: 2, label: null },
+      ],
+    });
+    await bad("Odd shape", {
+      ...good,
+      shape: {
+        conferences: 1,
+        divisionsPerConference: 1,
+        teamsPerDivision: 29,
+      },
+    });
+    await bad("Standard mismatch", {
+      ...good,
+      config: { ...good.config, preset: "standard" as const },
+    });
+    await bad("Too few spots", {
+      ...good,
+      config: {
+        ...good.config,
+        playoffs: {
+          ...good.config.playoffs,
+          teams: 2,
+          roundSeriesLengths: [7],
+        },
+      },
+    });
+    await bad("Pale colour", {
+      ...good,
+      franchises: [
+        { localPlayerSlot: 1, cityId: "as-jp-tokyo", primaryColor: "#ffff00" },
+      ] as typeof good.franchises,
+    });
+
+    // Nothing was created by the rejected requests.
+    expect((await api.leagues.list()).leagues).toHaveLength(0);
+    const league = await api.leagues.create({
+      name: "Tokyo Nights",
+      setup: good,
+    });
+    expect(league).toMatchObject({ size: "custom", status: "active" });
+  });
+
+  test("franchise identity and names are saved, and checked", async ({
+    baseURL,
+  }) => {
+    const user = await createConfirmedUser("identity");
+    const api = createApiClient({
+      baseUrl: baseURL ?? "",
+      fetch,
+      getAccessToken: async () => accessToken(user.email, user.password),
+    });
+    const base = standardSetup();
+    const preview = await api.leagues.create({ name: "Probe", setup: base });
+    const probe = await api.leagues.structure(preview.id);
+    const conference = probe.conferences[0]!;
+    const division = conference.divisions[0]!;
+    await api.leagues.delete(preview.id);
+
+    // Chosen identity and names are saved.
+    const league = await api.leagues.create({
+      name: "Identity",
+      setup: {
+        ...base,
+        franchises: [
+          {
+            localPlayerSlot: 1,
+            cityId: "na-us-new-york",
+            nickname: "Harbor Hawks",
+            primaryColor: "#0b3d91",
+            secondaryColor: "#ffd200",
+            logoId: "logo-03",
+          },
+        ],
+        names: {
+          conferences: { [conference.id]: "Harbor Conference" },
+          divisions: { [division.id]: "Lighthouse" },
+        },
+      } as typeof base,
+    });
+    const { teams } = await api.leagues.teams(league.id);
+    expect(teams.find((t) => t.localPlayerSlot === 1)).toMatchObject({
+      city: "New York",
+      nickname: "Harbor Hawks",
+      primaryColor: "#0b3d91",
+      secondaryColor: "#ffd200",
+      logoId: "logo-03",
+    });
+    const structure = await api.leagues.structure(league.id);
+    expect(structure.conferences[0]).toMatchObject({
+      id: conference.id,
+      name: "Harbor Conference",
+    });
+    expect(structure.conferences[0]!.divisions[0]).toMatchObject({
+      id: division.id,
+      name: "Lighthouse",
+    });
+    await api.leagues.delete(league.id);
+
+    const bad = (patch: object) =>
+      expect(
+        api.leagues.create({
+          name: "Bad",
+          setup: { ...base, ...patch } as typeof base,
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    const one = base.franchises[0]!;
+    await bad({ franchises: [{ ...one, logoId: "logo-99" }] });
+    await bad({
+      franchises: [
+        { ...one, primaryColor: "#112233", secondaryColor: "#112233" },
+      ],
+    });
+    await bad({
+      names: { conferences: { "no-such-conference": "X" }, divisions: {} },
+    });
+    await bad({
+      names: {
+        conferences: {
+          [conference.id]: "Same",
+          [probe.conferences[1]!.id]: "same",
+        },
+        divisions: {},
+      },
+    });
+    await bad({
+      localPlayers: [
+        { slot: 1, label: null },
+        { slot: 2, label: null },
+      ],
+      franchises: [
+        { ...one, nickname: "Hawks" },
+        { localPlayerSlot: 2, cityId: "na-us-boston", nickname: " hawks" },
+      ],
+    });
+    expect((await api.leagues.list()).leagues).toHaveLength(0);
   });
 });

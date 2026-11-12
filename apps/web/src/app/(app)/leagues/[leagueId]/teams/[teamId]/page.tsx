@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { controlLabel } from "@/components/leagues/control";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { ResponsiveTable, type Column } from "@/components/ui/responsive-table";
 import { ApiError } from "@/server/api/handler";
@@ -38,7 +39,7 @@ async function TeamRoster({
     throw error;
   });
   const { team, players } = detail;
-  const isMine = team.id === league.userTeamId;
+  const control = controlLabel(team.localPlayerSlot, league.localPlayerCount);
 
   const columns: Column<Player>[] = [
     {
@@ -149,9 +150,9 @@ async function TeamRoster({
         <div className="min-w-0">
           <h2 className="text-2xl font-bold">{teamName(team)}</h2>
           <p className="text-text-muted">
-            {team.conference}ern Conference · {team.division} Division ·
-            Strength {team.strength}
-            {isMine ? " · Your team" : ""}
+            {team.conference} Conference · {team.division} Division · Strength{" "}
+            {team.strength}
+            {control ? ` · ${control}` : ""}
           </p>
         </div>
       </section>

@@ -1,0 +1,88 @@
+-- Owner Mode worlds for pgTAP tests. Include after helpers.psql:
+--   \ir helpers.psql
+--   \ir owner_helpers.psql
+
+-- A grid of conferences x divisions x teams ------------------------------------------------
+
+create function pg_temp.grid_conferences(c integer) returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object('id', 'c-' || n, 'name', 'Conference ' || n,
+                                      'sort_order', n - 1) order by n)
+  from generate_series(1, c) n;
+$$;
+
+create function pg_temp.grid_divisions(c integer, d integer) returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object('id', 'd-' || ci || '-' || di,
+                                      'conference_id', 'c-' || ci,
+                                      'name', 'Division ' || ci || '.' || di,
+                                      'sort_order', di - 1) order by ci, di)
+  from generate_series(1, c) ci, generate_series(1, d) di;
+$$;
+
+-- Team n sits in division ceil(n / per). Teams 1 and 2 are Player 1's, team 7 is
+-- Player 2's (when there are that many teams); team 1 has scouting AI Assist on.
+create function pg_temp.grid_teams(c integer, d integer, per integer) returns jsonb
+language sql as $$
+  select jsonb_agg(jsonb_build_object(
+    'abbreviation', 'T' || lpad(n::text, 2, '0'),
+    'city', 'City ' || n,
+    'nickname', 'Team ' || n,
+    'conference_id', 'c-' || (((n - 1) / (d * per)) + 1),
+    'division_id', 'd-' || (((n - 1) / (d * per)) + 1) || '-' || ((((n - 1) / per) % d) + 1),
+    'city_id', 'na-us-city-' || n,
+    'logo_id', 'logo-' || lpad(((n % 20) + 1)::text, 2, '0'),
+    'primary_color', '#1d4ed8',
+    'secondary_color', '#facc15',
+    'local_player_slot', case when n in (1, 2) then 1 when n = 7 then 2 end,
+    'ai_scouting', n = 1
+  ) order by n)
+  from generate_series(1, c * d * per) n;
+$$;
+
+create function pg_temp.grid_players(teams integer) returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object(
+    'team', 'T' || lpad(t::text, 2, '0'),
+    'first_name', 'Player', 'last_name', t || '-' || s,
+    'position', (array['PG','SG','SF','PF','C'])[1 + (s % 5)],
+    'age', 25, 'height_inches', 78, 'weight_pounds', 215, 'jersey', s,
+    'overall', 60, 'potential', 65,
+    'inside', 60, 'mid_range', 60, 'three_point', 60, 'free_throw', 60,
+    'passing', 60, 'ball_handling', 60, 'off_rebound', 60, 'def_rebound', 60,
+    'perimeter_d', 60, 'interior_d', 60, 'speed', 60, 'strength', 60,
+    'stamina', 60
+  ))
+  from generate_series(1, teams) as t, generate_series(1, 15) as s;
+$$;
+
+create function pg_temp.owner_config(preset text, playoff_teams integer) returns jsonb
+language sql as $$
+  select jsonb_build_object(
+    'schemaVersion', 1, 'preset', preset, 'region', 'north-america',
+    'fantasyDraft', false,
+    'playoffs', jsonb_build_object(
+      'teams', playoff_teams, 'seeding', 'conference',
+      'autoQualifyDivisionLeaders', true, 'divisionLeaderTopSeeds', 2,
+      'roundSeriesLengths', case playoff_teams
+        when 4 then '[7, 5]'::jsonb when 16 then '[7, 7, 7, 7]'::jsonb end));
+$$;
+
+create function pg_temp.owner_players() returns jsonb language sql as $$
+  select '[{"slot": 1, "label": null}, {"slot": 2, "label": "Sam"}]'::jsonb;
+$$;
+
+-- A 12-team custom league (2 conferences x 2 divisions x 3 teams) for `owner`.
+-- Must be called while acting as service_role.
+create function pg_temp.make_owner_league(owner uuid, league_name text)
+returns public.leagues language sql as $$
+  select public.admin_create_owner_league(
+    owner, league_name, 'custom', pg_temp.owner_config('custom', 4), 'seed-' || league_name,
+    array[1, 2, 3, 4]::bigint[], pg_temp.grid_conferences(2), pg_temp.grid_divisions(2, 2),
+    pg_temp.owner_players(), pg_temp.grid_teams(2, 2, 3), pg_temp.grid_players(12)
+  );
+$$;
+
+grant execute on function
+  pg_temp.grid_conferences(integer), pg_temp.grid_divisions(integer, integer),
+  pg_temp.grid_teams(integer, integer, integer), pg_temp.grid_players(integer),
+  pg_temp.owner_config(text, integer), pg_temp.owner_players(),
+  pg_temp.make_owner_league(uuid, text)
+  to service_role;

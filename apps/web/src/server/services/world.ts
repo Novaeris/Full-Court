@@ -4,6 +4,8 @@ import {
   LeagueIdSchema,
   type ChooseTeamRequest,
   type League,
+  type LeagueStructure,
+  type RenameStructureRequest,
   type Player,
   type Team,
   type TeamDetail,
@@ -21,7 +23,37 @@ type TeamRow = Database["public"]["Tables"]["teams"]["Row"];
 type PlayerRow = Database["public"]["Tables"]["players"]["Row"];
 
 const TEAM_COLUMNS =
-  "id, abbreviation, city, nickname, conference, division, primary_color, secondary_color" as const;
+  "id, abbreviation, city, nickname, conference_id, division_id, primary_color, secondary_color, city_id, logo_id, local_player_slot, ai_trades, ai_roster_coverage, ai_roster_management, ai_scouting, ai_drafting" as const;
+
+/** Display names and order of a league's conferences and divisions. */
+type Structure = {
+  conferences: Map<string, { name: string; order: number }>;
+  divisions: Map<string, { name: string; order: number }>;
+};
+
+async function loadStructure(
+  ctx: UserContext,
+  leagueId: string,
+): Promise<Structure> {
+  const [conferences, divisions] = await Promise.all([
+    ctx.supabase
+      .from("league_conferences")
+      .select("id, name, sort_order")
+      .eq("league_id", leagueId),
+    ctx.supabase
+      .from("league_divisions")
+      .select("id, name, sort_order")
+      .eq("league_id", leagueId),
+  ]);
+  if (conferences.error) throw conferences.error;
+  if (divisions.error) throw divisions.error;
+  const index = (rows: { id: string; name: string; sort_order: number }[]) =>
+    new Map(rows.map((r) => [r.id, { name: r.name, order: r.sort_order }]));
+  return {
+    conferences: index(conferences.data),
+    divisions: index(divisions.data),
+  };
+}
 
 const PLAYER_COLUMNS =
   "id, team_id, first_name, last_name, position, age, height_inches, weight_pounds, jersey, overall, potential, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina" as const;
@@ -45,22 +77,43 @@ function toTeam(
     | "abbreviation"
     | "city"
     | "nickname"
-    | "conference"
-    | "division"
+    | "conference_id"
+    | "division_id"
     | "primary_color"
     | "secondary_color"
+    | "city_id"
+    | "logo_id"
+    | "local_player_slot"
+    | "ai_trades"
+    | "ai_roster_coverage"
+    | "ai_roster_management"
+    | "ai_scouting"
+    | "ai_drafting"
   >,
   strength: number,
+  structure: Structure,
 ): Team {
   return {
     id: row.id,
     abbreviation: row.abbreviation,
     city: row.city,
     nickname: row.nickname,
-    conference: row.conference as Team["conference"],
-    division: row.division,
+    conferenceId: row.conference_id,
+    divisionId: row.division_id,
+    conference: structure.conferences.get(row.conference_id)?.name ?? "",
+    division: structure.divisions.get(row.division_id)?.name ?? "",
     primaryColor: row.primary_color,
     secondaryColor: row.secondary_color,
+    cityId: row.city_id,
+    logoId: row.logo_id,
+    localPlayerSlot: row.local_player_slot,
+    aiAssist: {
+      trades: row.ai_trades,
+      rosterCoverage: row.ai_roster_coverage,
+      rosterManagement: row.ai_roster_management,
+      scouting: row.ai_scouting,
+      drafting: row.ai_drafting,
+    },
     strength,
   };
 }
@@ -108,18 +161,17 @@ export async function listTeams(
   leagueId: string,
 ): Promise<Team[]> {
   const league = await getLeague(ctx, leagueId);
-  const [teams, players] = await Promise.all([
+  const [teams, players, structure] = await Promise.all([
     ctx.supabase
       .from("teams")
       .select(TEAM_COLUMNS)
       .eq("league_id", league.id)
-      .order("conference")
-      .order("division")
       .order("city"),
     ctx.supabase
       .from("players")
       .select("team_id, overall")
       .eq("league_id", league.id),
+    loadStructure(ctx, league.id),
   ]);
   if (teams.error) throw teams.error;
   if (players.error) throw players.error;
@@ -131,7 +183,18 @@ export async function listTeams(
     list.push(p.overall);
     byTeam.set(p.team_id, list);
   }
-  return teams.data.map((t) => toTeam(t, teamStrength(byTeam.get(t.id) ?? [])));
+  const order = (id: string, of: Map<string, { order: number }>) =>
+    of.get(id)?.order ?? 0;
+  return teams.data
+    .map((t) => toTeam(t, teamStrength(byTeam.get(t.id) ?? []), structure))
+    .sort(
+      (a, b) =>
+        order(a.conferenceId, structure.conferences) -
+          order(b.conferenceId, structure.conferences) ||
+        order(a.divisionId, structure.divisions) -
+          order(b.divisionId, structure.divisions) ||
+        a.city.localeCompare(b.city),
+    );
 }
 
 /** One team and its roster, best players first. */
@@ -142,7 +205,7 @@ export async function getTeam(
 ): Promise<TeamDetail> {
   const league = await getLeague(ctx, leagueId);
   const id = parseTeamId(teamId);
-  const [team, players] = await Promise.all([
+  const [team, players, structure] = await Promise.all([
     ctx.supabase
       .from("teams")
       .select(TEAM_COLUMNS)
@@ -156,12 +219,17 @@ export async function getTeam(
       .eq("team_id", id)
       .order("overall", { ascending: false })
       .order("last_name"),
+    loadStructure(ctx, league.id),
   ]);
   if (team.error) throw team.error;
   if (players.error) throw players.error;
   if (!team.data) throw teamNotFound();
   return {
-    team: toTeam(team.data, teamStrength(players.data.map((p) => p.overall))),
+    team: toTeam(
+      team.data,
+      teamStrength(players.data.map((p) => p.overall)),
+      structure,
+    ),
     players: players.data.map(toPlayer),
   };
 }
@@ -225,4 +293,89 @@ export async function chooseTeam(
     }
   }
   return getLeague(ctx, league.id);
+}
+
+/** The league's conferences and divisions, in order, with team counts. */
+export async function getStructure(
+  ctx: UserContext,
+  leagueId: string,
+): Promise<LeagueStructure> {
+  const league = await getLeague(ctx, leagueId);
+  const [conferences, divisions, teams] = await Promise.all([
+    ctx.supabase
+      .from("league_conferences")
+      .select("id, name, sort_order")
+      .eq("league_id", league.id)
+      .order("sort_order"),
+    ctx.supabase
+      .from("league_divisions")
+      .select("id, conference_id, name, sort_order")
+      .eq("league_id", league.id)
+      .order("sort_order"),
+    ctx.supabase.from("teams").select("division_id").eq("league_id", league.id),
+  ]);
+  if (conferences.error) throw conferences.error;
+  if (divisions.error) throw divisions.error;
+  if (teams.error) throw teams.error;
+  const sizes = new Map<string, number>();
+  for (const t of teams.data) {
+    sizes.set(t.division_id, (sizes.get(t.division_id) ?? 0) + 1);
+  }
+  return {
+    conferences: conferences.data.map((c) => ({
+      id: c.id,
+      name: c.name,
+      divisions: divisions.data
+        .filter((d) => d.conference_id === c.id)
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          teamCount: sizes.get(d.id) ?? 0,
+        })),
+    })),
+  };
+}
+
+/**
+ * Renames conferences and divisions. Ids never change, so nothing that
+ * refers to them breaks. Two conferences can't share a name, and neither can
+ * two divisions in one conference.
+ */
+export async function renameStructure(
+  ctx: UserContext,
+  leagueId: string,
+  input: RenameStructureRequest,
+): Promise<LeagueStructure> {
+  const league = await getLeague(ctx, leagueId);
+  const { error } = await ctx.supabase.rpc("rename_structure", {
+    target_league: league.id,
+    conference_names: input.conferences,
+    division_names: input.divisions,
+  });
+  if (error) {
+    if (error.message === "league_not_found") {
+      throw new ApiError(404, "league_not_found", "That league doesn't exist.");
+    }
+    if (error.code === "23505") {
+      throw new ApiError(
+        409,
+        "name_taken",
+        "Two conferences, or two divisions in one conference, can't share a name.",
+      );
+    }
+    if (
+      ["unknown_conference", "unknown_division", "invalid_names"].includes(
+        error.message,
+      ) ||
+      error.code === "23514"
+    ) {
+      throw new ApiError(
+        400,
+        "invalid_names",
+        "Check the names and try again.",
+      );
+    }
+    throw error;
+  }
+  return getStructure(ctx, league.id);
 }

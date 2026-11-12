@@ -60,6 +60,7 @@ describe("api-client leagues", () => {
       status: "setup",
       size: "standard",
       userTeamId: null,
+      localPlayerCount: 0,
       createdAt: "2026-11-11T00:00:00Z",
       updatedAt: "2026-11-11T00:00:00Z",
     };

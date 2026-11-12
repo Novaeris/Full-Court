@@ -14,6 +14,26 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "0.7.0-alpha",
+    date: "2026-11-12",
+    title: "League setup",
+    added: [
+      "Set up your league before it starts: the standard 30-team layout, or a custom league of up to 32 teams.",
+      "Pick a region: North America, South America, Europe, Asia, or Australia and Oceania. Every team gets a real city from the region, and no two teams share a city.",
+      "Choose the playoffs: how many teams qualify, conference or league-wide seeding, automatic spots for division leaders, and best-of-3, 5 or 7 series, round by round.",
+      "Run one team or several, and let friends on the same device run their own: up to 8 local players, each with one or more franchises.",
+      "Customise your franchises with a city, team name, colours and one of 24 logos. Everything else is generated, and you can preview the whole league and shuffle it before you create it.",
+      "AI Assist settings for each franchise: trades, roster coverage, roster and rotation, scouting and drafting. Your choices are saved, but the AI itself isn't in the game yet.",
+      "A fantasy draft option, saved with your league. The draft itself comes later.",
+      "Rename conferences and divisions when you create a league, or later from league settings.",
+    ],
+    improved: [
+      "Your league page shows every team you run.",
+      "Teams show their logo.",
+      "League settings show the rules your league was created with.",
+    ],
+  },
+  {
     version: "0.6.0-alpha",
     date: "2026-11-11",
     title: "Game modes",
