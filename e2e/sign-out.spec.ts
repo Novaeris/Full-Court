@@ -13,14 +13,18 @@ test("sign out from the app navigation", async ({ page }, testInfo) => {
   const { email, password } = await createConfirmedUser("signout");
   await signInThroughUi(page, email, password);
 
-  if (testInfo.project.name === "desktop") {
-    // Desktop: a button at the foot of the sidebar.
+  if (testInfo.project.name !== "phone") {
+    // Desktop and tablet: in the account menu at the foot of the sidebar.
     await page
       .locator("aside")
+      .getByRole("button", { name: /^Account: / })
+      .click();
+    await page
+      .getByLabel("Account menu")
       .getByRole("button", { name: "Sign out" })
       .click();
   } else {
-    // Phone and tablet: inside the More sheet.
+    // Phone: inside the More sheet.
     await page.getByRole("button", { name: "More" }).click();
     await page
       .getByRole("dialog", { name: "More" })
@@ -33,7 +37,9 @@ test("sign out from the app navigation", async ({ page }, testInfo) => {
 test("sign out from the public site", async ({ page }, testInfo) => {
   const { email, password } = await createConfirmedUser("signoutsite");
   await signInThroughUi(page, email, password);
-  await page.goto("/about");
+  // Info pages stay in the game for members; the design-system page is one
+  // of the few public-frame pages a member still reaches.
+  await page.goto("/styleguide");
 
   if (testInfo.project.name === "phone") {
     await page.getByRole("button", { name: "Menu" }).click();

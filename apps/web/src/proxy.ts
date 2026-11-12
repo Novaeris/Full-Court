@@ -1,18 +1,23 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   maintenanceEnabled,
   maintenanceResponse,
 } from "@/server/maintenance/maintenance";
+import { memberRoute } from "@/server/navigation/member-routes";
 
 /**
  * Keeps the Supabase session fresh: refreshes an expiring access token and
  * writes the new cookies to both the request (for this render) and the
  * response (for the browser).
  *
+ * Keeps signed-in players inside the game: public info pages are rewritten
+ * to their in-game copies, and the landing page redirects to /modes
+ * (src/server/navigation/member-routes.ts).
+ *
  * Also serves the maintenance page when MAINTENANCE_MODE=on.
  *
- * This is not the access check. Pages, Server Actions and API routes each
+ * None of this is the access check. Pages, Server Actions and API routes each
  * verify the user themselves (src/server/auth/session.ts).
  */
 export async function proxy(request: NextRequest) {
@@ -26,7 +31,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  let response = NextResponse.next({ request });
+  // Cookies and headers the session refresh wants on the response. Collected
+  // first, then applied to whichever response this request gets.
+  const refreshed: {
+    cookies: { name: string; value: string; options: CookieOptions }[];
+    headers: Record<string, string>;
+  } = { cookies: [], headers: {} };
 
   const supabase = createServerClient(url, publishableKey, {
     cookies: {
@@ -35,21 +45,36 @@ export async function proxy(request: NextRequest) {
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
-        response = NextResponse.next({ request });
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
-        }
-        for (const [key, value] of Object.entries(headers)) {
-          response.headers.set(key, value);
-        }
+        refreshed.cookies = cookiesToSet;
+        refreshed.headers = headers;
       },
     },
   });
 
   // Validates the session and refreshes it when needed. Do not put code
   // between creating the client and this call.
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+  const signedIn = Boolean(data?.claims);
 
+  const route = memberRoute(request.nextUrl.pathname, signedIn);
+  let response: NextResponse;
+  if (route) {
+    const target = request.nextUrl.clone();
+    target.pathname = route.pathname;
+    response =
+      route.type === "rewrite"
+        ? NextResponse.rewrite(target, { request })
+        : NextResponse.redirect(target);
+  } else {
+    response = NextResponse.next({ request });
+  }
+
+  for (const { name, value, options } of refreshed.cookies) {
+    response.cookies.set(name, value, options);
+  }
+  for (const [key, value] of Object.entries(refreshed.headers)) {
+    response.headers.set(key, value);
+  }
   return response;
 }
 

@@ -4,6 +4,8 @@ export type NavItem = {
   href: string;
   label: string;
   icon: IconName;
+  /** Other sections that count as this item for the active state. */
+  match?: readonly string[];
 };
 
 /**
@@ -13,11 +15,21 @@ export type NavItem = {
  * the phone tab bar adds "More" as the fifth.
  */
 export const APP_NAV: readonly NavItem[] = [
-  { href: "/leagues", label: "Leagues", icon: "trophy" },
-  { href: "/account", label: "Account", icon: "user" },
+  { href: "/modes", label: "Modes", icon: "grid" },
+  // Owner Mode's saves are leagues, so league pages belong to Owner Mode.
+  { href: "/owner", label: "Owner", icon: "trophy", match: ["/leagues"] },
+  { href: "/career", label: "Career", icon: "star" },
+  { href: "/dynasty", label: "Dynasty", icon: "cards" },
 ];
 
-/** Secondary links: sidebar footer on desktop, "More" sheet on phones. */
+/** Account settings: first entry of the account menu and the "More" sheet. */
+export const ACCOUNT_LINK: NavItem = {
+  href: "/account",
+  label: "Account settings",
+  icon: "user",
+};
+
+/** Help and info links: the account menu on desktop and tablet, "More" on phones. */
 export const SECONDARY_NAV: readonly NavItem[] = [
   { href: "/support", label: "Contact & Support", icon: "mail" },
   { href: "/changelog", label: "Changelog", icon: "list" },
@@ -57,6 +69,16 @@ export const MARKETING_NAV: readonly NavItem[] = [
   { href: "/styleguide", label: "Design system", icon: "palette" },
 ];
 
-export function isActive(pathname: string, href: string): boolean {
+function inSection(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Whether `pathname` is inside the item's section (or one it claims). */
+export function isActive(
+  pathname: string,
+  item: Pick<NavItem, "href" | "match">,
+): boolean {
+  return [item.href, ...(item.match ?? [])].some((href) =>
+    inSection(pathname, href),
+  );
 }

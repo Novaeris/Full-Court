@@ -34,10 +34,11 @@ test("sign up, confirm by email and land signed in", async ({ page }) => {
   await page.goto("/leagues");
   await expect(page).toHaveURL(/\/login\?next=%2Fleagues$/);
 
+  // Confirming lands on Game Mode Selection, signed in.
   await page.goto(await emailLink(email, "Confirm your Full Court account"));
-  await expect(page).toHaveURL(/\/leagues$/);
+  await expect(page).toHaveURL(/\/modes$/);
   await expect(
-    page.getByRole("link", { name: "Account: Rookie Coach" }).first(),
+    page.getByRole("button", { name: "Account: Rookie Coach" }),
   ).toBeVisible();
 
   // First sign-in: the alpha introduction, once. The Terms were accepted at
@@ -53,15 +54,13 @@ test("sign up, confirm by email and land signed in", async ({ page }) => {
   await expect(intro).toBeHidden();
   await page.reload();
   await expect(
-    page.getByRole("link", { name: "Account: Rookie Coach" }).first(),
+    page.getByRole("button", { name: "Account: Rookie Coach" }),
   ).toBeVisible();
   await expect(intro).toHaveCount(0);
 
-  // Signed in, the home page offers the app instead of sign-in.
+  // Signed in, the landing page leads straight back into the game.
   await page.goto("/");
-  const hero = page.locator("#main");
-  await expect(hero.getByRole("link", { name: "Open the app" })).toBeVisible();
-  await expect(hero.getByRole("link", { name: "Sign in" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/modes$/);
 });
 
 test("visitors can sign up or sign in from the home page", async ({ page }) => {
@@ -140,7 +139,7 @@ test("sign in, return to the requested page, then sign out", async ({
 
   // Signed-in visitors skip the sign-in page.
   await page.goto("/login");
-  await expect(page).toHaveURL(/\/leagues$/);
+  await expect(page).toHaveURL(/\/modes$/);
 
   await page.goto("/account");
   await page
@@ -158,7 +157,7 @@ test("sign-in ignores off-site next= targets", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/localhost:\d+\/leagues$/);
+  await expect(page).toHaveURL(/localhost:\d+\/modes$/);
 });
 
 test("reset a forgotten password by email", async ({ page }) => {

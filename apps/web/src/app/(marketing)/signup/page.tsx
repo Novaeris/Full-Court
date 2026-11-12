@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { AuthCard, inlineLinkClass } from "@/components/auth/auth-card";
 import { SignUpForm } from "@/components/auth/auth-forms";
 import { FormSkeleton } from "@/components/forms/form-skeleton";
+import { DEFAULT_AFTER_SIGN_IN } from "@/server/auth/redirects";
 import { getCurrentUser } from "@/server/auth/session";
 
 export const metadata: Metadata = { title: "Create an account" };
@@ -32,7 +33,7 @@ export default function SignUpPage() {
 
 async function SignUp() {
   if (await getCurrentUser()) {
-    redirect("/leagues");
+    redirect(DEFAULT_AFTER_SIGN_IN);
   }
   return <SignUpForm />;
 }

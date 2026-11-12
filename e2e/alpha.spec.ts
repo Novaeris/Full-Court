@@ -67,10 +67,15 @@ test.describe("signed in", () => {
       page.getByRole("link", { name: /^Alpha/ }).first(),
     ).toBeVisible();
 
-    if (testInfo.project.name === "desktop") {
-      await page.locator("summary", { hasText: "Legal" }).click();
+    if (testInfo.project.name !== "phone") {
+      await page
+        .locator("aside")
+        .getByRole("button", { name: /^Account: / })
+        .click();
+      const menu = page.getByLabel("Account menu");
+      await menu.locator("summary", { hasText: "Legal" }).click();
       await expect(
-        page.getByRole("link", { name: "Privacy Policy" }),
+        menu.getByRole("link", { name: "Privacy Policy" }),
       ).toBeVisible();
     } else {
       await page.getByRole("button", { name: "More" }).click();

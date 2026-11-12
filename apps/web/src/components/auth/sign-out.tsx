@@ -25,6 +25,8 @@ const STYLES = {
     "flex min-h-touch w-full flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-xs font-medium text-text-muted hover:bg-surface-muted hover:text-text",
     "desktop:flex-row desktop:justify-start desktop:gap-3 desktop:px-3 desktop:text-sm",
   ].join(" "),
+  /** A row in the account menu. */
+  menu: "flex min-h-touch w-full items-center gap-3 rounded-md px-2 text-sm hover:bg-surface-muted",
   /** A row in the More sheet or the phone menu. */
   row: "flex min-h-touch w-full items-center gap-3 rounded-md px-2 text-base hover:bg-surface-muted",
   /** Plain text button in the site header. */
@@ -43,7 +45,9 @@ export function SignOutButton({ look }: { look: keyof typeof STYLES }) {
         {look === "header" ? null : (
           <Icon
             name="signOut"
-            className={look === "row" ? "size-5 text-text-muted" : "size-5"}
+            className={
+              look === "sidebar" ? "size-5" : "size-5 shrink-0 text-text-muted"
+            }
           />
         )}
         <span>Sign out</span>
