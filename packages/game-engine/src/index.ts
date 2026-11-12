@@ -8,3 +8,18 @@ export {
   type GeneratedWorld,
   type WorldOptions,
 } from "./world/generate";
+export {
+  CITY_CATALOGUE,
+  LONGITUDE_SCALE,
+  citiesIn,
+  findCity,
+  type CatalogCity,
+} from "./world/cities";
+export {
+  assignGeography,
+  balancedClusters,
+  selectCities,
+  type GeoAssignment,
+  type Placement,
+  type Point,
+} from "./world/geography";
