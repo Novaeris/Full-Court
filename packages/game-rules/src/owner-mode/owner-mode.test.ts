@@ -13,6 +13,8 @@ import {
   isStandardStructure,
   legacySettings,
   playoffRounds,
+  playoffTeamOptions,
+  reconcilePlayoffConfig,
   seedPlayoffTeams,
   standardStructure,
   supportedShapes,
@@ -651,5 +653,70 @@ describe("legacy leagues", () => {
     expect(
       validatePlayoffConfig(equalStructure(2, 2, 3), compact.playoffs),
     ).toEqual([]);
+  });
+});
+
+describe("reconcilePlayoffConfig", () => {
+  it("lists playoff team options up to the league size", () => {
+    expect(playoffTeamOptions(standard)).toEqual([2, 4, 8, 16]);
+    expect(playoffTeamOptions(equalStructure(4, 4, 2))).toEqual([
+      2, 4, 8, 16, 32,
+    ]);
+    expect(playoffTeamOptions(equalStructure(2, 2, 2))).toEqual([2, 4, 8]);
+  });
+
+  it("leaves a valid config alone", () => {
+    const config = defaultPlayoffConfig(standard);
+    expect(reconcilePlayoffConfig(standard, config)).toEqual(config);
+  });
+
+  it("falls back when the league shrinks", () => {
+    const small = equalStructure(2, 2, 3); // 12 teams
+    const result = reconcilePlayoffConfig(
+      small,
+      defaultPlayoffConfig(standard),
+    );
+    expect(result.teams).toBe(4);
+    expect(result.roundSeriesLengths).toEqual([7, 7]);
+    expect(result.divisionLeaderTopSeeds).toBe(2);
+    expect(validatePlayoffConfig(small, result)).toEqual([]);
+  });
+
+  it("switches to league seeding when conferences can't split the bracket", () => {
+    const three = equalStructure(3, 2, 3); // 18 teams
+    const config: PlayoffConfig = {
+      ...defaultPlayoffConfig(standard),
+      teams: 8,
+      roundSeriesLengths: [7, 7, 7],
+    };
+    expect(reconcilePlayoffConfig(three, config).seeding).toBe("league");
+  });
+
+  it("keeps chosen series lengths and pads or trims them to the rounds", () => {
+    const config: PlayoffConfig = {
+      ...defaultPlayoffConfig(standard),
+      teams: 8,
+      roundSeriesLengths: [3, 5, 7],
+    };
+    expect(
+      reconcilePlayoffConfig(standard, { ...config, teams: 16 })
+        .roundSeriesLengths,
+    ).toEqual([3, 5, 7, 7]);
+    expect(
+      reconcilePlayoffConfig(standard, { ...config, teams: 4 })
+        .roundSeriesLengths,
+    ).toEqual([3, 5]);
+  });
+
+  it("does not hide impossible leader counts", () => {
+    const structure = equalStructure(2, 4, 2);
+    const result = reconcilePlayoffConfig(structure, {
+      ...defaultPlayoffConfig(structure),
+      teams: 4,
+      seeding: "conference",
+    });
+    expect(codes(validatePlayoffConfig(structure, result))).toContain(
+      "division_leaders_exceed_spots",
+    );
   });
 });

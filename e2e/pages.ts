@@ -17,4 +17,9 @@ export const PAGES = [
 ] as const;
 
 /** Pages that need an account; visitors are sent to sign in. */
-export const PROTECTED = ["/leagues", "/leagues/new", "/account"] as const;
+export const PROTECTED = [
+  "/leagues",
+  "/leagues/new",
+  "/leagues/new/setup",
+  "/account",
+] as const;

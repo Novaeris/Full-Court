@@ -5,6 +5,7 @@ import {
   type DivisionId,
   type LeagueStructure,
   type PlayoffConfig,
+  type SeriesLength,
 } from "@fullcourt/game-types";
 import { divisionCount, totalTeams, type RuleIssue } from "./structure";
 
@@ -60,6 +61,55 @@ export function defaultPlayoffConfig(
     autoQualifyDivisionLeaders: true,
     divisionLeaderTopSeeds: Math.min(4, spots),
     roundSeriesLengths: Array.from({ length: playoffRounds(teams) }, () => 7),
+  };
+}
+
+/** Playoff team counts a league can choose: 2, 4, 8, 16 or 32, up to its size. */
+export function playoffTeamOptions(structure: LeagueStructure): number[] {
+  const total = Math.min(totalTeams(structure), MAX_LEAGUE_TEAMS);
+  const options: number[] = [];
+  for (let n = 2; n <= total; n *= 2) options.push(n);
+  return options;
+}
+
+/**
+ * Adjusts a playoff config after the league's structure or the number of
+ * playoff teams changed, so a form never holds an impossible combination:
+ * an unavailable team count falls back to the default, conference seeding
+ * falls back to league-wide when the bracket can't split, series lengths
+ * follow the number of rounds, and top seeds are capped to the pool. Rules
+ * that need a decision (such as too few spots for division leaders) are left
+ * for validatePlayoffConfig to report.
+ */
+export function reconcilePlayoffConfig(
+  structure: LeagueStructure,
+  config: PlayoffConfig,
+): PlayoffConfig {
+  const teams = playoffTeamOptions(structure).includes(config.teams)
+    ? config.teams
+    : defaultPlayoffConfig(structure).teams;
+  const seeding =
+    config.seeding === "conference" && !canSeedByConference(structure, teams)
+      ? "league"
+      : config.seeding;
+  const rounds = playoffRounds(teams);
+  const roundSeriesLengths = Array.from(
+    { length: rounds },
+    (_, i): SeriesLength =>
+      config.roundSeriesLengths[i] ?? config.roundSeriesLengths.at(-1) ?? 7,
+  );
+  const spots =
+    seeding === "conference" ? teams / structure.conferences.length : teams;
+  const divisionLeaderTopSeeds =
+    config.divisionLeaderTopSeeds === null
+      ? null
+      : Math.max(1, Math.min(config.divisionLeaderTopSeeds, spots));
+  return {
+    ...config,
+    teams,
+    seeding,
+    roundSeriesLengths,
+    divisionLeaderTopSeeds,
   };
 }
 
@@ -124,7 +174,7 @@ export function validatePlayoffConfig(
     if (leaders > spots) {
       add(
         "division_leaders_exceed_spots",
-        `Division leaders qualify automatically, but only ${spots} playoff spots are available for ${leaders} leaders.`,
+        `Division leaders qualify automatically, but only ${spots} playoff ${spots === 1 ? "spot is" : "spots are"} available for ${leaders} ${leaders === 1 ? "leader" : "leaders"}.`,
       );
     }
   }
