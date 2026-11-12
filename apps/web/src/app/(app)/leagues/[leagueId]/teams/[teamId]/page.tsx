@@ -149,8 +149,8 @@ async function TeamRoster({
         <div className="min-w-0">
           <h2 className="text-2xl font-bold">{teamName(team)}</h2>
           <p className="text-text-muted">
-            {team.conference}ern Conference · {team.division} Division ·
-            Strength {team.strength}
+            {team.conference} Conference · {team.division} Division · Strength{" "}
+            {team.strength}
             {isMine ? " · Your team" : ""}
           </p>
         </div>

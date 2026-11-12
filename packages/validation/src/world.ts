@@ -1,4 +1,4 @@
-import { CONFERENCES, POSITIONS, RATING_KEYS } from "@fullcourt/game-types";
+import { POSITIONS, RATING_KEYS } from "@fullcourt/game-types";
 import { z } from "zod";
 
 /** Teams, players and team selection, as the API returns them. */
@@ -17,7 +17,11 @@ export const TeamSchema = z.object({
   abbreviation: z.string(),
   city: z.string(),
   nickname: z.string(),
-  conference: z.enum(CONFERENCES),
+  /** Stable ids; display names may change, ids never do. */
+  conferenceId: z.string(),
+  divisionId: z.string(),
+  /** Display names. */
+  conference: z.string(),
   division: z.string(),
   primaryColor: z.string(),
   secondaryColor: z.string(),

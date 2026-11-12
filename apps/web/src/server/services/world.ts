@@ -21,7 +21,37 @@ type TeamRow = Database["public"]["Tables"]["teams"]["Row"];
 type PlayerRow = Database["public"]["Tables"]["players"]["Row"];
 
 const TEAM_COLUMNS =
-  "id, abbreviation, city, nickname, conference, division, primary_color, secondary_color" as const;
+  "id, abbreviation, city, nickname, conference_id, division_id, primary_color, secondary_color" as const;
+
+/** Display names and order of a league's conferences and divisions. */
+type Structure = {
+  conferences: Map<string, { name: string; order: number }>;
+  divisions: Map<string, { name: string; order: number }>;
+};
+
+async function loadStructure(
+  ctx: UserContext,
+  leagueId: string,
+): Promise<Structure> {
+  const [conferences, divisions] = await Promise.all([
+    ctx.supabase
+      .from("league_conferences")
+      .select("id, name, sort_order")
+      .eq("league_id", leagueId),
+    ctx.supabase
+      .from("league_divisions")
+      .select("id, name, sort_order")
+      .eq("league_id", leagueId),
+  ]);
+  if (conferences.error) throw conferences.error;
+  if (divisions.error) throw divisions.error;
+  const index = (rows: { id: string; name: string; sort_order: number }[]) =>
+    new Map(rows.map((r) => [r.id, { name: r.name, order: r.sort_order }]));
+  return {
+    conferences: index(conferences.data),
+    divisions: index(divisions.data),
+  };
+}
 
 const PLAYER_COLUMNS =
   "id, team_id, first_name, last_name, position, age, height_inches, weight_pounds, jersey, overall, potential, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina" as const;
@@ -45,20 +75,23 @@ function toTeam(
     | "abbreviation"
     | "city"
     | "nickname"
-    | "conference"
-    | "division"
+    | "conference_id"
+    | "division_id"
     | "primary_color"
     | "secondary_color"
   >,
   strength: number,
+  structure: Structure,
 ): Team {
   return {
     id: row.id,
     abbreviation: row.abbreviation,
     city: row.city,
     nickname: row.nickname,
-    conference: row.conference as Team["conference"],
-    division: row.division,
+    conferenceId: row.conference_id,
+    divisionId: row.division_id,
+    conference: structure.conferences.get(row.conference_id)?.name ?? "",
+    division: structure.divisions.get(row.division_id)?.name ?? "",
     primaryColor: row.primary_color,
     secondaryColor: row.secondary_color,
     strength,
@@ -108,18 +141,17 @@ export async function listTeams(
   leagueId: string,
 ): Promise<Team[]> {
   const league = await getLeague(ctx, leagueId);
-  const [teams, players] = await Promise.all([
+  const [teams, players, structure] = await Promise.all([
     ctx.supabase
       .from("teams")
       .select(TEAM_COLUMNS)
       .eq("league_id", league.id)
-      .order("conference")
-      .order("division")
       .order("city"),
     ctx.supabase
       .from("players")
       .select("team_id, overall")
       .eq("league_id", league.id),
+    loadStructure(ctx, league.id),
   ]);
   if (teams.error) throw teams.error;
   if (players.error) throw players.error;
@@ -131,7 +163,18 @@ export async function listTeams(
     list.push(p.overall);
     byTeam.set(p.team_id, list);
   }
-  return teams.data.map((t) => toTeam(t, teamStrength(byTeam.get(t.id) ?? [])));
+  const order = (id: string, of: Map<string, { order: number }>) =>
+    of.get(id)?.order ?? 0;
+  return teams.data
+    .map((t) => toTeam(t, teamStrength(byTeam.get(t.id) ?? []), structure))
+    .sort(
+      (a, b) =>
+        order(a.conferenceId, structure.conferences) -
+          order(b.conferenceId, structure.conferences) ||
+        order(a.divisionId, structure.divisions) -
+          order(b.divisionId, structure.divisions) ||
+        a.city.localeCompare(b.city),
+    );
 }
 
 /** One team and its roster, best players first. */
@@ -142,7 +185,7 @@ export async function getTeam(
 ): Promise<TeamDetail> {
   const league = await getLeague(ctx, leagueId);
   const id = parseTeamId(teamId);
-  const [team, players] = await Promise.all([
+  const [team, players, structure] = await Promise.all([
     ctx.supabase
       .from("teams")
       .select(TEAM_COLUMNS)
@@ -156,12 +199,17 @@ export async function getTeam(
       .eq("team_id", id)
       .order("overall", { ascending: false })
       .order("last_name"),
+    loadStructure(ctx, league.id),
   ]);
   if (team.error) throw team.error;
   if (players.error) throw players.error;
   if (!team.data) throw teamNotFound();
   return {
-    team: toTeam(team.data, teamStrength(players.data.map((p) => p.overall))),
+    team: toTeam(
+      team.data,
+      teamStrength(players.data.map((p) => p.overall)),
+      structure,
+    ),
     players: players.data.map(toPlayer),
   };
 }

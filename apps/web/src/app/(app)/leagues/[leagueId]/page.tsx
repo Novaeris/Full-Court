@@ -97,7 +97,7 @@ async function Overview({
               <p className="text-sm font-semibold text-text-muted">Your team</p>
               <h2 className="text-2xl font-bold">{teamName(mine)}</h2>
               <p className="text-text-muted">
-                {mine.conference}ern Conference · {mine.division} Division ·
+                {mine.conference} Conference · {mine.division} Division ·
                 Strength {mine.strength} (#{rank} of {teams.length})
               </p>
             </div>

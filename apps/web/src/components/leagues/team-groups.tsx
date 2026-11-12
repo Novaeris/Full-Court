@@ -18,20 +18,20 @@ export function TeamGroups({
   highlightTeamId?: string | null;
   action?: (team: Team) => ReactNode;
 }) {
-  const conferences = groupBy(teams, (t) => t.conference);
+  const conferences = groupBy(teams, (t) => t.conferenceId);
   return (
     <div className="flex flex-col gap-8">
-      {[...conferences].map(([conference, inConference]) => (
-        <section key={conference} aria-labelledby={`conf-${conference}`}>
-          <h2 id={`conf-${conference}`} className="text-2xl font-bold">
-            {conference}ern Conference
+      {[...conferences].map(([conferenceId, inConference]) => (
+        <section key={conferenceId} aria-labelledby={`conf-${conferenceId}`}>
+          <h2 id={`conf-${conferenceId}`} className="text-2xl font-bold">
+            {inConference[0]?.conference} Conference
           </h2>
           <div className="mt-4 grid gap-6 desktop:grid-cols-2 wide:grid-cols-3">
-            {[...groupBy(inConference, (t) => t.division)].map(
-              ([division, inDivision]) => (
-                <div key={division}>
+            {[...groupBy(inConference, (t) => t.divisionId)].map(
+              ([divisionId, inDivision]) => (
+                <div key={divisionId}>
                   <h3 className="mb-2 text-sm font-semibold tracking-wide text-text-muted uppercase">
-                    {division} Division
+                    {inDivision[0]?.division} Division
                   </h3>
                   <ul className="flex flex-col gap-2">
                     {inDivision.map((team) => (
