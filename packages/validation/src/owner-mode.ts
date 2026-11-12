@@ -1,0 +1,121 @@
+import {
+  AI_ASSIST_KEYS,
+  LEAGUE_CONFIG_SCHEMA_VERSION,
+  LEAGUE_PRESETS,
+  MAX_LEAGUE_TEAMS,
+  MAX_LOCAL_PLAYERS,
+  PLAYOFF_SEEDINGS,
+  REGIONS,
+  SERIES_LENGTHS,
+  type AiAssistFlags,
+} from "@fullcourt/game-types";
+import { z } from "zod";
+
+/**
+ * Shape checks for Owner Mode settings. Cross-field rules (bracket sizes,
+ * division-leader spots, one franchise per city…) live in
+ * @fullcourt/game-rules, which callers run after parsing.
+ */
+
+const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const COLOR = /^#[0-9a-f]{6}$/;
+
+export const RegionSchema = z.enum(REGIONS);
+export const LeaguePresetSchema = z.enum(LEAGUE_PRESETS);
+
+export const IdSchema = z
+  .string()
+  .regex(SLUG, "Use lowercase letters, numbers and dashes.");
+const NameSchema = z.string().trim().min(1).max(40);
+
+export const LeagueStructureSchema = z.object({
+  conferences: z
+    .array(
+      z.object({
+        id: IdSchema,
+        name: NameSchema,
+        divisions: z
+          .array(
+            z.object({
+              id: IdSchema,
+              name: NameSchema,
+              teamCount: z.number().int().min(1).max(MAX_LEAGUE_TEAMS),
+            }),
+          )
+          .min(1)
+          .max(MAX_LEAGUE_TEAMS),
+      }),
+    )
+    .min(1)
+    .max(MAX_LEAGUE_TEAMS),
+});
+
+const seriesLength = z.union(
+  SERIES_LENGTHS.map((n) => z.literal(n)) as unknown as [
+    z.ZodLiteral<3>,
+    z.ZodLiteral<5>,
+    z.ZodLiteral<7>,
+  ],
+);
+
+export const PlayoffConfigSchema = z.object({
+  teams: z.number().int().min(2).max(MAX_LEAGUE_TEAMS),
+  seeding: z.enum(PLAYOFF_SEEDINGS),
+  autoQualifyDivisionLeaders: z.boolean(),
+  divisionLeaderTopSeeds: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LEAGUE_TEAMS)
+    .nullable(),
+  roundSeriesLengths: z.array(seriesLength).min(1).max(5),
+});
+
+/** One version of the stored config. Add a branch when the version changes. */
+const LeagueConfigV1Schema = z.object({
+  schemaVersion: z.literal(LEAGUE_CONFIG_SCHEMA_VERSION),
+  preset: LeaguePresetSchema,
+  region: RegionSchema,
+  fantasyDraft: z.boolean(),
+  playoffs: PlayoffConfigSchema,
+});
+
+export const LeagueConfigSchema = z.discriminatedUnion("schemaVersion", [
+  LeagueConfigV1Schema,
+]);
+
+export const AiAssistSchema = z.object(
+  Object.fromEntries(AI_ASSIST_KEYS.map((key) => [key, z.boolean()])) as Record<
+    keyof AiAssistFlags,
+    z.ZodBoolean
+  >,
+);
+
+export const LocalPlayerSchema = z.object({
+  slot: z.number().int().min(1).max(MAX_LOCAL_PLAYERS),
+  label: z.string().trim().min(1).max(24).nullable(),
+});
+
+export const FranchiseSchema = z.object({
+  cityId: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)+$/, "Choose a city."),
+  nickname: NameSchema,
+  primaryColor: z.string().regex(COLOR, "Use a colour like #1a2b3c."),
+  secondaryColor: z.string().regex(COLOR, "Use a colour like #1a2b3c."),
+  logoId: z.string().regex(/^logo-\d{2,3}$/, "Choose a logo."),
+  conferenceId: IdSchema,
+  divisionId: IdSchema,
+  localPlayerSlot: z.number().int().min(1).max(MAX_LOCAL_PLAYERS).nullable(),
+  aiAssist: AiAssistSchema,
+});
+
+/**
+ * Everything the owner chooses before generation. Not wired into league
+ * creation yet; the existing `{ name, size }` request is unchanged.
+ */
+export const OwnerModeSetupSchema = z.object({
+  config: LeagueConfigSchema,
+  structure: LeagueStructureSchema,
+  localPlayers: z.array(LocalPlayerSchema).min(1).max(MAX_LOCAL_PLAYERS),
+  franchises: z.array(FranchiseSchema).max(MAX_LEAGUE_TEAMS),
+});
+export type OwnerModeSetupInput = z.input<typeof OwnerModeSetupSchema>;
