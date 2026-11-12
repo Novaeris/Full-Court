@@ -9,15 +9,18 @@ import {
 } from "@fullcourt/game-engine";
 import {
   equalStructure,
+  legacySettings,
   validateOwnerModeSetup,
   validateSupportedStructure,
 } from "@fullcourt/game-rules";
 import {
   LEAGUE_LIMIT,
+  LeagueConfigSchema,
   LeagueIdSchema,
   type CreateLeagueInput,
   type League,
   type LeagueList,
+  type LeagueSettings,
   type OwnerSetupInput,
   type RenameLeagueRequest,
 } from "@fullcourt/validation";
@@ -93,6 +96,38 @@ export async function getLeague(ctx: UserContext, id: string): Promise<League> {
   if (error) throw error;
   if (!data) throw notFound();
   return toLeague(data);
+}
+
+/**
+ * The rules a league was created with: its stored config, or for leagues made
+ * before Owner Mode (which store none) a view derived from their size. Nothing
+ * is ever written back to old leagues.
+ */
+export async function getSettings(
+  ctx: UserContext,
+  id: string,
+): Promise<LeagueSettings> {
+  const { data, error } = await ctx.supabase
+    .from("leagues")
+    .select("size, config")
+    .eq("id", parseLeagueId(id))
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound();
+  if (data.config === null) {
+    const { legacy, preset, region, fantasyDraft, playoffs } = legacySettings(
+      data.size === "standard" ? "standard" : "compact",
+    );
+    return { legacy, preset, region, fantasyDraft, playoffs };
+  }
+  const config = LeagueConfigSchema.parse(data.config);
+  return {
+    legacy: false,
+    preset: config.preset,
+    region: config.region,
+    fantasyDraft: config.fantasyDraft,
+    playoffs: config.playoffs,
+  };
 }
 
 const limitReached = () =>

@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { contrastRatio } from "@fullcourt/design-tokens";
 import {
+  ID_PATTERN,
   defaultPlayoffConfig,
   equalStructure,
   standardStructure,
+  supportedShapes,
+  supportedTeamCounts,
   validateOwnerModeSetup,
+  validateStructureIntegrity,
 } from "@fullcourt/game-rules";
 import {
   LOGO_IDS,
@@ -373,4 +377,70 @@ describe("planOwnerLeague", () => {
     );
     expect(plan.teams.filter((t) => t.nickname === "Comets")).toHaveLength(1);
   });
+});
+
+describe("every supported league shape in every region", () => {
+  // Leagues are written under the database's limits and the game's rules, so
+  // check them for all shapes, not just the ones the UI offers first.
+  it("plans valid leagues that fit the database", () => {
+    let leagues = 0;
+    for (const region of REGIONS) {
+      for (const n of supportedTeamCounts()) {
+        for (const shape of supportedShapes(n)) {
+          const structure = equalStructure(
+            shape.conferences,
+            shape.divisionsPerConference,
+            shape.teamsPerDivision,
+          );
+          const label = `${region} ${shape.conferences}x${shape.divisionsPerConference}x${shape.teamsPerDivision}`;
+          const plan = planOwnerLeague(
+            options({
+              region,
+              shape: structure,
+              identitySeed: `sweep-${leagues}`,
+              franchises: [{ localPlayerSlot: 1, cityId: OWN_CITY[region] }],
+            }),
+          );
+          leagues++;
+
+          expect(plan.teams, label).toHaveLength(n);
+          expect(validateStructureIntegrity(plan.structure), label).toEqual([]);
+          // Same sizes as asked for, with unique ids and names.
+          const sizes = plan.structure.conferences
+            .flatMap((c) => c.divisions)
+            .map((d) => d.teamCount);
+          expect(new Set(sizes), label).toEqual(
+            new Set([shape.teamsPerDivision]),
+          );
+          const ids = plan.structure.conferences.flatMap((c) => [
+            c.id,
+            ...c.divisions.map((d) => d.id),
+          ]);
+          expect(new Set(ids).size, label).toBe(ids.length);
+          for (const id of ids) expect(id, label).toMatch(ID_PATTERN);
+
+          // Every team fits the database columns, and nothing repeats.
+          for (const key of ["cityId", "abbreviation", "nickname"] as const) {
+            expect(
+              new Set(plan.teams.map((t) => t[key])).size,
+              `${label} ${key}`,
+            ).toBe(n);
+          }
+          for (const t of plan.teams) {
+            expect(t.abbreviation, label).toMatch(/^[A-Z0-9]{3}$/);
+            expect(t.primaryColor, label).toMatch(/^#[0-9a-f]{6}$/);
+            expect(t.secondaryColor, label).toMatch(/^#[0-9a-f]{6}$/);
+            expect(t.logoId, label).toMatch(/^logo-\d{2}$/);
+            expect(t.city.length, label).toBeLessThanOrEqual(40);
+            expect(t.nickname.length, label).toBeLessThanOrEqual(40);
+            expect(
+              contrastRatio(t.primaryColor, "#ffffff"),
+              `${label} ${t.cityId}`,
+            ).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+      }
+    }
+    expect(leagues).toBeGreaterThan(150);
+  }, 120_000);
 });

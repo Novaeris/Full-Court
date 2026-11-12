@@ -3,6 +3,7 @@ import {
   DeleteLeagueResponseSchema,
   LeagueListSchema,
   LeagueSchema,
+  LeagueSettingsSchema,
   LeagueStructureSchema,
   TeamDetailSchema,
   TeamListSchema,
@@ -12,6 +13,7 @@ import {
   type CreateLeagueRequest,
   type League,
   type LeagueList,
+  type LeagueSettings,
   type LeagueStructure,
   type RenameLeagueRequest,
   type RenameStructureRequest,
@@ -124,6 +126,11 @@ export function createApiClient(options: ApiClientOptions) {
       teams: (id: string): Promise<{ teams: Team[] }> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/teams`, (b) =>
           TeamListSchema.parse(b),
+        ),
+      /** The rules a league was created with (derived for older leagues). */
+      settings: (id: string): Promise<LeagueSettings> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/settings`, (b) =>
+          LeagueSettingsSchema.parse(b),
         ),
       /** Conferences and divisions, with their stable ids and display names. */
       structure: (id: string): Promise<LeagueStructure> =>

@@ -7,8 +7,10 @@ import {
   RenameLeagueForm,
   RenameStructureForm,
 } from "@/components/leagues/league-forms";
+import { LeagueRules } from "@/components/leagues/league-rules";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { loadLeague } from "@/server/leagues/load";
+import { getSettings } from "@/server/services/leagues";
 import { getStructure, listTeams } from "@/server/services/world";
 
 export const metadata: Metadata = { title: "League settings" };
@@ -30,15 +32,22 @@ async function Settings({
 }) {
   const { leagueId } = await params;
   const { ctx, league } = await loadLeague(leagueId);
-  const [teams, structure] = await Promise.all([
+  const [teams, structure, settings] = await Promise.all([
     listTeams(ctx, league.id),
     getStructure(ctx, league.id),
+    getSettings(ctx, league.id),
   ]);
   const franchises = teams.filter((team) => team.localPlayerSlot !== null);
   return (
     <div className="flex max-w-prose flex-col gap-6">
       <SettingsCard title="Name">
         <RenameLeagueForm leagueId={league.id} current={league.name} />
+      </SettingsCard>
+      <SettingsCard
+        title="League rules"
+        description="The rules this league was created with."
+      >
+        <LeagueRules settings={settings} structure={structure} />
       </SettingsCard>
       <SettingsCard
         title="Conferences and divisions"

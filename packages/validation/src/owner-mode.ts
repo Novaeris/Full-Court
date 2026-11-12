@@ -2,6 +2,7 @@ import {
   AI_ASSIST_KEYS,
   LEAGUE_CONFIG_SCHEMA_VERSION,
   LEAGUE_PRESETS,
+  MAX_CONFERENCES,
   MAX_LEAGUE_TEAMS,
   MAX_LOCAL_PLAYERS,
   NO_AI_ASSIST,
@@ -118,18 +119,6 @@ export const FranchiseSchema = z.object({
   aiAssist: AiAssistSchema,
 });
 
-/**
- * Everything the owner chooses before generation. Not wired into league
- * creation yet; the existing `{ name, size }` request is unchanged.
- */
-export const OwnerModeSetupSchema = z.object({
-  config: LeagueConfigSchema,
-  structure: LeagueStructureSchema,
-  localPlayers: z.array(LocalPlayerSchema).min(1).max(MAX_LOCAL_PLAYERS),
-  franchises: z.array(FranchiseSchema).max(MAX_LEAGUE_TEAMS),
-});
-export type OwnerModeSetupInput = z.input<typeof OwnerModeSetupSchema>;
-
 /** Sizes of the equal divisions wanted; ids and names are generated. */
 export const SetupShapeSchema = z.object({
   conferences: z.number().int().min(1).max(4),
@@ -166,8 +155,20 @@ export const OwnerSetupRequestSchema = z.object({
   /** New names for generated conferences and divisions, by id. */
   names: z
     .object({
-      conferences: z.record(IdSchema, StructureNameSchema).default({}),
-      divisions: z.record(IdSchema, StructureNameSchema).default({}),
+      conferences: z
+        .record(IdSchema, StructureNameSchema)
+        .refine(
+          (r) => Object.keys(r).length <= MAX_CONFERENCES,
+          "Too many names.",
+        )
+        .default({}),
+      divisions: z
+        .record(IdSchema, StructureNameSchema)
+        .refine(
+          (r) => Object.keys(r).length <= MAX_LEAGUE_TEAMS,
+          "Too many names.",
+        )
+        .default({}),
     })
     .default({ conferences: {}, divisions: {} }),
 });
@@ -186,3 +187,15 @@ export const RenameStructureRequestSchema = z.object({
 export type RenameStructureRequest = z.infer<
   typeof RenameStructureRequestSchema
 >;
+
+/** GET /api/v1/leagues/:leagueId/settings: the rules a league was created with. */
+export const LeagueSettingsSchema = z.object({
+  /** True for leagues created before Owner Mode: derived, never stored. */
+  legacy: z.boolean(),
+  preset: LeaguePresetSchema,
+  /** Null for leagues created before Owner Mode, which used fictional cities. */
+  region: RegionSchema.nullable(),
+  fantasyDraft: z.boolean(),
+  playoffs: PlayoffConfigSchema,
+});
+export type LeagueSettings = z.infer<typeof LeagueSettingsSchema>;

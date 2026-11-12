@@ -4,7 +4,6 @@ import {
   FranchiseSchema,
   LeagueConfigSchema,
   LeagueStructureSchema,
-  OwnerModeSetupSchema,
   OwnerSetupRequestSchema,
   RenameStructureRequestSchema,
 } from "./owner-mode";
@@ -92,27 +91,6 @@ describe("FranchiseSchema", () => {
         .success,
     ).toBe(false);
   });
-
-  it("builds a full setup", () => {
-    const setup = {
-      config,
-      structure: {
-        conferences: [
-          {
-            id: "c-east",
-            name: "Eastern",
-            divisions: [{ id: "d-atlantic", name: "Atlantic", teamCount: 5 }],
-          },
-        ],
-      },
-      localPlayers: [{ slot: 1, label: null }],
-      franchises: [franchise],
-    };
-    expect(OwnerModeSetupSchema.safeParse(setup).success).toBe(true);
-    expect(
-      OwnerModeSetupSchema.safeParse({ ...setup, localPlayers: [] }).success,
-    ).toBe(false);
-  });
 });
 
 describe("OwnerSetupRequestSchema", () => {
@@ -152,6 +130,18 @@ describe("OwnerSetupRequestSchema", () => {
     expect(bad({ franchises: [{ localPlayerSlot: 1, cityId: "Paris" }] })).toBe(
       false,
     );
+  });
+
+  it("bounds the number of name overrides", () => {
+    const many = (n: number) =>
+      Object.fromEntries(
+        Array.from({ length: n }, (_, i) => [`id-${i}`, `Name ${i}`]),
+      );
+    const withNames = (names: object) =>
+      OwnerSetupRequestSchema.safeParse({ ...request, names }).success;
+    expect(withNames({ conferences: many(4), divisions: many(32) })).toBe(true);
+    expect(withNames({ conferences: many(5), divisions: {} })).toBe(false);
+    expect(withNames({ conferences: {}, divisions: many(33) })).toBe(false);
   });
 
   it("is optional on a create-league request, which stays valid without it", () => {
