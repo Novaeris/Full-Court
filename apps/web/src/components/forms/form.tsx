@@ -71,19 +71,22 @@ export function SubmitButton({
   pendingLabel,
   variant = "primary",
   className = "",
+  disabled = false,
 }: {
   children: ReactNode;
   pendingLabel: string;
   variant?: "primary" | "secondary" | "danger";
   className?: string;
+  /** Disabled for a reason other than sending, such as an invalid form. */
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
   const classes = buttonClasses(variant, className);
   return (
     <button
       type="submit"
-      disabled={pending}
-      aria-disabled={pending}
+      disabled={pending || disabled}
+      aria-disabled={pending || disabled}
       className={classes}
     >
       {pending ? pendingLabel : children}

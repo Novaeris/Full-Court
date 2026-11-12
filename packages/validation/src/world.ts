@@ -21,6 +21,9 @@ export const TeamSchema = z.object({
   /** Stable ids; display names may change, ids never do. */
   conferenceId: z.string(),
   divisionId: z.string(),
+  /** The catalogue city and built-in logo; null for leagues created before Owner Mode. */
+  cityId: z.string().nullable(),
+  logoId: z.string().nullable(),
   /** The local player running the team, or null when the AI does. */
   localPlayerSlot: z.number().int().nullable(),
   /** AI Assist permissions: always all off for AI-run teams. */

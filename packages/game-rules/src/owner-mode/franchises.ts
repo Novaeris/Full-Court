@@ -1,5 +1,6 @@
 import {
   AI_ASSIST_KEYS,
+  LOGO_IDS,
   MAX_LOCAL_PLAYERS,
   type FranchiseSpec,
   type LeagueStructure,
@@ -11,6 +12,11 @@ export const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 export const LOGO_ID_PATTERN = /^logo-\d{2,3}$/;
 export const CITY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)+$/;
 export const LOCAL_PLAYER_LABEL_MAX = 24;
+
+/** Names compare without case or surrounding spaces. */
+export function nameKey(name: string): string {
+  return name.trim().toLowerCase();
+}
 
 /**
  * Local players: 1 to MAX_LOCAL_PLAYERS, numbered 1…n with no gaps. How many
@@ -84,6 +90,7 @@ export function validateFranchises(
   }
 
   const cities = new Set<string>();
+  const nicknames = new Set<string>();
   const inDivision = new Map<string, number>();
   const controlled = new Set<number>();
 
@@ -98,15 +105,24 @@ export function validateFranchises(
     const nickname = f.nickname.trim();
     if (nickname.length < 1 || nickname.length > NAME_MAX) {
       add("invalid_nickname", `A team name has 1 to ${NAME_MAX} characters.`);
+    } else if (nicknames.has(nameKey(nickname))) {
+      add("duplicate_nickname", "Two franchises can't share a team name.");
     }
+    nicknames.add(nameKey(nickname));
     if (!COLOR_PATTERN.test(f.primaryColor)) {
       add("invalid_color", "Primary colour must look like #1a2b3c.");
     }
     if (!COLOR_PATTERN.test(f.secondaryColor)) {
       add("invalid_color", "Secondary colour must look like #1a2b3c.");
     }
-    if (!LOGO_ID_PATTERN.test(f.logoId)) {
+    if (!LOGO_IDS.includes(f.logoId)) {
       add("invalid_logo", `"${f.logoId}" isn't a built-in logo.`);
+    }
+    if (
+      COLOR_PATTERN.test(f.primaryColor) &&
+      f.primaryColor === f.secondaryColor
+    ) {
+      add("same_colors", "Pick two different colours.");
     }
 
     const division = divisions.get(f.divisionId);

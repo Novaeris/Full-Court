@@ -6,6 +6,7 @@ import {
   createConfirmedUser,
   signInThroughUi,
 } from "./support/auth";
+import { standardSetup } from "./support/league";
 
 async function expectAccessible(page: Page) {
   // Streamed pages send <title> with the streamed content; wait for it.
@@ -409,5 +410,100 @@ test.describe("world API", () => {
       setup: good,
     });
     expect(league).toMatchObject({ size: "custom", status: "active" });
+  });
+
+  test("franchise identity and names are saved, and checked", async ({
+    baseURL,
+  }) => {
+    const user = await createConfirmedUser("identity");
+    const api = createApiClient({
+      baseUrl: baseURL ?? "",
+      fetch,
+      getAccessToken: async () => accessToken(user.email, user.password),
+    });
+    const base = standardSetup();
+    const preview = await api.leagues.create({ name: "Probe", setup: base });
+    const probe = await api.leagues.structure(preview.id);
+    const conference = probe.conferences[0]!;
+    const division = conference.divisions[0]!;
+    await api.leagues.delete(preview.id);
+
+    // Chosen identity and names are saved.
+    const league = await api.leagues.create({
+      name: "Identity",
+      setup: {
+        ...base,
+        franchises: [
+          {
+            localPlayerSlot: 1,
+            cityId: "na-us-new-york",
+            nickname: "Harbor Hawks",
+            primaryColor: "#0b3d91",
+            secondaryColor: "#ffd200",
+            logoId: "logo-03",
+          },
+        ],
+        names: {
+          conferences: { [conference.id]: "Harbor Conference" },
+          divisions: { [division.id]: "Lighthouse" },
+        },
+      } as typeof base,
+    });
+    const { teams } = await api.leagues.teams(league.id);
+    expect(teams.find((t) => t.localPlayerSlot === 1)).toMatchObject({
+      city: "New York",
+      nickname: "Harbor Hawks",
+      primaryColor: "#0b3d91",
+      secondaryColor: "#ffd200",
+      logoId: "logo-03",
+    });
+    const structure = await api.leagues.structure(league.id);
+    expect(structure.conferences[0]).toMatchObject({
+      id: conference.id,
+      name: "Harbor Conference",
+    });
+    expect(structure.conferences[0]!.divisions[0]).toMatchObject({
+      id: division.id,
+      name: "Lighthouse",
+    });
+    await api.leagues.delete(league.id);
+
+    const bad = (patch: object) =>
+      expect(
+        api.leagues.create({
+          name: "Bad",
+          setup: { ...base, ...patch } as typeof base,
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    const one = base.franchises[0]!;
+    await bad({ franchises: [{ ...one, logoId: "logo-99" }] });
+    await bad({
+      franchises: [
+        { ...one, primaryColor: "#112233", secondaryColor: "#112233" },
+      ],
+    });
+    await bad({
+      names: { conferences: { "no-such-conference": "X" }, divisions: {} },
+    });
+    await bad({
+      names: {
+        conferences: {
+          [conference.id]: "Same",
+          [probe.conferences[1]!.id]: "same",
+        },
+        divisions: {},
+      },
+    });
+    await bad({
+      localPlayers: [
+        { slot: 1, label: null },
+        { slot: 2, label: null },
+      ],
+      franchises: [
+        { ...one, nickname: "Hawks" },
+        { localPlayerSlot: 2, cityId: "na-us-boston", nickname: " hawks" },
+      ],
+    });
+    expect((await api.leagues.list()).leagues).toHaveLength(0);
   });
 });

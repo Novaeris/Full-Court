@@ -29,6 +29,13 @@ export const IdSchema = z
   .regex(SLUG, "Use lowercase letters, numbers and dashes.");
 const NameSchema = z.string().trim().min(1).max(40);
 
+/** A conference or division name as typed by the owner. */
+export const StructureNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Enter a name.")
+  .max(40, "Use at most 40 characters.");
+
 export const LeagueStructureSchema = z.object({
   conferences: z
     .array(
@@ -156,16 +163,16 @@ export const OwnerSetupRequestSchema = z.object({
   localPlayers: z.array(LocalPlayerSchema).min(1).max(MAX_LOCAL_PLAYERS),
   franchises: z.array(FranchiseRequestSchema).min(1).max(MAX_LEAGUE_TEAMS),
   identitySeed: IdentitySeedSchema,
+  /** New names for generated conferences and divisions, by id. */
+  names: z
+    .object({
+      conferences: z.record(IdSchema, StructureNameSchema).default({}),
+      divisions: z.record(IdSchema, StructureNameSchema).default({}),
+    })
+    .default({ conferences: {}, divisions: {} }),
 });
 export type OwnerSetupRequest = z.input<typeof OwnerSetupRequestSchema>;
 export type OwnerSetupInput = z.output<typeof OwnerSetupRequestSchema>;
-
-/** A conference or division name as typed by the owner. */
-export const StructureNameSchema = z
-  .string()
-  .trim()
-  .min(1, "Enter a name.")
-  .max(40, "Use at most 40 characters.");
 
 /** PATCH /api/v1/leagues/:leagueId/structure: rename, never re-id. */
 export const RenameStructureRequestSchema = z.object({

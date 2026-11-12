@@ -11,6 +11,7 @@ import {
 import {
   AI_ASSIST_KEYS,
   AI_ASSIST_LABELS,
+  LOGO_IDS,
   MAX_LOCAL_PLAYERS,
   REGIONS,
   REGION_NAMES,
@@ -21,6 +22,7 @@ import {
   useActionState,
   useEffect,
   useId,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -34,6 +36,8 @@ import {
   SelectField,
   SubmitButton,
 } from "@/components/forms/form";
+import { TeamBadge } from "@/components/leagues/team-badge";
+import { TeamLogo, logoLabel } from "@/components/leagues/team-logo";
 import { Button } from "@/components/ui/button";
 import { createLeagueAction } from "@/server/leagues/actions";
 import {
@@ -41,10 +45,14 @@ import {
   draftIssues,
   draftReducer,
   draftToRequest,
+  franchiseLabel,
   initialDraft,
+  previewLeague,
   roundName,
   structureOf,
   teamCount,
+  type Draft,
+  type Preview,
 } from "./draft";
 
 const STEPS = [
@@ -61,13 +69,28 @@ const LAST = STEPS.length - 1;
  * can never offer a combination the server would reject.
  */
 export function LeagueSetupForm({ identitySeed }: { identitySeed: string }) {
-  const [draft, dispatch] = useReducer(draftReducer, undefined, initialDraft);
+  const [draft, dispatch] = useReducer(
+    draftReducer,
+    identitySeed,
+    initialDraft,
+  );
   const [state, action] = useActionState(createLeagueAction, IDLE);
   const [step, setStep] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
-  const issues = draftIssues(draft);
-  const stepIssues =
-    step === 0 ? issues.basics : step === 1 ? issues.rules : [];
+  const preview = useMemo(() => previewLeague(draft), [draft]);
+  const issues = useMemo(() => draftIssues(draft, preview), [draft, preview]);
+  const stepIssues = [
+    issues.basics,
+    issues.rules,
+    issues.franchises,
+    issues.review,
+  ][step] as RuleIssue[];
+  const anyIssues =
+    issues.basics.length +
+      issues.rules.length +
+      issues.franchises.length +
+      issues.review.length >
+    0;
   const structure = structureOf(draft.shape);
   const total = teamCount(draft.shape);
 
@@ -112,14 +135,21 @@ export function LeagueSetupForm({ identitySeed }: { identitySeed: string }) {
           total={total}
         />
       ) : null}
-      {step === 2 ? <FranchisesStep draft={draft} dispatch={dispatch} /> : null}
+      {step === 2 ? (
+        <FranchisesStep draft={draft} dispatch={dispatch} preview={preview} />
+      ) : null}
       {step === LAST ? (
         <>
-          <ReviewStep draft={draft} total={total} />
+          <ReviewStep
+            draft={draft}
+            total={total}
+            dispatch={dispatch}
+            preview={preview}
+          />
           <input
             type="hidden"
             name="request"
-            value={JSON.stringify(draftToRequest(draft, identitySeed))}
+            value={JSON.stringify(draftToRequest(draft, preview))}
           />
           <FormMessage state={state} />
         </>
@@ -143,7 +173,10 @@ export function LeagueSetupForm({ identitySeed }: { identitySeed: string }) {
             Next: {STEPS[step + 1]}
           </Button>
         ) : (
-          <SubmitButton pendingLabel="Generating your league…">
+          <SubmitButton
+            pendingLabel="Generating your league…"
+            disabled={anyIssues}
+          >
             Create league
           </SubmitButton>
         )}
@@ -478,59 +511,255 @@ function RulesStep({
 function FranchisesStep({
   draft,
   dispatch,
+  preview,
 }: {
-  draft: ReturnType<typeof initialDraft>;
+  draft: Draft;
   dispatch: Dispatch;
+  preview: Preview;
 }) {
   const cities = citiesIn(draft.region);
+  const players = Array.from({ length: draft.localPlayers }, (_, i) => i + 1);
+  const full = draft.franchises.length >= teamCount(draft.shape);
   return (
     <div className="flex flex-col gap-5">
       <p className="text-text-muted">
-        {draft.localPlayers === 1
-          ? "Pick the city you will run."
-          : "Pick the city each player will run."}{" "}
-        Every other team in {REGION_NAMES[draft.region]} is generated for you,
-        with its own city, name, colours and logo.
+        Set up the franchises people will run. Every other team in{" "}
+        {REGION_NAMES[draft.region]} is generated for you, with its own city,
+        name, colours and logo, and anything you leave blank here is generated
+        too.
       </p>
-      {draft.franchiseCities.map((cityId, index) => {
-        const who =
-          draft.localPlayers === 1 ? "Your franchise" : `Player ${index + 1}`;
+      {draft.franchises.map((franchise, index) => {
+        const generated = preview.generated?.teams.find(
+          (t) => t.cityId === franchise.cityId,
+        );
+        const canRemove =
+          draft.franchises.filter(
+            (f) => f.localPlayerSlot === franchise.localPlayerSlot,
+          ).length > 1;
+        const customised =
+          franchise.nickname.trim() !== "" ||
+          franchise.primaryColor !== null ||
+          franchise.secondaryColor !== null ||
+          franchise.logoId !== null;
+        const primary =
+          franchise.primaryColor ?? generated?.primaryColor ?? "#1d4ed8";
+        const secondary =
+          franchise.secondaryColor ?? generated?.secondaryColor ?? "#facc15";
+        const logo = franchise.logoId ?? generated?.logoId ?? LOGO_IDS[0];
+        const patch = (change: Parameters<typeof dispatchPatch>[2]) =>
+          dispatchPatch(dispatch, franchise.key, change);
         return (
           <fieldset
-            key={index}
+            key={franchise.key}
             className="flex flex-col gap-4 rounded-lg border border-border p-4"
           >
-            <legend className="px-1 font-bold">{who}</legend>
+            <legend className="px-1 font-bold">
+              {franchiseLabel(draft, index)}
+            </legend>
+            {draft.localPlayers > 1 ? (
+              <SelectField
+                label="Run by"
+                name={`owner-${franchise.key}`}
+                value={String(franchise.localPlayerSlot)}
+                onChange={(e) =>
+                  patch({ localPlayerSlot: Number(e.target.value) })
+                }
+                options={players.map((n) => ({
+                  value: String(n),
+                  label: `Player ${n}`,
+                }))}
+              />
+            ) : null}
             <SelectField
-              label={
-                draft.localPlayers === 1
-                  ? "Your franchise city"
-                  : `Player ${index + 1}'s franchise city`
-              }
-              name={`city-${index}`}
-              value={cityId}
-              onChange={(e) =>
-                dispatch({
-                  type: "franchiseCity",
-                  index,
-                  cityId: e.target.value,
-                })
-              }
+              label="City"
+              name={`city-${franchise.key}`}
+              value={franchise.cityId}
+              onChange={(e) => patch({ cityId: e.target.value })}
               options={cities.map((city) => ({
                 value: city.id,
                 label: `${city.name}, ${city.subdivision}`,
               }))}
             />
+            <Field
+              label="Team name"
+              name={`nickname-${franchise.key}`}
+              maxLength={40}
+              autoComplete="off"
+              placeholder={generated?.nickname ?? ""}
+              hint={
+                generated
+                  ? `Leave blank to be the ${generated.city} ${generated.nickname}.`
+                  : undefined
+              }
+              value={franchise.nickname}
+              onChange={(e) => patch({ nickname: e.target.value })}
+            />
+            <div className="grid gap-4 tablet:grid-cols-2">
+              <ColorField
+                label="Primary colour"
+                value={primary}
+                onChange={(value) => patch({ primaryColor: value })}
+              />
+              <ColorField
+                label="Secondary colour"
+                value={secondary}
+                onChange={(value) => patch({ secondaryColor: value })}
+              />
+            </div>
+            <p className="-mt-2 text-sm text-text-muted">
+              Team names are shown in white on the primary colour, so choose a
+              dark one.
+            </p>
+            <LogoPicker
+              name={`logo-${franchise.key}`}
+              value={logo ?? "logo-01"}
+              background={primary}
+              onChange={(value) => patch({ logoId: value })}
+            />
+            <div className="flex flex-col gap-2 tablet:flex-row">
+              <span className="flex items-center gap-3">
+                <TeamBadge
+                  size="lg"
+                  team={{
+                    abbreviation: generated?.abbreviation ?? "",
+                    primaryColor: primary,
+                    secondaryColor: secondary,
+                    logoId: logo ?? null,
+                  }}
+                />
+                <span className="font-semibold break-words">
+                  {franchise.nickname.trim() || generated?.nickname}
+                </span>
+              </span>
+            </div>
             <AiAssistSettings
-              flags={draft.aiAssist[index]}
-              onChange={(key, value) =>
-                dispatch({ type: "aiAssist", index, key, value })
+              flags={franchise.aiAssist}
+              onChange={(flag, value) =>
+                dispatch({
+                  type: "aiAssist",
+                  key: franchise.key,
+                  flag,
+                  value,
+                })
               }
             />
+            <div className="flex flex-col gap-2 tablet:flex-row">
+              {customised ? (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    dispatch({ type: "resetFranchise", key: franchise.key })
+                  }
+                >
+                  Use generated name, colours and logo
+                </Button>
+              ) : null}
+              {canRemove ? (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    dispatch({ type: "removeFranchise", key: franchise.key })
+                  }
+                >
+                  Remove this franchise
+                </Button>
+              ) : null}
+            </div>
           </fieldset>
         );
       })}
+      <div>
+        <Button
+          variant="secondary"
+          disabled={full}
+          onClick={() => dispatch({ type: "addFranchise" })}
+        >
+          Add another franchise
+        </Button>
+        {full ? (
+          <p className="mt-2 text-sm text-text-muted">
+            Every team in the league is already a franchise.
+          </p>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function dispatchPatch(
+  dispatch: Dispatch,
+  key: number,
+  change: Extract<Parameters<Dispatch>[0], { type: "franchise" }>["patch"],
+) {
+  dispatch({ type: "franchise", key, patch: change });
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="font-semibold">
+        {label}
+      </label>
+      <div className="flex items-center gap-3">
+        <input
+          id={id}
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-11 w-16 cursor-pointer rounded-md border border-text-muted bg-surface p-1"
+        />
+        <span className="font-mono text-sm text-text-muted">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+/** The built-in logos as a radio group; the one in use is highlighted. */
+function LogoPicker({
+  name,
+  value,
+  background,
+  onChange,
+}: {
+  name: string;
+  value: string;
+  background: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1 font-semibold">Logo</legend>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] gap-2">
+        {LOGO_IDS.map((id) => (
+          <label key={id} className="relative block cursor-pointer">
+            <input
+              type="radio"
+              name={name}
+              value={id}
+              checked={value === id}
+              onChange={() => onChange(id)}
+              className="peer sr-only"
+            />
+            <span
+              className="flex h-12 w-full items-center justify-center rounded-md text-white ring-offset-2 ring-offset-surface peer-checked:ring-4 peer-checked:ring-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+              style={{ backgroundColor: background }}
+            >
+              <TeamLogo logoId={id} className="size-7" />
+              <span className="sr-only">{logoLabel(id)}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -539,10 +768,10 @@ function AiAssistSettings({
   flags,
   onChange,
 }: {
-  flags: ReturnType<typeof initialDraft>["aiAssist"][number] | undefined;
+  flags: Draft["franchises"][number]["aiAssist"];
   onChange: (key: (typeof AI_ASSIST_KEYS)[number], value: boolean) => void;
 }) {
-  const on = AI_ASSIST_KEYS.filter((key) => flags?.[key]).length;
+  const on = AI_ASSIST_KEYS.filter((key) => flags[key]).length;
   return (
     <details className="rounded-md border border-border bg-surface-muted">
       <summary className="flex min-h-touch cursor-pointer items-center px-3 font-semibold">
@@ -560,7 +789,7 @@ function AiAssistSettings({
           <CheckboxField
             key={key}
             name={`ai-${key}`}
-            checked={flags?.[key] ?? false}
+            checked={flags[key]}
             onChange={(e) => onChange(key, e.target.checked)}
             label={
               <>
@@ -579,12 +808,23 @@ function AiAssistSettings({
   );
 }
 
+/** A random seed for "Shuffle league". Only the seed is random: the league is not. */
+function newSeed(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function ReviewStep({
   draft,
   total,
+  dispatch,
+  preview,
 }: {
-  draft: ReturnType<typeof initialDraft>;
+  draft: Draft;
   total: number;
+  dispatch: Dispatch;
+  preview: Preview;
 }) {
   const { playoffs } = draft;
   const structure = structureOf(draft.shape);
@@ -593,6 +833,9 @@ function ReviewStep({
     playoffs.seeding === "conference"
       ? playoffs.teams / structure.conferences.length
       : playoffs.teams;
+  const [announce, setAnnounce] = useState("");
+  const teamOf = (cityId: string) =>
+    preview.plan?.teams.find((t) => t.cityId === cityId);
   const rows: [string, ReactNode][] = [
     ["League name", draft.name.trim()],
     [
@@ -625,29 +868,33 @@ function ReviewStep({
     ],
     [
       "Franchises",
-      draft.franchiseCities
-        .map((id, i) => {
-          const city = citiesIn(draft.region).find((c) => c.id === id);
-          const label = city ? `${city.name}, ${city.subdivision}` : id;
-          return draft.localPlayers === 1 ? label : `Player ${i + 1}: ${label}`;
+      draft.franchises
+        .map((f, i) => {
+          const team = teamOf(f.cityId);
+          const label = team ? `${team.city} ${team.nickname}` : f.cityId;
+          return draft.localPlayers === 1
+            ? label
+            : `${franchiseLabel(draft, i)}: ${label}`;
         })
         .join(" · "),
     ],
     [
       "AI Assist",
-      draft.aiAssist
-        .map((flags, i) => {
-          const on = AI_ASSIST_KEYS.filter((key) => flags[key]).map(
+      draft.franchises
+        .map((f, i) => {
+          const on = AI_ASSIST_KEYS.filter((key) => f.aiAssist[key]).map(
             (key) => AI_ASSIST_LABELS[key].name,
           );
           const text = on.length === 0 ? "all off" : on.join(", ");
-          return draft.localPlayers === 1 ? text : `Player ${i + 1}: ${text}`;
+          return draft.franchises.length === 1
+            ? text
+            : `${franchiseLabel(draft, i)}: ${text}`;
         })
         .join(" · "),
     ],
   ];
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <dl className="divide-y divide-border rounded-lg border border-border bg-surface">
         {rows.map(([label, value]) => (
           <div
@@ -661,6 +908,153 @@ function ReviewStep({
           </div>
         ))}
       </dl>
+
+      <section aria-labelledby="preview-h" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 tablet:flex-row tablet:items-end tablet:justify-between">
+          <div>
+            <h3 id="preview-h" className="text-xl font-bold">
+              League preview
+            </h3>
+            <p className="text-text-muted">
+              Every team in your league, as it will be created. Rename any
+              conference or division, or shuffle the teams you aren&apos;t
+              running.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 tablet:flex-row">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                dispatch({ type: "shuffle", seed: newSeed() });
+                setAnnounce("League shuffled.");
+              }}
+            >
+              Shuffle league
+            </Button>
+            {Object.keys(preview.names.conferences).length +
+              Object.keys(preview.names.divisions).length >
+            0 ? (
+              <Button
+                variant="secondary"
+                onClick={() => dispatch({ type: "resetNames" })}
+              >
+                Use generated names
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <p role="status" className="sr-only">
+          {announce}
+        </p>
+        {preview.plan ? (
+          <PreviewLeague draft={draft} dispatch={dispatch} preview={preview} />
+        ) : (
+          <p className="text-danger">{preview.problem}</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PreviewLeague({
+  draft,
+  dispatch,
+  preview,
+}: {
+  draft: Draft;
+  dispatch: Dispatch;
+  preview: Preview;
+}) {
+  const plan = preview.plan;
+  const generated = preview.generated;
+  if (!plan || !generated) return null;
+  return (
+    <div className="flex flex-col gap-5">
+      {plan.structure.conferences.map((conference, ci) => {
+        const generatedConference = generated.structure.conferences[ci];
+        return (
+          <fieldset
+            key={conference.id}
+            className="flex flex-col gap-4 rounded-lg border border-border p-4"
+          >
+            <legend className="px-1 text-lg font-bold">
+              {conference.name} Conference
+            </legend>
+            <Field
+              label="Conference name"
+              name={`conference:${conference.id}`}
+              maxLength={40}
+              autoComplete="off"
+              value={
+                draft.names.conferences[conference.id] ??
+                generatedConference?.name ??
+                conference.name
+              }
+              onChange={(e) =>
+                dispatch({
+                  type: "rename",
+                  kind: "conference",
+                  id: conference.id,
+                  name: e.target.value,
+                })
+              }
+            />
+            <div className="grid gap-4 desktop:grid-cols-2">
+              {conference.divisions.map((division, di) => (
+                <div key={division.id} className="flex flex-col gap-2">
+                  <Field
+                    label={`Division name (${division.teamCount} teams)`}
+                    name={`division:${division.id}`}
+                    maxLength={40}
+                    autoComplete="off"
+                    value={
+                      draft.names.divisions[division.id] ??
+                      generatedConference?.divisions[di]?.name ??
+                      division.name
+                    }
+                    onChange={(e) =>
+                      dispatch({
+                        type: "rename",
+                        kind: "division",
+                        id: division.id,
+                        name: e.target.value,
+                      })
+                    }
+                  />
+                  <ul
+                    aria-label={`${division.name} Division teams`}
+                    className="flex flex-col gap-1.5"
+                  >
+                    {plan.teams
+                      .filter((t) => t.divisionId === division.id)
+                      .map((team) => (
+                        <li
+                          key={team.cityId}
+                          className={[
+                            "flex items-center gap-3 rounded-md border px-2 py-1.5",
+                            team.localPlayerSlot === null
+                              ? "border-border"
+                              : "border-accent bg-accent-soft",
+                          ].join(" ")}
+                        >
+                          <TeamBadge size="sm" team={team} />
+                          <span className="min-w-0 flex-1 break-words">
+                            {team.city} {team.nickname}
+                          </span>
+                          {team.localPlayerSlot !== null ? (
+                            <span className="shrink-0 text-sm font-semibold">
+                              Player {team.localPlayerSlot}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </fieldset>
+        );
+      })}
     </div>
   );
 }

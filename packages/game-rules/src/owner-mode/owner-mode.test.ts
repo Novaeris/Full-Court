@@ -437,13 +437,22 @@ describe("local players and franchises", () => {
 
   it("lets one player control several franchises", () => {
     const issues = validateFranchises(standard, players, [
-      franchise({ cityId: "na-us-nyc", localPlayerSlot: 1 }),
+      franchise({
+        cityId: "na-us-nyc",
+        nickname: "Comets",
+        localPlayerSlot: 1,
+      }),
       franchise({
         cityId: "na-us-bos",
+        nickname: "Bruins",
         localPlayerSlot: 1,
         divisionId: d2?.id ?? "",
       }),
-      franchise({ cityId: "na-us-chi", localPlayerSlot: 2 }),
+      franchise({
+        cityId: "na-us-chi",
+        nickname: "Chargers",
+        localPlayerSlot: 2,
+      }),
     ]);
     expect(issues).toEqual([]);
   });
@@ -456,7 +465,7 @@ describe("local players and franchises", () => {
         [players[0] as (typeof players)[0]],
         [
           franchise({ cityId: "na-us-nyc" }),
-          franchise({ cityId: "na-us-bos" }),
+          franchise({ cityId: "na-us-bos", nickname: "Bruins" }),
         ],
       ),
     ).toEqual([]);
@@ -717,6 +726,91 @@ describe("reconcilePlayoffConfig", () => {
     });
     expect(codes(validatePlayoffConfig(structure, result))).toContain(
       "division_leaders_exceed_spots",
+    );
+  });
+});
+
+describe("franchise identity rules", () => {
+  const [conf] = standard.conferences;
+  const division = conf?.divisions[0];
+  const one = [{ slot: 1, label: null }];
+  const base: FranchiseSpec = {
+    cityId: "na-us-new-york",
+    nickname: "Comets",
+    primaryColor: "#112233",
+    secondaryColor: "#ffcc00",
+    logoId: "logo-01",
+    conferenceId: conf?.id ?? "",
+    divisionId: division?.id ?? "",
+    localPlayerSlot: 1,
+    aiAssist: { ...NO_AI_ASSIST },
+  };
+
+  it("only accepts built-in logos", () => {
+    expect(validateFranchises(standard, one, [base])).toEqual([]);
+    for (const logoId of ["logo-24", "logo-01"]) {
+      expect(validateFranchises(standard, one, [{ ...base, logoId }])).toEqual(
+        [],
+      );
+    }
+    for (const logoId of ["logo-25", "logo-00", "star", "logo-1"]) {
+      expect(
+        codes(validateFranchises(standard, one, [{ ...base, logoId }])),
+      ).toContain("invalid_logo");
+    }
+  });
+
+  it("rejects the same team name twice, ignoring case and spaces", () => {
+    const two = [
+      { slot: 1, label: null },
+      { slot: 2, label: null },
+    ];
+    expect(
+      codes(
+        validateFranchises(standard, two, [
+          base,
+          {
+            ...base,
+            cityId: "na-us-boston",
+            nickname: "  COMETS ",
+            localPlayerSlot: 2,
+          },
+        ]),
+      ),
+    ).toContain("duplicate_nickname");
+  });
+
+  it("rejects identical primary and secondary colours", () => {
+    expect(
+      codes(
+        validateFranchises(standard, one, [
+          { ...base, secondaryColor: base.primaryColor },
+        ]),
+      ),
+    ).toContain("same_colors");
+  });
+});
+
+describe("structure names", () => {
+  it("rejects two conferences with the same name, ignoring case", () => {
+    const s = equalStructure(2, 2, 3);
+    if (s.conferences[0]) s.conferences[0].name = "Same";
+    if (s.conferences[1]) s.conferences[1].name = " same ";
+    expect(codes(validateStructureIntegrity(s))).toContain(
+      "duplicate_conference_name",
+    );
+  });
+
+  it("allows the same division name in different conferences but not within one", () => {
+    const s = equalStructure(2, 2, 3);
+    for (const c of s.conferences) {
+      if (c.divisions[0]) c.divisions[0].name = "North";
+    }
+    expect(validateStructureIntegrity(s)).toEqual([]);
+    const first = s.conferences[0];
+    if (first?.divisions[1]) first.divisions[1].name = "north";
+    expect(codes(validateStructureIntegrity(s))).toContain(
+      "duplicate_division_name",
     );
   });
 });

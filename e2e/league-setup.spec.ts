@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
 import { createApiClient } from "@fullcourt/api-client";
+import { expect, test, type Page } from "@playwright/test";
 import {
   accessToken,
   createConfirmedUser,
@@ -32,6 +32,9 @@ async function noOverflow(page: Page) {
   );
   expect(overflow).toBeLessThanOrEqual(0);
 }
+
+const nextStep = (page: Page, name: RegExp | string = /^Next: /) =>
+  page.getByRole("button", { name }).click();
 
 test("league setup: structure, playoffs, franchises and review at every size", async ({
   page,
@@ -80,24 +83,26 @@ test("league setup: structure, playoffs, franchises and review at every size", a
   await noOverflow(page);
   await expectAccessible(page);
 
-  // Step 3: a franchise city for each local player, never the same twice.
-  await page.getByRole("button", { name: "Next: Your franchises" }).click();
+  // Step 3: a franchise for each player, never in the same city twice.
+  await nextStep(page, "Next: Your franchises");
   await expect(
     page.getByRole("heading", { level: 2, name: "Your franchises" }),
   ).toBeFocused();
-  const first = page.getByLabel("Player 1's franchise city");
-  const second = page.getByLabel("Player 2's franchise city");
-  await expect(first).not.toHaveValue(await second.inputValue());
-  await first.selectOption("na-ca-vancouver");
-  await second.selectOption("na-us-miami");
-  // Picking a city another player has is refused: the choice stays put.
-  await second.selectOption("na-ca-vancouver");
-  await expect(second).toHaveValue("na-us-miami");
+  const first = page.getByRole("group", { name: "Franchise 1 · Player 1" });
+  const second = page.getByRole("group", { name: "Franchise 2 · Player 2" });
+  const firstCity = first.getByLabel("City", { exact: true });
+  const secondCity = second.getByLabel("City", { exact: true });
+  await expect(firstCity).not.toHaveValue(await secondCity.inputValue());
+  await firstCity.selectOption("na-ca-vancouver");
+  await secondCity.selectOption("na-us-miami");
+  // Picking a city another franchise has is refused: the choice stays put.
+  await secondCity.selectOption("na-ca-vancouver");
+  await expect(secondCity).toHaveValue("na-us-miami");
   await noOverflow(page);
   await expectAccessible(page);
 
-  // Step 4: the review shows what was chosen.
-  await page.getByRole("button", { name: "Next: Review" }).click();
+  // Step 4: the review shows what was chosen, and previews the whole league.
+  await nextStep(page, "Next: Review");
   const review = page.getByRole("definition");
   await expect(review.filter({ hasText: "Harbor League" })).toBeVisible();
   await expect(review.filter({ hasText: "North America" })).toBeVisible();
@@ -105,10 +110,185 @@ test("league setup: structure, playoffs, franchises and review at every size", a
   await expect(review.filter({ hasText: "Miami" })).toBeVisible();
   await expect(review.filter({ hasText: "Yes" })).toBeVisible();
   await expect(
+    page.getByRole("heading", { name: "League preview" }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Player [12]$/)).toHaveCount(2);
+  await expect(
     page.getByRole("button", { name: "Create league" }),
   ).toBeVisible();
   await noOverflow(page);
   await expectAccessible(page);
+});
+
+test("customise a franchise, shuffle and rename, then create", async ({
+  page,
+  baseURL,
+}) => {
+  const { email, password } = await createConfirmedUser("setup-custom");
+  await signInThroughUi(page, email, password);
+  await page.goto("/leagues/new");
+
+  await page.getByLabel("League name").fill("Orca Cup");
+  await nextStep(page); // playoffs
+  await nextStep(page); // franchises
+
+  const franchise = page.getByRole("group", { name: "Your franchise" });
+  await franchise
+    .getByLabel("City", { exact: true })
+    .selectOption("na-ca-vancouver");
+  // The generated name is offered until you type one.
+  await expect(franchise.getByLabel("Team name")).toHaveValue("");
+  await franchise.getByLabel("Team name").fill("Orcas");
+  await franchise.getByLabel("Primary colour").fill("#0b3d91");
+  await franchise.getByLabel("Secondary colour").fill("#ffd200");
+  // The radio is visually hidden behind its logo tile, which is what people click.
+  await franchise.getByRole("radio", { name: "Anchor" }).check({ force: true });
+  await expect(franchise.getByRole("radio", { name: "Anchor" })).toBeChecked();
+  await noOverflow(page);
+  await expectAccessible(page);
+
+  // A pale primary colour is explained and blocks the step.
+  await franchise.getByLabel("Primary colour").fill("#ffee00");
+  await expect(page.getByTestId("issues")).toContainText(
+    "darker primary colour",
+  );
+  await expect(
+    page.getByRole("button", { name: "Next: Review" }),
+  ).toBeDisabled();
+  await franchise.getByLabel("Primary colour").fill("#0b3d91");
+  await expect(page.getByTestId("issues")).toHaveCount(0);
+
+  // A second franchise for the same player, added and removed.
+  await page.getByRole("button", { name: "Add another franchise" }).click();
+  await expect(page.getByRole("group", { name: "Franchise 2" })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Remove this franchise" })
+    .last()
+    .click();
+  await expect(page.getByRole("group", { name: "Franchise 2" })).toHaveCount(0);
+
+  await nextStep(page, "Next: Review");
+
+  // The preview shows the league as it will be created: Orcas are in it.
+  const preview = page.getByRole("region", { name: "League preview" });
+  await expect(preview.getByText("Vancouver Orcas")).toBeVisible();
+  const before = await preview.innerText();
+  await page.getByRole("button", { name: "Shuffle league" }).click();
+  await expect(page.getByRole("status")).toHaveText("League shuffled.");
+  await expect(preview.getByText("Vancouver Orcas")).toBeVisible();
+  expect(await preview.innerText()).not.toBe(before);
+
+  // Rename a conference and a division in the preview.
+  await preview.getByLabel("Conference name").first().fill("Harbor League");
+  await preview
+    .getByLabel(/^Division name/)
+    .first()
+    .fill("Lighthouse");
+  await expect(
+    preview.getByRole("group", { name: "Harbor League Conference" }),
+  ).toBeVisible();
+  // Two conferences can't share a name.
+  await preview.getByLabel("Conference name").nth(1).fill("harbor league");
+  await expect(page.getByTestId("issues")).toContainText("both called");
+  await expect(
+    page.getByRole("button", { name: "Create league" }),
+  ).toBeDisabled();
+  await preview.getByLabel("Conference name").nth(1).fill("Bay League");
+  await expect(page.getByTestId("issues")).toHaveCount(0);
+  await noOverflow(page);
+  await expectAccessible(page);
+
+  await page.getByRole("button", { name: "Create league" }).click();
+  await expect(page).toHaveURL(/\/leagues\/([0-9a-f-]{36})$/);
+  const leagueId = page.url().split("/").pop() as string;
+  await expect(page.getByRole("region", { name: "Your team" })).toContainText(
+    "Vancouver Orcas",
+  );
+
+  // What was previewed is what was created.
+  const api = createApiClient({
+    baseUrl: baseURL ?? "",
+    fetch,
+    getAccessToken: async () => accessToken(email, password),
+  });
+  const { teams } = await api.leagues.teams(leagueId);
+  const mine = teams.find((t) => t.localPlayerSlot === 1);
+  expect(mine).toMatchObject({
+    city: "Vancouver",
+    nickname: "Orcas",
+    primaryColor: "#0b3d91",
+    secondaryColor: "#ffd200",
+    logoId: "logo-18",
+    cityId: "na-ca-vancouver",
+  });
+  const structure = await api.leagues.structure(leagueId);
+  expect(structure.conferences.map((c) => c.name)).toEqual([
+    "Harbor League",
+    "Bay League",
+  ]);
+  expect(structure.conferences[0]?.divisions[0]?.name).toBe("Lighthouse");
+  // Every other team was generated, with a city, name, colours and logo.
+  const generated = teams.filter((t) => t.localPlayerSlot === null);
+  expect(generated).toHaveLength(29);
+  expect(generated.every((t) => t.logoId && t.cityId)).toBe(true);
+
+  // The chosen logo shows on the team list.
+  await page.goto(`/leagues/${leagueId}/teams`);
+  await expect(page.getByText("Vancouver Orcas").first()).toBeVisible();
+  await noOverflow(page);
+  await expectAccessible(page);
+});
+
+test("several franchises for one player and one for another", async ({
+  page,
+  baseURL,
+}) => {
+  const { email, password } = await createConfirmedUser("setup-multi");
+  await signInThroughUi(page, email, password);
+  await page.goto("/leagues/new");
+  await page.getByLabel("League name").fill("Couch League");
+  await page.getByRole("radio", { name: "Europe" }).check();
+  await nextStep(page);
+  await page.getByLabel("Local players").selectOption("2");
+  await nextStep(page);
+
+  // Player 1 and Player 2 start with one franchise each; Player 1 takes a second.
+  await page.getByRole("button", { name: "Add another franchise" }).click();
+  const third = page.getByRole("group", { name: "Franchise 3 · Player 1" });
+  await expect(third).toBeVisible();
+  await third.getByLabel("City", { exact: true }).selectOption("eu-it-rome");
+  await page
+    .getByRole("group", { name: "Franchise 1 · Player 1" })
+    .getByLabel("City", { exact: true })
+    .selectOption("eu-fr-paris");
+  await page
+    .getByRole("group", { name: "Franchise 2 · Player 2" })
+    .getByLabel("City", { exact: true })
+    .selectOption("eu-es-madrid");
+  // A player's only franchise can't be removed.
+  await expect(
+    page
+      .getByRole("group", { name: "Franchise 2 · Player 2" })
+      .getByRole("button", { name: "Remove this franchise" }),
+  ).toHaveCount(0);
+  await nextStep(page, "Next: Review");
+  await page.getByRole("button", { name: "Create league" }).click();
+  await expect(page).toHaveURL(/\/leagues\/([0-9a-f-]{36})$/);
+  const leagueId = page.url().split("/").pop() as string;
+
+  const api = createApiClient({
+    baseUrl: baseURL ?? "",
+    fetch,
+    getAccessToken: async () => accessToken(email, password),
+  });
+  const { teams } = await api.leagues.teams(leagueId);
+  const bySlot = (slot: number) =>
+    teams
+      .filter((t) => t.localPlayerSlot === slot)
+      .map((t) => t.city)
+      .sort();
+  expect(bySlot(1)).toEqual(["Paris", "Rome"]);
+  expect(bySlot(2)).toEqual(["Madrid"]);
 });
 
 test("create a custom league and find your franchises in it", async ({
@@ -121,16 +301,18 @@ test("create a custom league and find your franchises in it", async ({
   await page.getByLabel("League name").fill("Euro Cup");
   await page.getByRole("radio", { name: /Custom/ }).check();
   await page.getByRole("radio", { name: "Europe" }).check();
-  await page.getByRole("button", { name: /Next: Playoffs/ }).click();
+  await nextStep(page, /Next: Playoffs/);
   await page.getByLabel("Local players").selectOption("2");
-  await page.getByRole("button", { name: "Next: Your franchises" }).click();
+  await nextStep(page, "Next: Your franchises");
   await page
-    .getByLabel("Player 1's franchise city")
+    .getByRole("group", { name: "Franchise 1 · Player 1" })
+    .getByLabel("City", { exact: true })
     .selectOption("eu-fr-paris");
   await page
-    .getByLabel("Player 2's franchise city")
+    .getByRole("group", { name: "Franchise 2 · Player 2" })
+    .getByLabel("City", { exact: true })
     .selectOption("eu-es-madrid");
-  await page.getByRole("button", { name: "Next: Review" }).click();
+  await nextStep(page, "Next: Review");
   await page.getByRole("button", { name: "Create league" }).click();
 
   // Straight into the league, already running Player 1's team.
@@ -161,11 +343,13 @@ test("league setup fits a 320px screen", async ({ page }) => {
   await page.getByLabel("League name").fill("Narrow League");
   await page.getByRole("radio", { name: /Custom/ }).check();
   await noOverflow(page);
-  await page.getByRole("button", { name: /Next: Playoffs/ }).click();
+  await nextStep(page, /Next: Playoffs/);
   await noOverflow(page);
-  await page.getByRole("button", { name: "Next: Your franchises" }).click();
+  await nextStep(page, "Next: Your franchises");
   await noOverflow(page);
-  await page.getByRole("button", { name: "Next: Review" }).click();
+  await page.getByRole("button", { name: "Add another franchise" }).click();
+  await noOverflow(page);
+  await nextStep(page, "Next: Review");
   await noOverflow(page);
 });
 
@@ -195,7 +379,7 @@ test("playoff rules block impossible settings with a clear message", async ({
   await page.getByLabel("Conferences and divisions").selectOption({
     label: "2 conferences · 4 divisions each · 2 teams per division",
   });
-  await page.getByRole("button", { name: /Next: Playoffs/ }).click();
+  await nextStep(page, /Next: Playoffs/);
 
   // Four playoff teams are two per conference, fewer than the four division
   // leaders who would qualify automatically.
@@ -222,12 +406,12 @@ test("AI Assist is off by default, set per franchise, and saved with it", async 
   await signInThroughUi(page, email, password);
   await page.goto("/leagues/new");
   await page.getByLabel("League name").fill("Assisted League");
-  await page.getByRole("button", { name: /^Next: / }).click();
+  await nextStep(page);
   await page.getByLabel("Local players").selectOption("2");
-  await page.getByRole("button", { name: "Next: Your franchises" }).click();
+  await nextStep(page, "Next: Your franchises");
 
-  const player1 = page.getByRole("group", { name: "Player 1" });
-  const player2 = page.getByRole("group", { name: "Player 2" });
+  const player1 = page.getByRole("group", { name: "Franchise 1 · Player 1" });
+  const player2 = page.getByRole("group", { name: "Franchise 2 · Player 2" });
   await expect(player1.getByText("AI Assist: all off")).toBeVisible();
   await expect(player2.getByText("AI Assist: all off")).toBeVisible();
 
@@ -250,12 +434,10 @@ test("AI Assist is off by default, set per franchise, and saved with it", async 
   await noOverflow(page);
   await expectAccessible(page);
 
-  await page.getByRole("button", { name: "Next: Review" }).click();
+  await nextStep(page, "Next: Review");
   await expect(
-    page
-      .getByRole("definition")
-      .filter({ hasText: "Player 1: Scouting, Drafting" }),
-  ).toContainText("Player 2: all off");
+    page.getByRole("definition").filter({ hasText: "Scouting, Drafting" }),
+  ).toContainText("all off");
   await page.getByRole("button", { name: "Create league" }).click();
   await expect(page).toHaveURL(/\/leagues\/([0-9a-f-]{36})$/);
   const leagueId = page.url().split("/").pop() as string;

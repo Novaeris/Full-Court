@@ -78,12 +78,21 @@ export function validateStructureIntegrity(
   }
   const conferenceIds = new Set<string>();
   const divisionIds = new Set<string>();
+  const conferenceNames = new Set<string>();
   for (const conference of structure.conferences) {
     checkLabel(conference.id, conference.name, "conference", add);
     if (conferenceIds.has(conference.id)) {
       add("duplicate_conference_id", `Conference id ${conference.id} repeats.`);
     }
     conferenceIds.add(conference.id);
+    if (conferenceNames.has(conference.name.trim().toLowerCase())) {
+      add(
+        "duplicate_conference_name",
+        `Two conferences are both called ${conference.name.trim()}.`,
+      );
+    }
+    conferenceNames.add(conference.name.trim().toLowerCase());
+    const divisionNames = new Set<string>();
     if (conference.divisions.length < 1) {
       add(
         "empty_conference",
@@ -96,6 +105,13 @@ export function validateStructureIntegrity(
         add("duplicate_division_id", `Division id ${division.id} repeats.`);
       }
       divisionIds.add(division.id);
+      if (divisionNames.has(division.name.trim().toLowerCase())) {
+        add(
+          "duplicate_division_name",
+          `Two divisions in ${conference.name.trim()} are both called ${division.name.trim()}.`,
+        );
+      }
+      divisionNames.add(division.name.trim().toLowerCase());
       if (!Number.isInteger(division.teamCount) || division.teamCount < 1) {
         add("empty_division", `${division.name} needs at least one team.`);
       }

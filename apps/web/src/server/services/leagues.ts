@@ -186,6 +186,7 @@ async function createOwnerLeague(
       shape,
       localPlayers: setup.localPlayers,
       franchises,
+      names: setup.names,
     });
   } catch (error) {
     throw invalidSetup(

@@ -14,7 +14,11 @@ import {
 } from "@fullcourt/game-types";
 import { describe, expect, it } from "vitest";
 import { findCity } from "./cities";
-import { generateOwnerWorld, type OwnerWorldOptions } from "./league";
+import {
+  generateOwnerWorld,
+  planOwnerLeague,
+  type OwnerWorldOptions,
+} from "./league";
 import { EXTRA_TEAM_COLORS, TEAM_COLORS } from "./names";
 
 const hash = (v: unknown) =>
@@ -273,3 +277,100 @@ const PINNED: Record<Region, string> = {
   asia: "c35494963db67789",
   australia: "4dae328f6408ea3a",
 };
+
+describe("planOwnerLeague", () => {
+  it("is exactly the league a world is generated with, so previews are honest", () => {
+    for (const region of REGIONS) {
+      const o = options({
+        region,
+        franchises: [{ localPlayerSlot: 1, cityId: OWN_CITY[region] }],
+      });
+      const plan = planOwnerLeague(o);
+      const world = generateOwnerWorld(o);
+      expect(world.teams).toEqual(plan.teams);
+      expect(world.structure).toEqual(plan.structure);
+      expect(world.localPlayers).toEqual(plan.localPlayers);
+    }
+  });
+
+  it("needs no roster seed", () => {
+    const a = planOwnerLeague(options({ seed: "one" }));
+    const b = planOwnerLeague(options({ seed: "two" }));
+    expect(a).toEqual(b);
+  });
+
+  it("renames conferences and divisions without changing any id or placement", () => {
+    const plain = planOwnerLeague(options());
+    const conference = plain.structure.conferences[0];
+    const division = conference?.divisions[0];
+    const named = planOwnerLeague(
+      options({
+        names: {
+          conferences: { [conference?.id ?? ""]: "  Harbor League " },
+          divisions: { [division?.id ?? ""]: "Lighthouse" },
+        },
+      }),
+    );
+    expect(named.structure.conferences[0]?.name).toBe("Harbor League");
+    expect(named.structure.conferences[0]?.divisions[0]?.name).toBe(
+      "Lighthouse",
+    );
+    // Only names differ.
+    const ids = (p: typeof plain) =>
+      p.structure.conferences.flatMap((c) => [
+        c.id,
+        ...c.divisions.map((d) => d.id),
+      ]);
+    expect(ids(named)).toEqual(ids(plain));
+    expect(named.teams).toEqual(plain.teams);
+  });
+
+  it("rejects renames to unknown ids or to names already taken", () => {
+    const plain = planOwnerLeague(options());
+    const [a, b] = plain.structure.conferences;
+    expect(() =>
+      planOwnerLeague(options({ names: { conferences: { nope: "X" } } })),
+    ).toThrow(/isn't a conference or division/);
+    expect(() =>
+      planOwnerLeague(
+        options({
+          names: {
+            conferences: { [a?.id ?? ""]: "Twin", [b?.id ?? ""]: " twin " },
+          },
+        }),
+      ),
+    ).toThrow(/both called/);
+  });
+
+  it("rejects two franchises with the same team name", () => {
+    expect(() =>
+      planOwnerLeague(
+        options({
+          localPlayers: [
+            { slot: 1, label: null },
+            { slot: 2, label: null },
+          ],
+          franchises: [
+            {
+              localPlayerSlot: 1,
+              cityId: "na-us-new-york",
+              nickname: "Comets",
+            },
+            { localPlayerSlot: 2, cityId: "na-us-boston", nickname: " comets" },
+          ],
+        }),
+      ),
+    ).toThrow(/share a team name/);
+  });
+
+  it("never gives an AI team the name an owner picked", () => {
+    const plan = planOwnerLeague(
+      options({
+        franchises: [
+          { localPlayerSlot: 1, cityId: "na-ca-vancouver", nickname: "Comets" },
+        ],
+      }),
+    );
+    expect(plan.teams.filter((t) => t.nickname === "Comets")).toHaveLength(1);
+  });
+});

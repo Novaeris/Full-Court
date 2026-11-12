@@ -12,7 +12,11 @@ import {
   type PlayerSeed,
   type Region,
 } from "@fullcourt/game-types";
-import { totalTeams } from "@fullcourt/game-rules";
+import {
+  nameKey,
+  totalTeams,
+  validateStructureIntegrity,
+} from "@fullcourt/game-rules";
 import { shuffle } from "../rng/helpers";
 import { createRng, seedState, type RngState } from "../rng/rng";
 import { findCity } from "./cities";
@@ -31,6 +35,12 @@ export type OwnerFranchiseInput = {
   aiAssist?: AiAssistFlags;
 };
 
+/** New display names for generated conferences and divisions, by id. */
+export type StructureNameOverrides = {
+  conferences?: Readonly<Record<string, string>>;
+  divisions?: Readonly<Record<string, string>>;
+};
+
 export type OwnerWorldOptions = {
   /** Seeds the rosters. Chosen by the server, never by a client. */
   seed: string;
@@ -44,6 +54,8 @@ export type OwnerWorldOptions = {
   shape: LeagueStructure;
   localPlayers: readonly LocalPlayerSpec[];
   franchises: readonly OwnerFranchiseInput[];
+  /** Renames what was generated; ids are unaffected. */
+  names?: StructureNameOverrides;
 };
 
 export type OwnerTeamSeed = {
@@ -63,25 +75,27 @@ export type OwnerTeamSeed = {
   aiAssist: AiAssistFlags;
 };
 
-export type GeneratedOwnerWorld = {
+/** Everything about a league except its players: what a preview shows. */
+export type OwnerLeaguePlan = {
   /** Conferences and divisions with generated ids and names, in geographic order. */
   structure: LeagueStructure;
   localPlayers: LocalPlayerSpec[];
   teams: OwnerTeamSeed[];
+};
+
+export type GeneratedOwnerWorld = OwnerLeaguePlan & {
   players: PlayerSeed[];
   /** RNG state after generating rosters; simulation continues from here. */
   rngState: RngState;
 };
 
 /**
- * Generates a whole Owner Mode league: real cities placed into geographic
- * divisions, a franchise identity for every team, and full rosters. The
- * owner's franchises keep what they chose; the rest are generated. Pure and
- * deterministic for a given set of options.
+ * Plans an Owner Mode league: real cities placed into geographic divisions
+ * and a franchise identity for every team. The owner's franchises keep what
+ * they chose; the rest are generated. Needs no rosters, so a client can
+ * preview exactly the league the server will create. Pure and deterministic.
  */
-export function generateOwnerWorld(
-  options: OwnerWorldOptions,
-): GeneratedOwnerWorld {
+export function planOwnerLeague(options: OwnerWorldOptions): OwnerLeaguePlan {
   const { region, franchises } = options;
   const total = totalTeams(options.shape);
   invariant(franchises.length <= total, "more franchises than teams");
@@ -100,10 +114,11 @@ export function generateOwnerWorld(
     franchises.map((f) => f.cityId),
   );
   const geography = assignGeography(region, cityIds, options.shape);
+  const structure = renameStructure(geography.structure, options.names);
 
   // Teams in league order: conference, division, then city name.
   const divisionOrder = new Map<DivisionId, number>();
-  geography.structure.conferences.forEach((c, ci) =>
+  structure.conferences.forEach((c, ci) =>
     c.divisions.forEach((d, di) => divisionOrder.set(d.id, ci * 100 + di)),
   );
   const ordered = cityIds
@@ -115,6 +130,13 @@ export function generateOwnerWorld(
             0) || a.name.localeCompare(b.name),
     );
 
+  const humanNicknames = franchises.flatMap((f) =>
+    f.nickname ? [nameKey(f.nickname)] : [],
+  );
+  invariant(
+    new Set(humanNicknames).size === humanNicknames.length,
+    "two franchises can't share a team name",
+  );
   const chosen = new Map(franchises.map((f) => [f.cityId, f]));
   const takenNicknames = new Set(
     franchises.flatMap((f) => (f.nickname ? [f.nickname.toLowerCase()] : [])),
@@ -155,13 +177,53 @@ export function generateOwnerWorld(
     };
   });
 
-  const rng = createRng(seedState(options.seed));
-  const players = generateRosters(rng, teams);
   return {
-    structure: geography.structure,
+    structure,
     localPlayers: options.localPlayers.map((p) => ({ ...p })),
     teams,
-    players,
-    rngState: rng.state(),
   };
+}
+
+/** Applies the owner's names to the generated structure; ids stay as they are. */
+function renameStructure(
+  structure: LeagueStructure,
+  names: StructureNameOverrides | undefined,
+): LeagueStructure {
+  const conferences = names?.conferences ?? {};
+  const divisions = names?.divisions ?? {};
+  const known = new Set(
+    structure.conferences.flatMap((c) => [
+      c.id,
+      ...c.divisions.map((d) => d.id),
+    ]),
+  );
+  for (const id of [...Object.keys(conferences), ...Object.keys(divisions)]) {
+    invariant(known.has(id), `${id} isn't a conference or division here`);
+  }
+  const renamed: LeagueStructure = {
+    conferences: structure.conferences.map((c) => ({
+      ...c,
+      name: conferences[c.id]?.trim() || c.name,
+      divisions: c.divisions.map((d) => ({
+        ...d,
+        name: divisions[d.id]?.trim() || d.name,
+      })),
+    })),
+  };
+  const problem = validateStructureIntegrity(renamed)[0];
+  invariant(!problem, problem?.message ?? "");
+  return renamed;
+}
+
+/**
+ * Generates a whole Owner Mode league: the plan plus full rosters. Pure and
+ * deterministic for a given set of options.
+ */
+export function generateOwnerWorld(
+  options: OwnerWorldOptions,
+): GeneratedOwnerWorld {
+  const plan = planOwnerLeague(options);
+  const rng = createRng(seedState(options.seed));
+  const players = generateRosters(rng, plan.teams);
+  return { ...plan, players, rngState: rng.state() };
 }
