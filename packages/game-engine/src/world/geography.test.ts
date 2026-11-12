@@ -318,9 +318,9 @@ describe("balancedClusters", () => {
 });
 
 const PINNED_WORLDS: Record<Region, string> = {
-  "north-america": "fedad473fd7e7bc9",
-  "south-america": "9b2dddb27ca904dd",
-  europe: "c10938cd173f6e4c",
-  asia: "1dd8c8bcfb6d6ef0",
-  australia: "a758b2246b40dc11",
+  "north-america": "f28147f72289a0b1",
+  "south-america": "c166f21b4a0fd93c",
+  europe: "f998e8cd0ed18ae1",
+  asia: "fe2970bb20b496bb",
+  australia: "331086dc50372740",
 };

@@ -26,12 +26,22 @@ export async function createLeagueAction(
   _prev: FormState,
   form: FormData,
 ): Promise<FormState> {
-  const values = { name: text(form, "name"), size: text(form, "size") };
-  const parsed = CreateLeagueRequestSchema.safeParse({
-    name: values.name,
-    size: values.size || undefined,
-  });
-  if (!parsed.success) return invalid(parsed.error, values);
+  let json: unknown;
+  try {
+    json = JSON.parse(text(form, "request"));
+  } catch {
+    return {
+      status: "error",
+      message: "Something went wrong. Please try again.",
+    };
+  }
+  const parsed = CreateLeagueRequestSchema.safeParse(json);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Check your league settings.",
+    };
+  }
 
   const ctx = await getUserContext();
   if (!ctx) redirect("/login?next=/leagues/new");
@@ -41,7 +51,7 @@ export async function createLeagueAction(
     leagueId = (await createLeague(ctx, parsed.data)).id;
     await trackEvent("league_created");
   } catch (error) {
-    return { status: "error", message: serviceMessage(error), values };
+    return { status: "error", message: serviceMessage(error) };
   }
   redirect(`/leagues/${leagueId}`);
 }

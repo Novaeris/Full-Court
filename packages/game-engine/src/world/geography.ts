@@ -235,17 +235,36 @@ function directionNames(
   groups: readonly Group[],
   adjective: boolean,
 ): string[] {
-  const all = groups.flatMap((g) => g.points);
-  const xs = all.map((p) => p.x);
-  const ys = all.map((p) => p.y);
-  const mean = toGroup(all);
-  const tx = 0.2 * (Math.max(...xs) - Math.min(...xs));
-  const ty = 0.2 * (Math.max(...ys) - Math.min(...ys));
+  // Compare the sibling groups' centres with each other: a direction is used
+  // only along an axis where they really differ, so two groups split along a
+  // diagonal can be Northeastern and Southwestern, but two groups side by
+  // side are simply Western and Eastern.
+  const meanX = groups.reduce((s, g) => s + g.cx, 0) / groups.length;
+  const meanY = groups.reduce((s, g) => s + g.cy, 0) / groups.length;
+  const spreadX =
+    Math.max(...groups.map((g) => g.cx)) - Math.min(...groups.map((g) => g.cx));
+  const spreadY =
+    Math.max(...groups.map((g) => g.cy)) - Math.min(...groups.map((g) => g.cy));
+  const main = Math.max(spreadX, spreadY);
+  const useX = spreadX > 0 && spreadX >= 0.4 * main;
+  const useY = spreadY > 0 && spreadY >= 0.4 * main;
   const names = groups.map((g) => {
-    const dx = g.cx - mean.cx;
-    const dy = g.cy - mean.cy;
-    const v = dy > ty ? "North" : dy < -ty ? "South" : "";
-    const h = dx > tx ? "East" : dx < -tx ? "West" : "";
+    const dx = g.cx - meanX;
+    const dy = g.cy - meanY;
+    const v = useY
+      ? dy > 0.25 * spreadY
+        ? "North"
+        : dy < -0.25 * spreadY
+          ? "South"
+          : ""
+      : "";
+    const h = useX
+      ? dx > 0.25 * spreadX
+        ? "East"
+        : dx < -0.25 * spreadX
+          ? "West"
+          : ""
+      : "";
     const noun = v ? v + h.toLowerCase() : h || "Central";
     return adjective ? (ADJECTIVES[noun] as string) : noun;
   });

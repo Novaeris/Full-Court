@@ -1,5 +1,6 @@
 "use client";
 
+import { citiesIn } from "@fullcourt/game-engine";
 import {
   canSeedByConference,
   playoffTeamOptions,
@@ -14,8 +15,8 @@ import {
   SERIES_LENGTHS,
   type SeriesLength,
 } from "@fullcourt/game-types";
-import Link from "next/link";
 import {
+  useActionState,
   useEffect,
   useId,
   useReducer,
@@ -23,27 +24,43 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CheckboxField, Field, SelectField } from "@/components/forms/form";
+import {
+  CheckboxField,
+  Field,
+  FormMessage,
+  IDLE,
+  SelectField,
+  SubmitButton,
+} from "@/components/forms/form";
 import { Button } from "@/components/ui/button";
+import { createLeagueAction } from "@/server/leagues/actions";
 import {
   describeShape,
   draftIssues,
   draftReducer,
+  draftToRequest,
   initialDraft,
   roundName,
   structureOf,
   teamCount,
 } from "./draft";
 
-const STEPS = ["Basics", "Playoffs and options", "Review"] as const;
+const STEPS = [
+  "Basics",
+  "Playoffs and options",
+  "Your franchises",
+  "Review",
+] as const;
+const LAST = STEPS.length - 1;
 
 /**
  * League setup: name, structure, region, playoffs, fantasy draft and local
  * players. Rules and validation come from @fullcourt/game-rules, so the form
  * can never offer a combination the server would reject.
  */
-export function LeagueSetupForm() {
+export function LeagueSetupForm({ identitySeed }: { identitySeed: string }) {
   const [draft, dispatch] = useReducer(draftReducer, undefined, initialDraft);
+  const [state, action] = useActionState(createLeagueAction, IDLE);
   const [step, setStep] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const issues = draftIssues(draft);
@@ -60,7 +77,12 @@ export function LeagueSetupForm() {
   return (
     <form
       noValidate
-      onSubmit={(event) => event.preventDefault()}
+      action={action}
+      // Enter in a field moves nothing forward: only the Create button on the
+      // last step submits.
+      onSubmit={(event) => {
+        if (step !== LAST) event.preventDefault();
+      }}
       className="flex flex-col gap-6"
     >
       <StepIndicator current={step} />
@@ -88,7 +110,18 @@ export function LeagueSetupForm() {
           total={total}
         />
       ) : null}
-      {step === 2 ? <ReviewStep draft={draft} total={total} /> : null}
+      {step === 2 ? <FranchisesStep draft={draft} dispatch={dispatch} /> : null}
+      {step === LAST ? (
+        <>
+          <ReviewStep draft={draft} total={total} />
+          <input
+            type="hidden"
+            name="request"
+            value={JSON.stringify(draftToRequest(draft, identitySeed))}
+          />
+          <FormMessage state={state} />
+        </>
+      ) : null}
 
       <IssueList issues={stepIssues.filter((i) => i.code !== "name")} />
 
@@ -100,14 +133,18 @@ export function LeagueSetupForm() {
         ) : (
           <span />
         )}
-        {step < STEPS.length - 1 ? (
+        {step < LAST ? (
           <Button
             onClick={() => setStep(step + 1)}
             disabled={stepIssues.length > 0}
           >
             Next: {STEPS[step + 1]}
           </Button>
-        ) : null}
+        ) : (
+          <SubmitButton pendingLabel="Generating your league…">
+            Create league
+          </SubmitButton>
+        )}
       </div>
     </form>
   );
@@ -436,6 +473,46 @@ function RulesStep({
   );
 }
 
+function FranchisesStep({
+  draft,
+  dispatch,
+}: {
+  draft: ReturnType<typeof initialDraft>;
+  dispatch: Dispatch;
+}) {
+  const cities = citiesIn(draft.region);
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-text-muted">
+        {draft.localPlayers === 1
+          ? "Pick the city you will run."
+          : "Pick the city each player will run."}{" "}
+        Every other team in {REGION_NAMES[draft.region]} is generated for you,
+        with its own city, name, colours and logo.
+      </p>
+      {draft.franchiseCities.map((cityId, index) => (
+        <SelectField
+          key={index}
+          label={
+            draft.localPlayers === 1
+              ? "Your franchise city"
+              : `Player ${index + 1}'s franchise city`
+          }
+          name={`city-${index}`}
+          value={cityId}
+          onChange={(e) =>
+            dispatch({ type: "franchiseCity", index, cityId: e.target.value })
+          }
+          options={cities.map((city) => ({
+            value: city.id,
+            label: `${city.name}, ${city.subdivision}`,
+          }))}
+        />
+      ))}
+    </div>
+  );
+}
+
 function ReviewStep({
   draft,
   total,
@@ -480,6 +557,16 @@ function ReviewStep({
       "Local players",
       draft.localPlayers === 1 ? "1 player" : `${draft.localPlayers} players`,
     ],
+    [
+      "Franchises",
+      draft.franchiseCities
+        .map((id, i) => {
+          const city = citiesIn(draft.region).find((c) => c.id === id);
+          const label = city ? `${city.name}, ${city.subdivision}` : id;
+          return draft.localPlayers === 1 ? label : `Player ${i + 1}: ${label}`;
+        })
+        .join(" · "),
+    ],
   ];
   return (
     <div className="flex flex-col gap-4">
@@ -496,21 +583,6 @@ function ReviewStep({
           </div>
         ))}
       </dl>
-      <p
-        role="note"
-        className="rounded-md border border-border bg-surface-muted px-4 py-3"
-      >
-        This is a preview of the new league rules. Nothing is saved yet:
-        choosing your franchises, and creating the league from these settings,
-        arrive in a following update. Use the standard setup on the{" "}
-        <Link
-          href="/leagues/new"
-          className="font-semibold text-accent underline underline-offset-4"
-        >
-          New league
-        </Link>{" "}
-        page to create a league today.
-      </p>
     </div>
   );
 }

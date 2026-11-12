@@ -5,7 +5,9 @@ import {
   LeagueConfigSchema,
   LeagueStructureSchema,
   OwnerModeSetupSchema,
+  OwnerSetupRequestSchema,
 } from "./owner-mode";
+import { CreateLeagueRequestSchema } from "./leagues";
 
 const config = {
   schemaVersion: 1,
@@ -108,6 +110,62 @@ describe("FranchiseSchema", () => {
     expect(OwnerModeSetupSchema.safeParse(setup).success).toBe(true);
     expect(
       OwnerModeSetupSchema.safeParse({ ...setup, localPlayers: [] }).success,
+    ).toBe(false);
+  });
+});
+
+describe("OwnerSetupRequestSchema", () => {
+  const request = {
+    config,
+    shape: { conferences: 2, divisionsPerConference: 3, teamsPerDivision: 5 },
+    localPlayers: [{ slot: 1, label: null }],
+    franchises: [{ localPlayerSlot: 1, cityId: "eu-fr-paris" }],
+    identitySeed: "abcdefgh12345678",
+  };
+
+  it("accepts a request and turns AI Assist off by default", () => {
+    const parsed = OwnerSetupRequestSchema.parse(request);
+    expect(parsed.franchises[0]?.aiAssist).toEqual(NO_AI_ASSIST);
+  });
+
+  it("rejects bad seeds, shapes, players and franchises", () => {
+    const bad = (patch: object) =>
+      OwnerSetupRequestSchema.safeParse({ ...request, ...patch }).success;
+    expect(bad({})).toBe(true);
+    expect(bad({ identitySeed: "short" })).toBe(false);
+    expect(bad({ identitySeed: "has spaces in it!" })).toBe(false);
+    expect(
+      bad({
+        shape: {
+          conferences: 9,
+          divisionsPerConference: 1,
+          teamsPerDivision: 2,
+        },
+      }),
+    ).toBe(false);
+    expect(bad({ localPlayers: [] })).toBe(false);
+    expect(bad({ franchises: [] })).toBe(false);
+    expect(
+      bad({ franchises: [{ localPlayerSlot: 9, cityId: "eu-fr-paris" }] }),
+    ).toBe(false);
+    expect(bad({ franchises: [{ localPlayerSlot: 1, cityId: "Paris" }] })).toBe(
+      false,
+    );
+  });
+
+  it("is optional on a create-league request, which stays valid without it", () => {
+    expect(
+      CreateLeagueRequestSchema.parse({ name: "Plain" }).setup,
+    ).toBeUndefined();
+    expect(
+      CreateLeagueRequestSchema.safeParse({ name: "Owner", setup: request })
+        .success,
+    ).toBe(true);
+    expect(
+      CreateLeagueRequestSchema.safeParse({
+        name: "Owner",
+        setup: { ...request, identitySeed: "x" },
+      }).success,
     ).toBe(false);
   });
 });

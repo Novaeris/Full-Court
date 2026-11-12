@@ -1,3 +1,4 @@
+import { citiesIn } from "@fullcourt/game-engine";
 import {
   defaultPlayoffConfig,
   equalStructure,
@@ -14,6 +15,7 @@ import {
 import {
   LEAGUE_CONFIG_SCHEMA_VERSION,
   MAX_LOCAL_PLAYERS,
+  NO_AI_ASSIST,
   type LeagueConfig,
   type LeaguePreset,
   type LeagueStructure,
@@ -21,7 +23,10 @@ import {
   type Region,
   type SeriesLength,
 } from "@fullcourt/game-types";
-import { LeagueNameSchema } from "@fullcourt/validation";
+import {
+  LeagueNameSchema,
+  type CreateLeagueRequest,
+} from "@fullcourt/validation";
 
 /**
  * The league setup being edited. Plain data plus a reducer, so the form's
@@ -37,7 +42,32 @@ export type Draft = {
   playoffs: PlayoffConfig;
   fantasyDraft: boolean;
   localPlayers: number;
+  /** The city of each local player's franchise: Player 1 first. */
+  franchiseCities: string[];
 };
+
+/**
+ * City choices for `count` franchises: keeps the ones already chosen (when
+ * they are in the region and not repeated) and fills the rest with the
+ * region's biggest unused cities.
+ */
+export function franchiseCitiesFor(
+  region: Region,
+  count: number,
+  keep: readonly string[] = [],
+): string[] {
+  const available = citiesIn(region).map((c) => c.id);
+  const chosen: string[] = [];
+  for (const id of keep) {
+    if (chosen.length < count && available.includes(id) && !chosen.includes(id))
+      chosen.push(id);
+  }
+  for (const id of available) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(id)) chosen.push(id);
+  }
+  return chosen;
+}
 
 /** The 12-team layout offered as a quick custom choice. */
 export const COMPACT_SHAPE: EqualShape = {
@@ -64,6 +94,7 @@ export function initialDraft(): Draft {
     playoffs: defaultPlayoffConfig(structureOf(shape)),
     fantasyDraft: false,
     localPlayers: 1,
+    franchiseCities: franchiseCitiesFor("north-america", 1),
   };
 }
 
@@ -77,7 +108,8 @@ export type DraftAction =
   | { type: "round"; index: number; value: SeriesLength }
   | { type: "allRounds"; value: SeriesLength }
   | { type: "fantasyDraft"; value: boolean }
-  | { type: "localPlayers"; value: number };
+  | { type: "localPlayers"; value: number }
+  | { type: "franchiseCity"; index: number; cityId: string };
 
 export function teamCount(shape: EqualShape): number {
   return (
@@ -88,14 +120,20 @@ export function teamCount(shape: EqualShape): number {
 /** Changing the structure resets the dependent choices to something valid. */
 function withShape(draft: Draft, shape: EqualShape): Draft {
   const structure = structureOf(shape);
+  const localPlayers = Math.min(
+    draft.localPlayers,
+    MAX_LOCAL_PLAYERS,
+    totalTeams(structure),
+  );
   return {
     ...draft,
     shape,
     playoffs: reconcilePlayoffConfig(structure, draft.playoffs),
-    localPlayers: Math.min(
-      draft.localPlayers,
-      MAX_LOCAL_PLAYERS,
-      totalTeams(structure),
+    localPlayers,
+    franchiseCities: franchiseCitiesFor(
+      draft.region,
+      localPlayers,
+      draft.franchiseCities,
     ),
   };
 }
@@ -105,7 +143,12 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
     case "name":
       return { ...draft, name: action.value };
     case "region":
-      return { ...draft, region: action.value };
+      // Cities belong to a region, so the choices start again.
+      return {
+        ...draft,
+        region: action.value,
+        franchiseCities: franchiseCitiesFor(action.value, draft.localPlayers),
+      };
     case "preset": {
       if (action.value === "standard") {
         return withShape(
@@ -161,14 +204,35 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
       };
     case "fantasyDraft":
       return { ...draft, fantasyDraft: action.value };
-    case "localPlayers":
+    case "localPlayers": {
+      const localPlayers = Math.max(
+        1,
+        Math.min(action.value, MAX_LOCAL_PLAYERS, teamCount(draft.shape)),
+      );
       return {
         ...draft,
-        localPlayers: Math.max(
-          1,
-          Math.min(action.value, MAX_LOCAL_PLAYERS, teamCount(draft.shape)),
+        localPlayers,
+        franchiseCities: franchiseCitiesFor(
+          draft.region,
+          localPlayers,
+          draft.franchiseCities,
         ),
       };
+    }
+    case "franchiseCity": {
+      // A city can only be used once.
+      const taken = draft.franchiseCities.some(
+        (id, i) => i !== action.index && id === action.cityId,
+      );
+      if (taken || !citiesIn(draft.region).some((c) => c.id === action.cityId))
+        return draft;
+      return {
+        ...draft,
+        franchiseCities: draft.franchiseCities.map((id, i) =>
+          i === action.index ? action.cityId : id,
+        ),
+      };
+    }
   }
 }
 
@@ -223,4 +287,31 @@ export function describeShape(shape: EqualShape): string {
   const c = shape.conferences;
   const d = shape.divisionsPerConference;
   return `${c} ${c === 1 ? "conference" : "conferences"} · ${d} ${d === 1 ? "division" : "divisions"} each · ${shape.teamsPerDivision} teams per division`;
+}
+
+/**
+ * The create-league request for this draft. The identity seed fixes the
+ * generated franchises; the server picks the roster seed itself.
+ */
+export function draftToRequest(
+  draft: Draft,
+  identitySeed: string,
+): CreateLeagueRequest {
+  return {
+    name: draft.name.trim(),
+    setup: {
+      config: draftToConfig(draft),
+      shape: draft.shape,
+      localPlayers: Array.from({ length: draft.localPlayers }, (_, i) => ({
+        slot: i + 1,
+        label: null,
+      })),
+      franchises: draft.franchiseCities.map((cityId, i) => ({
+        localPlayerSlot: i + 1,
+        cityId,
+        aiAssist: { ...NO_AI_ASSIST },
+      })),
+      identitySeed,
+    },
+  };
 }

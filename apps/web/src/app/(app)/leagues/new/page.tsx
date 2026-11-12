@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { FormSkeleton } from "@/components/forms/form-skeleton";
 import { Page, PageHeader } from "@/components/layout/primitives";
-import { CreateLeagueForm } from "@/components/leagues/league-forms";
+import { LeagueSetupForm } from "@/components/leagues/setup/league-setup-form";
 import { ButtonLink } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { requireUserContext } from "@/server/auth/session";
@@ -23,9 +24,9 @@ export default function NewLeaguePage() {
       </Link>
       <PageHeader
         title="New league"
-        description="Name your league. Teams and players come next."
+        description="Choose the structure, region and playoff rules, then pick your franchise. Everything else is generated."
       />
-      <Suspense fallback={<FormSkeleton fields={1} />}>
+      <Suspense fallback={<FormSkeleton fields={3} />}>
         <NewLeague />
       </Suspense>
     </Page>
@@ -48,9 +49,11 @@ async function NewLeague() {
       </div>
     );
   }
+  // Seeds the generated franchises: the same value gives the same league.
+  const identitySeed = randomUUID().replaceAll("-", "").slice(0, 16);
   return (
     <div className="rounded-lg border border-border bg-surface p-6">
-      <CreateLeagueForm />
+      <LeagueSetupForm identitySeed={identitySeed} />
     </div>
   );
 }

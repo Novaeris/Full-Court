@@ -4,6 +4,7 @@ import {
   LEAGUE_PRESETS,
   MAX_LEAGUE_TEAMS,
   MAX_LOCAL_PLAYERS,
+  NO_AI_ASSIST,
   PLAYOFF_SEEDINGS,
   REGIONS,
   SERIES_LENGTHS,
@@ -119,3 +120,40 @@ export const OwnerModeSetupSchema = z.object({
   franchises: z.array(FranchiseSchema).max(MAX_LEAGUE_TEAMS),
 });
 export type OwnerModeSetupInput = z.input<typeof OwnerModeSetupSchema>;
+
+/** Sizes of the equal divisions wanted; ids and names are generated. */
+export const SetupShapeSchema = z.object({
+  conferences: z.number().int().min(1).max(4),
+  divisionsPerConference: z.number().int().min(1).max(MAX_LEAGUE_TEAMS),
+  teamsPerDivision: z.number().int().min(1).max(MAX_LEAGUE_TEAMS),
+});
+
+/** A franchise the owner customised; anything left out is generated. */
+export const FranchiseRequestSchema = z.object({
+  localPlayerSlot: z.number().int().min(1).max(MAX_LOCAL_PLAYERS),
+  cityId: FranchiseSchema.shape.cityId,
+  nickname: NameSchema.optional(),
+  primaryColor: FranchiseSchema.shape.primaryColor.optional(),
+  secondaryColor: FranchiseSchema.shape.secondaryColor.optional(),
+  logoId: FranchiseSchema.shape.logoId.optional(),
+  aiAssist: AiAssistSchema.default(() => ({ ...NO_AI_ASSIST })),
+});
+
+/** Seeds the generated franchises, so a preview matches what is created. */
+export const IdentitySeedSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{8,64}$/, "That seed isn't valid.");
+
+/**
+ * The Owner Mode part of POST /api/v1/leagues. The server generates the
+ * structure, the other franchises and every roster, then re-checks all rules.
+ */
+export const OwnerSetupRequestSchema = z.object({
+  config: LeagueConfigSchema,
+  shape: SetupShapeSchema,
+  localPlayers: z.array(LocalPlayerSchema).min(1).max(MAX_LOCAL_PLAYERS),
+  franchises: z.array(FranchiseRequestSchema).min(1).max(MAX_LEAGUE_TEAMS),
+  identitySeed: IdentitySeedSchema,
+});
+export type OwnerSetupRequest = z.input<typeof OwnerSetupRequestSchema>;
+export type OwnerSetupInput = z.output<typeof OwnerSetupRequestSchema>;

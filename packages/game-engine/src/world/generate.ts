@@ -180,8 +180,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function abbreviate(city: string): string[] {
+/** Three-letter abbreviation options for a city, best first. */
+export function abbreviate(city: string): string[] {
   const words = city
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .toUpperCase()
     .replace(/[^A-Z ]/g, "")
     .split(" ");
@@ -297,9 +300,14 @@ function uniqueName(
   throw new Error("Ran out of unique player names");
 }
 
-export function generateWorld(options: WorldOptions): GeneratedWorld {
-  const rng = createRng(seedState(options.seed));
-  const teams = generateTeams(rng, options.size);
+/**
+ * Fills every team with a full roster. Teams are visited in the order given;
+ * the same RNG sequence always produces the same players.
+ */
+export function generateRosters(
+  rng: Rng,
+  teams: readonly { abbreviation: string }[],
+): PlayerSeed[] {
   const players: PlayerSeed[] = [];
   const names = new Set<string>();
 
@@ -346,5 +354,12 @@ export function generateWorld(options: WorldOptions): GeneratedWorld {
     });
   }
 
+  return players;
+}
+
+export function generateWorld(options: WorldOptions): GeneratedWorld {
+  const rng = createRng(seedState(options.seed));
+  const teams = generateTeams(rng, options.size);
+  const players = generateRosters(rng, teams);
   return { teams, players, rngState: rng.state() };
 }

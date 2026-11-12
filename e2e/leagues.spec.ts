@@ -6,6 +6,7 @@ import {
   createConfirmedUser,
   signInThroughUi,
 } from "./support/auth";
+import { createLeagueThroughUi } from "./support/league";
 
 async function expectAccessible(page: Page) {
   // Streamed pages send <title> with the streamed content; wait for it.
@@ -43,9 +44,7 @@ test("create a league and move between its tabs", async ({ page }) => {
   await page.getByRole("link", { name: "Create a league" }).click();
   await expect(page).toHaveURL(/\/leagues\/new$/);
 
-  await page.getByLabel("League name").fill("  Harbor City Dynasty  ");
-  await page.getByRole("button", { name: "Create league" }).click();
-  await expect(page).toHaveURL(/\/leagues\/[0-9a-f-]{36}$/);
+  await createLeagueThroughUi(page, "  Harbor City Dynasty  ");
   await expect(
     page.getByRole("heading", { level: 1, name: "Harbor City Dynasty" }),
   ).toBeVisible();
@@ -81,16 +80,15 @@ test("the create form explains a bad name", async ({ page }, testInfo) => {
   const { email, password } = await createConfirmedUser("leaguebad");
   await signInThroughUi(page, email, password, "/leagues/new");
   await page.getByLabel("League name").fill("   ");
-  await page.getByRole("button", { name: "Create league" }).click();
   await expect(page.getByText("Give your league a name.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Next: / })).toBeDisabled();
 });
 
 test("rename and delete a league", async ({ page }, testInfo) => {
   desktopOnly(testInfo.project.name);
   const { email, password } = await createConfirmedUser("leaguerd");
   await signInThroughUi(page, email, password, "/leagues/new");
-  await page.getByLabel("League name").fill("First Name");
-  await page.getByRole("button", { name: "Create league" }).click();
+  await createLeagueThroughUi(page, "First Name");
   await page
     .getByRole("navigation", { name: "League" })
     .getByRole("link", { name: "Settings" })

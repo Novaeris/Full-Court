@@ -15,6 +15,13 @@ export const MIN_DIVISIONS = 2;
 export const MAX_CONFERENCES = 4;
 export const MAX_LOCAL_PLAYERS = 8;
 
+/** Built-in logos are identified by stable ids, `logo-01`…`logo-24`. */
+export const LOGO_COUNT = 24;
+export const LOGO_IDS: readonly LogoId[] = Array.from(
+  { length: LOGO_COUNT },
+  (_, i) => `logo-${String(i + 1).padStart(2, "0")}`,
+);
+
 export const REGIONS = [
   "north-america",
   "south-america",
