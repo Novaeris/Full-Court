@@ -258,7 +258,17 @@ test.describe("world API", () => {
         { slot: 2, label: "Sam" },
       ],
       franchises: [
-        { localPlayerSlot: 1, cityId: "eu-gb-london" },
+        {
+          localPlayerSlot: 1,
+          cityId: "eu-gb-london",
+          aiAssist: {
+            trades: true,
+            rosterCoverage: false,
+            rosterManagement: true,
+            scouting: false,
+            drafting: false,
+          },
+        },
         { localPlayerSlot: 1, cityId: "eu-fr-paris" },
         { localPlayerSlot: 2, cityId: "eu-de-berlin" },
       ],
@@ -285,6 +295,21 @@ test.describe("world API", () => {
     expect(perDivision).toEqual([5, 5, 5, 5, 5, 5]);
     const mine = teams.find((t) => t.id === league.userTeamId);
     expect(["London", "Paris"]).toContain(mine?.city);
+
+    // AI Assist is saved per franchise; AI-run teams never have any.
+    const flags = (city: string) => teams.find((t) => t.city === city);
+    expect(flags("London")?.aiAssist).toEqual({
+      trades: true,
+      rosterCoverage: false,
+      rosterManagement: true,
+      scouting: false,
+      drafting: false,
+    });
+    expect(Object.values(flags("Paris")?.aiAssist ?? {})).not.toContain(true);
+    expect(flags("Berlin")?.localPlayerSlot).toBe(2);
+    for (const t of teams.filter((t) => t.localPlayerSlot === null)) {
+      expect(Object.values(t.aiAssist)).not.toContain(true);
+    }
 
     // The same identity seed gives the same franchises; rosters differ.
     const again = await api.leagues.create({ name: "Euro League 2", setup });

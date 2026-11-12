@@ -1,6 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { createConfirmedUser, signInThroughUi } from "./support/auth";
+import { createApiClient } from "@fullcourt/api-client";
+import {
+  accessToken,
+  createConfirmedUser,
+  signInThroughUi,
+} from "./support/auth";
 
 async function expectAccessible(page: Page) {
   await expect(page).toHaveTitle(/\S/);
@@ -207,4 +212,87 @@ test("playoff rules block impossible settings with a clear message", async ({
   await page.getByLabel("Division leaders qualify automatically").uncheck();
   await expect(page.getByTestId("issues")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Next: Your/ })).toBeEnabled();
+});
+
+test("AI Assist is off by default, set per franchise, and saved with it", async ({
+  page,
+  baseURL,
+}) => {
+  const { email, password } = await createConfirmedUser("setup-ai");
+  await signInThroughUi(page, email, password);
+  await page.goto("/leagues/new");
+  await page.getByLabel("League name").fill("Assisted League");
+  await page.getByRole("button", { name: /^Next: / }).click();
+  await page.getByLabel("Local players").selectOption("2");
+  await page.getByRole("button", { name: "Next: Your franchises" }).click();
+
+  const player1 = page.getByRole("group", { name: "Player 1" });
+  const player2 = page.getByRole("group", { name: "Player 2" });
+  await expect(player1.getByText("AI Assist: all off")).toBeVisible();
+  await expect(player2.getByText("AI Assist: all off")).toBeVisible();
+
+  // Open Player 1's AI Assist: five permissions, none on.
+  await player1.getByText("AI Assist: all off").click();
+  for (const name of [
+    "Trades",
+    "Roster coverage",
+    "Roster and rotation",
+    "Scouting",
+    "Drafting",
+  ]) {
+    await expect(player1.getByRole("checkbox", { name })).not.toBeChecked();
+  }
+  await player1.getByRole("checkbox", { name: "Scouting" }).check();
+  await player1.getByRole("checkbox", { name: "Drafting" }).check();
+  await expect(player1.getByText("AI Assist: 2 of 5 on")).toBeVisible();
+  // Player 2 is unaffected.
+  await expect(player2.getByText("AI Assist: all off")).toBeVisible();
+  await noOverflow(page);
+  await expectAccessible(page);
+
+  await page.getByRole("button", { name: "Next: Review" }).click();
+  await expect(
+    page
+      .getByRole("definition")
+      .filter({ hasText: "Player 1: Scouting, Drafting" }),
+  ).toContainText("Player 2: all off");
+  await page.getByRole("button", { name: "Create league" }).click();
+  await expect(page).toHaveURL(/\/leagues\/([0-9a-f-]{36})$/);
+  const leagueId = page.url().split("/").pop() as string;
+
+  // Saved with the franchises: visible in the league settings.
+  await page.goto(`/leagues/${leagueId}/settings`);
+  const section = page.getByRole("region", {
+    name: "Franchises and AI Assist",
+  });
+  await expect(section).toBeVisible();
+  const rows = section.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: "Player 1" })).toContainText(
+    "Scouting, Drafting",
+  );
+  await expect(rows.filter({ hasText: "Player 2" })).toContainText("all off");
+  await noOverflow(page);
+  await expectAccessible(page);
+
+  // And in the API: only those two flags, only on Player 1's team.
+  const api = createApiClient({
+    baseUrl: baseURL ?? "",
+    fetch,
+    getAccessToken: async () => accessToken(email, password),
+  });
+  const { teams } = await api.leagues.teams(leagueId);
+  const on = (t: (typeof teams)[number]) =>
+    Object.entries(t.aiAssist)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+      .sort();
+  expect(on(teams.find((t) => t.localPlayerSlot === 1)!)).toEqual([
+    "drafting",
+    "scouting",
+  ]);
+  expect(on(teams.find((t) => t.localPlayerSlot === 2)!)).toEqual([]);
+  for (const t of teams.filter((t) => t.localPlayerSlot === null)) {
+    expect(on(t)).toEqual([]);
+  }
 });

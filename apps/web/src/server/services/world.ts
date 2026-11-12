@@ -21,7 +21,7 @@ type TeamRow = Database["public"]["Tables"]["teams"]["Row"];
 type PlayerRow = Database["public"]["Tables"]["players"]["Row"];
 
 const TEAM_COLUMNS =
-  "id, abbreviation, city, nickname, conference_id, division_id, primary_color, secondary_color" as const;
+  "id, abbreviation, city, nickname, conference_id, division_id, primary_color, secondary_color, local_player_slot, ai_trades, ai_roster_coverage, ai_roster_management, ai_scouting, ai_drafting" as const;
 
 /** Display names and order of a league's conferences and divisions. */
 type Structure = {
@@ -79,6 +79,12 @@ function toTeam(
     | "division_id"
     | "primary_color"
     | "secondary_color"
+    | "local_player_slot"
+    | "ai_trades"
+    | "ai_roster_coverage"
+    | "ai_roster_management"
+    | "ai_scouting"
+    | "ai_drafting"
   >,
   strength: number,
   structure: Structure,
@@ -94,6 +100,14 @@ function toTeam(
     division: structure.divisions.get(row.division_id)?.name ?? "",
     primaryColor: row.primary_color,
     secondaryColor: row.secondary_color,
+    localPlayerSlot: row.local_player_slot,
+    aiAssist: {
+      trades: row.ai_trades,
+      rosterCoverage: row.ai_roster_coverage,
+      rosterManagement: row.ai_roster_management,
+      scouting: row.ai_scouting,
+      drafting: row.ai_drafting,
+    },
     strength,
   };
 }

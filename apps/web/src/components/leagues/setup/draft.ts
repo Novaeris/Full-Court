@@ -16,6 +16,8 @@ import {
   LEAGUE_CONFIG_SCHEMA_VERSION,
   MAX_LOCAL_PLAYERS,
   NO_AI_ASSIST,
+  type AiAssistFlags,
+  type AiAssistKey,
   type LeagueConfig,
   type LeaguePreset,
   type LeagueStructure,
@@ -44,7 +46,20 @@ export type Draft = {
   localPlayers: number;
   /** The city of each local player's franchise: Player 1 first. */
   franchiseCities: string[];
+  /** AI Assist permissions for each of those franchises, all off by default. */
+  aiAssist: AiAssistFlags[];
 };
+
+/** Keeps the first `count` entries and adds franchises with everything off. */
+function resizeAiAssist(
+  current: readonly AiAssistFlags[],
+  count: number,
+): AiAssistFlags[] {
+  return Array.from(
+    { length: count },
+    (_, i) => current[i] ?? { ...NO_AI_ASSIST },
+  );
+}
 
 /**
  * City choices for `count` franchises: keeps the ones already chosen (when
@@ -95,6 +110,7 @@ export function initialDraft(): Draft {
     fantasyDraft: false,
     localPlayers: 1,
     franchiseCities: franchiseCitiesFor("north-america", 1),
+    aiAssist: resizeAiAssist([], 1),
   };
 }
 
@@ -109,7 +125,8 @@ export type DraftAction =
   | { type: "allRounds"; value: SeriesLength }
   | { type: "fantasyDraft"; value: boolean }
   | { type: "localPlayers"; value: number }
-  | { type: "franchiseCity"; index: number; cityId: string };
+  | { type: "franchiseCity"; index: number; cityId: string }
+  | { type: "aiAssist"; index: number; key: AiAssistKey; value: boolean };
 
 export function teamCount(shape: EqualShape): number {
   return (
@@ -135,6 +152,7 @@ function withShape(draft: Draft, shape: EqualShape): Draft {
       localPlayers,
       draft.franchiseCities,
     ),
+    aiAssist: resizeAiAssist(draft.aiAssist, localPlayers),
   };
 }
 
@@ -217,8 +235,16 @@ export function draftReducer(draft: Draft, action: DraftAction): Draft {
           localPlayers,
           draft.franchiseCities,
         ),
+        aiAssist: resizeAiAssist(draft.aiAssist, localPlayers),
       };
     }
+    case "aiAssist":
+      return {
+        ...draft,
+        aiAssist: draft.aiAssist.map((flags, i) =>
+          i === action.index ? { ...flags, [action.key]: action.value } : flags,
+        ),
+      };
     case "franchiseCity": {
       // A city can only be used once.
       const taken = draft.franchiseCities.some(
@@ -309,7 +335,7 @@ export function draftToRequest(
       franchises: draft.franchiseCities.map((cityId, i) => ({
         localPlayerSlot: i + 1,
         cityId,
-        aiAssist: { ...NO_AI_ASSIST },
+        aiAssist: { ...(draft.aiAssist[i] ?? NO_AI_ASSIST) },
       })),
       identitySeed,
     },

@@ -9,6 +9,8 @@ import {
   type RuleIssue,
 } from "@fullcourt/game-rules";
 import {
+  AI_ASSIST_KEYS,
+  AI_ASSIST_LABELS,
   MAX_LOCAL_PLAYERS,
   REGIONS,
   REGION_NAMES,
@@ -490,26 +492,90 @@ function FranchisesStep({
         Every other team in {REGION_NAMES[draft.region]} is generated for you,
         with its own city, name, colours and logo.
       </p>
-      {draft.franchiseCities.map((cityId, index) => (
-        <SelectField
-          key={index}
-          label={
-            draft.localPlayers === 1
-              ? "Your franchise city"
-              : `Player ${index + 1}'s franchise city`
-          }
-          name={`city-${index}`}
-          value={cityId}
-          onChange={(e) =>
-            dispatch({ type: "franchiseCity", index, cityId: e.target.value })
-          }
-          options={cities.map((city) => ({
-            value: city.id,
-            label: `${city.name}, ${city.subdivision}`,
-          }))}
-        />
-      ))}
+      {draft.franchiseCities.map((cityId, index) => {
+        const who =
+          draft.localPlayers === 1 ? "Your franchise" : `Player ${index + 1}`;
+        return (
+          <fieldset
+            key={index}
+            className="flex flex-col gap-4 rounded-lg border border-border p-4"
+          >
+            <legend className="px-1 font-bold">{who}</legend>
+            <SelectField
+              label={
+                draft.localPlayers === 1
+                  ? "Your franchise city"
+                  : `Player ${index + 1}'s franchise city`
+              }
+              name={`city-${index}`}
+              value={cityId}
+              onChange={(e) =>
+                dispatch({
+                  type: "franchiseCity",
+                  index,
+                  cityId: e.target.value,
+                })
+              }
+              options={cities.map((city) => ({
+                value: city.id,
+                label: `${city.name}, ${city.subdivision}`,
+              }))}
+            />
+            <AiAssistSettings
+              flags={draft.aiAssist[index]}
+              onChange={(key, value) =>
+                dispatch({ type: "aiAssist", index, key, value })
+              }
+            />
+          </fieldset>
+        );
+      })}
     </div>
+  );
+}
+
+/** The five AI Assist permissions for one franchise, all off by default. */
+function AiAssistSettings({
+  flags,
+  onChange,
+}: {
+  flags: ReturnType<typeof initialDraft>["aiAssist"][number] | undefined;
+  onChange: (key: (typeof AI_ASSIST_KEYS)[number], value: boolean) => void;
+}) {
+  const on = AI_ASSIST_KEYS.filter((key) => flags?.[key]).length;
+  return (
+    <details className="rounded-md border border-border bg-surface-muted">
+      <summary className="flex min-h-touch cursor-pointer items-center px-3 font-semibold">
+        AI Assist:{" "}
+        {on === 0 ? "all off" : `${on} of ${AI_ASSIST_KEYS.length} on`}
+      </summary>
+      <div className="flex flex-col gap-3 px-3 pb-3">
+        <p className="text-sm text-text-muted">
+          Choose what the AI may do for this franchise. Each permission is saved
+          with the franchise, and all are off unless you turn them on. The AI
+          that uses them isn&apos;t in the game yet, so for now they only record
+          your choice.
+        </p>
+        {AI_ASSIST_KEYS.map((key) => (
+          <CheckboxField
+            key={key}
+            name={`ai-${key}`}
+            checked={flags?.[key] ?? false}
+            onChange={(e) => onChange(key, e.target.checked)}
+            label={
+              <>
+                <span className="block font-semibold">
+                  {AI_ASSIST_LABELS[key].name}
+                </span>
+                <span className="block text-sm text-text-muted">
+                  {AI_ASSIST_LABELS[key].description}
+                </span>
+              </>
+            }
+          />
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -564,6 +630,18 @@ function ReviewStep({
           const city = citiesIn(draft.region).find((c) => c.id === id);
           const label = city ? `${city.name}, ${city.subdivision}` : id;
           return draft.localPlayers === 1 ? label : `Player ${i + 1}: ${label}`;
+        })
+        .join(" · "),
+    ],
+    [
+      "AI Assist",
+      draft.aiAssist
+        .map((flags, i) => {
+          const on = AI_ASSIST_KEYS.filter((key) => flags[key]).map(
+            (key) => AI_ASSIST_LABELS[key].name,
+          );
+          const text = on.length === 0 ? "all off" : on.join(", ");
+          return draft.localPlayers === 1 ? text : `Player ${i + 1}: ${text}`;
         })
         .join(" · "),
     ],

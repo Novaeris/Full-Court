@@ -1,5 +1,6 @@
 import { POSITIONS, RATING_KEYS } from "@fullcourt/game-types";
 import { z } from "zod";
+import { AiAssistSchema } from "./owner-mode";
 
 /** Teams, players and team selection, as the API returns them. */
 
@@ -20,6 +21,10 @@ export const TeamSchema = z.object({
   /** Stable ids; display names may change, ids never do. */
   conferenceId: z.string(),
   divisionId: z.string(),
+  /** The local player running the team, or null when the AI does. */
+  localPlayerSlot: z.number().int().nullable(),
+  /** AI Assist permissions: always all off for AI-run teams. */
+  aiAssist: AiAssistSchema,
   /** Display names. */
   conference: z.string(),
   division: z.string(),

@@ -219,3 +219,81 @@ describe("franchise cities", () => {
     ]);
   });
 });
+
+describe("AI Assist per franchise", () => {
+  it("starts with every permission off", () => {
+    const draft = named();
+    expect(draft.aiAssist).toHaveLength(1);
+    expect(
+      Object.values(draft.aiAssist[0] ?? {}).every((v) => v === false),
+    ).toBe(true);
+    expect(Object.keys(draft.aiAssist[0] ?? {})).toHaveLength(5);
+  });
+
+  it("switches one permission for one franchise without touching the others", () => {
+    let draft = draftReducer(named(), { type: "localPlayers", value: 2 });
+    draft = draftReducer(draft, {
+      type: "aiAssist",
+      index: 1,
+      key: "scouting",
+      value: true,
+    });
+    draft = draftReducer(draft, {
+      type: "aiAssist",
+      index: 1,
+      key: "drafting",
+      value: true,
+    });
+    expect(draft.aiAssist[0]).toEqual({
+      trades: false,
+      rosterCoverage: false,
+      rosterManagement: false,
+      scouting: false,
+      drafting: false,
+    });
+    expect(draft.aiAssist[1]).toMatchObject({
+      scouting: true,
+      drafting: true,
+      trades: false,
+    });
+    draft = draftReducer(draft, {
+      type: "aiAssist",
+      index: 1,
+      key: "scouting",
+      value: false,
+    });
+    expect(draft.aiAssist[1]?.scouting).toBe(false);
+  });
+
+  it("keeps choices as players are added or removed, and new franchises start off", () => {
+    let draft = draftReducer(named(), {
+      type: "aiAssist",
+      index: 0,
+      key: "trades",
+      value: true,
+    });
+    draft = draftReducer(draft, { type: "localPlayers", value: 3 });
+    expect(draft.aiAssist).toHaveLength(3);
+    expect(draft.aiAssist[0]?.trades).toBe(true);
+    expect(draft.aiAssist[1]?.trades).toBe(false);
+    draft = draftReducer(draft, { type: "region", value: "asia" });
+    expect(draft.aiAssist[0]?.trades).toBe(true);
+    expect(
+      draftReducer(draft, { type: "localPlayers", value: 1 }).aiAssist,
+    ).toHaveLength(1);
+  });
+
+  it("sends each franchise's permissions in the request", () => {
+    let draft = draftReducer(named(), { type: "localPlayers", value: 2 });
+    draft = draftReducer(draft, {
+      type: "aiAssist",
+      index: 0,
+      key: "rosterCoverage",
+      value: true,
+    });
+    const franchises = draftToRequest(draft, "abcdefgh12345678").setup
+      ?.franchises;
+    expect(franchises?.[0]?.aiAssist?.rosterCoverage).toBe(true);
+    expect(franchises?.[1]?.aiAssist?.rosterCoverage).toBe(false);
+  });
+});
