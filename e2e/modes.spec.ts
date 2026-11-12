@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { createConfirmedUser, signInThroughUi } from "./support/auth";
+import { createLeagueThroughUi } from "./support/league";
 
 /**
  * Game Mode Selection (/modes) and the three mode entry points
@@ -300,9 +301,7 @@ test("Owner Mode: start a world, then find it among the saves", async ({
   await expect(page).toHaveURL(/\/owner#saves$/);
   await page.getByRole("link", { name: "Create your first world" }).click();
   await expect(page).toHaveURL(/\/leagues\/new$/);
-  await page.getByLabel("League name").fill("Bayside Owners");
-  await page.getByRole("button", { name: "Create league" }).click();
-  await expect(page).toHaveURL(/\/leagues\/[0-9a-f-]{36}$/);
+  await createLeagueThroughUi(page, "Bayside Owners");
 
   await page.goto("/owner");
   await expect(page.getByText("1 of 5 save slots used.")).toBeVisible();

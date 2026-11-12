@@ -11,7 +11,8 @@ import { standardSetup } from "./support/league";
 async function expectAccessible(page: Page) {
   await expect(page).toHaveTitle(/\S/);
   const size = page.viewportSize();
-  if (size) await page.setViewportSize({ width: size.width, height: 4000 });
+  if (size) await page.setViewportSize({ width: size.width, height: 8000 });
+  await page.evaluate(() => window.scrollTo(0, 0));
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();

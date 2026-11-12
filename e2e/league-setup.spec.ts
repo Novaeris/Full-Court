@@ -13,7 +13,8 @@ async function expectAccessible(page: Page) {
   // The phone tab bar is fixed to the bottom of the screen. Check on a tall
   // viewport so a field scrolled under it by the test isn't flagged.
   const size = page.viewportSize();
-  if (size) await page.setViewportSize({ width: size.width, height: 4000 });
+  if (size) await page.setViewportSize({ width: size.width, height: 8000 });
+  await page.evaluate(() => window.scrollTo(0, 0));
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
@@ -555,4 +556,36 @@ test("one player running several teams sees them all", async ({
   ).toHaveCount(2);
   await page.goto(`/leagues/${league.id}/teams`);
   await expect(page.getByText(/· Your team/)).toHaveCount(2);
+});
+
+test("choosing the logo that is already shown still counts as a choice", async ({
+  page,
+}) => {
+  const { email, password } = await createConfirmedUser("setup-logo");
+  await signInThroughUi(page, email, password);
+  await page.goto("/leagues/new");
+  await page.getByLabel("League name").fill("Logo League");
+  await nextStep(page);
+  await nextStep(page);
+
+  // Until you choose, the generated logo is shown as selected. Choose that
+  // very one: it must be kept even when the league around it changes.
+  const franchise = page.getByRole("group", { name: "Your franchise" });
+  const shown = await franchise
+    .locator('input[type="radio"]:checked')
+    .evaluate((el) => (el as HTMLInputElement).value);
+  await franchise
+    .locator(`input[type="radio"][value="${shown}"]`)
+    .evaluate((el) => (el as HTMLInputElement).click());
+  await nextStep(page);
+
+  const logoSent = async () =>
+    JSON.parse(await page.locator('input[name="request"]').inputValue()).setup
+      .franchises[0].logoId;
+  expect(await logoSent()).toBe(shown);
+  // Shuffling regenerates everything that was not chosen, but not this.
+  for (let i = 0; i < 5; i++) {
+    await page.getByRole("button", { name: "Shuffle league" }).click();
+    expect(await logoSent()).toBe(shown);
+  }
 });

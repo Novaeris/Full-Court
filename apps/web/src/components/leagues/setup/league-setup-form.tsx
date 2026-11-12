@@ -746,7 +746,12 @@ function LogoPicker({
               name={name}
               value={id}
               checked={value === id}
-              onChange={() => onChange(id)}
+              // Handle the click, not the change: until you choose, the
+              // generated logo is shown as selected, and clicking that one
+              // must still count as choosing it (a change event would not
+              // fire, and a later shuffle would swap it for another).
+              onClick={() => onChange(id)}
+              onChange={() => {}}
               className="peer sr-only"
             />
             <span
