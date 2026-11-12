@@ -51,6 +51,8 @@ export const LeagueStructureSchema = z.object({
     .max(MAX_LEAGUE_TEAMS),
 });
 
+export type LeagueStructure = z.infer<typeof LeagueStructureSchema>;
+
 const seriesLength = z.union(
   SERIES_LENGTHS.map((n) => z.literal(n)) as unknown as [
     z.ZodLiteral<3>,
@@ -157,3 +159,23 @@ export const OwnerSetupRequestSchema = z.object({
 });
 export type OwnerSetupRequest = z.input<typeof OwnerSetupRequestSchema>;
 export type OwnerSetupInput = z.output<typeof OwnerSetupRequestSchema>;
+
+/** A conference or division name as typed by the owner. */
+export const StructureNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Enter a name.")
+  .max(40, "Use at most 40 characters.");
+
+/** PATCH /api/v1/leagues/:leagueId/structure: rename, never re-id. */
+export const RenameStructureRequestSchema = z.object({
+  conferences: z
+    .array(z.object({ id: IdSchema, name: StructureNameSchema }))
+    .max(MAX_LEAGUE_TEAMS),
+  divisions: z
+    .array(z.object({ id: IdSchema, name: StructureNameSchema }))
+    .max(MAX_LEAGUE_TEAMS),
+});
+export type RenameStructureRequest = z.infer<
+  typeof RenameStructureRequestSchema
+>;

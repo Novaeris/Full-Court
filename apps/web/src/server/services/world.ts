@@ -4,6 +4,8 @@ import {
   LeagueIdSchema,
   type ChooseTeamRequest,
   type League,
+  type LeagueStructure,
+  type RenameStructureRequest,
   type Player,
   type Team,
   type TeamDetail,
@@ -287,4 +289,89 @@ export async function chooseTeam(
     }
   }
   return getLeague(ctx, league.id);
+}
+
+/** The league's conferences and divisions, in order, with team counts. */
+export async function getStructure(
+  ctx: UserContext,
+  leagueId: string,
+): Promise<LeagueStructure> {
+  const league = await getLeague(ctx, leagueId);
+  const [conferences, divisions, teams] = await Promise.all([
+    ctx.supabase
+      .from("league_conferences")
+      .select("id, name, sort_order")
+      .eq("league_id", league.id)
+      .order("sort_order"),
+    ctx.supabase
+      .from("league_divisions")
+      .select("id, conference_id, name, sort_order")
+      .eq("league_id", league.id)
+      .order("sort_order"),
+    ctx.supabase.from("teams").select("division_id").eq("league_id", league.id),
+  ]);
+  if (conferences.error) throw conferences.error;
+  if (divisions.error) throw divisions.error;
+  if (teams.error) throw teams.error;
+  const sizes = new Map<string, number>();
+  for (const t of teams.data) {
+    sizes.set(t.division_id, (sizes.get(t.division_id) ?? 0) + 1);
+  }
+  return {
+    conferences: conferences.data.map((c) => ({
+      id: c.id,
+      name: c.name,
+      divisions: divisions.data
+        .filter((d) => d.conference_id === c.id)
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          teamCount: sizes.get(d.id) ?? 0,
+        })),
+    })),
+  };
+}
+
+/**
+ * Renames conferences and divisions. Ids never change, so nothing that
+ * refers to them breaks. Two conferences can't share a name, and neither can
+ * two divisions in one conference.
+ */
+export async function renameStructure(
+  ctx: UserContext,
+  leagueId: string,
+  input: RenameStructureRequest,
+): Promise<LeagueStructure> {
+  const league = await getLeague(ctx, leagueId);
+  const { error } = await ctx.supabase.rpc("rename_structure", {
+    target_league: league.id,
+    conference_names: input.conferences,
+    division_names: input.divisions,
+  });
+  if (error) {
+    if (error.message === "league_not_found") {
+      throw new ApiError(404, "league_not_found", "That league doesn't exist.");
+    }
+    if (error.code === "23505") {
+      throw new ApiError(
+        409,
+        "name_taken",
+        "Two conferences, or two divisions in one conference, can't share a name.",
+      );
+    }
+    if (
+      ["unknown_conference", "unknown_division", "invalid_names"].includes(
+        error.message,
+      ) ||
+      error.code === "23514"
+    ) {
+      throw new ApiError(
+        400,
+        "invalid_names",
+        "Check the names and try again.",
+      );
+    }
+    throw error;
+  }
+  return getStructure(ctx, league.id);
 }

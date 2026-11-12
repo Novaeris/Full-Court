@@ -6,6 +6,7 @@ import {
   LeagueStructureSchema,
   OwnerModeSetupSchema,
   OwnerSetupRequestSchema,
+  RenameStructureRequestSchema,
 } from "./owner-mode";
 import { CreateLeagueRequestSchema } from "./leagues";
 
@@ -167,5 +168,36 @@ describe("OwnerSetupRequestSchema", () => {
         setup: { ...request, identitySeed: "x" },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("RenameStructureRequestSchema", () => {
+  it("trims names and keeps ids as they are", () => {
+    expect(
+      RenameStructureRequestSchema.parse({
+        conferences: [{ id: "c-east", name: "  Atlantic " }],
+        divisions: [{ id: "d-east-north", name: "North" }],
+      }),
+    ).toEqual({
+      conferences: [{ id: "c-east", name: "Atlantic" }],
+      divisions: [{ id: "d-east-north", name: "North" }],
+    });
+  });
+
+  it("rejects blank, over-long and badly identified entries", () => {
+    const bad = (patch: object) =>
+      RenameStructureRequestSchema.safeParse({
+        conferences: [],
+        divisions: [],
+        ...patch,
+      }).success;
+    expect(bad({ conferences: [{ id: "c-east", name: "   " }] })).toBe(false);
+    expect(bad({ divisions: [{ id: "d-x", name: "x".repeat(41) }] })).toBe(
+      false,
+    );
+    expect(bad({ conferences: [{ id: "Not An Id", name: "Fine" }] })).toBe(
+      false,
+    );
+    expect(bad({})).toBe(true);
   });
 });

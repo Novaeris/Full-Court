@@ -5,10 +5,11 @@ import { FormSkeleton } from "@/components/forms/form-skeleton";
 import {
   DeleteLeagueForm,
   RenameLeagueForm,
+  RenameStructureForm,
 } from "@/components/leagues/league-forms";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { loadLeague } from "@/server/leagues/load";
-import { listTeams } from "@/server/services/world";
+import { getStructure, listTeams } from "@/server/services/world";
 
 export const metadata: Metadata = { title: "League settings" };
 
@@ -29,13 +30,21 @@ async function Settings({
 }) {
   const { leagueId } = await params;
   const { ctx, league } = await loadLeague(leagueId);
-  const franchises = (await listTeams(ctx, league.id)).filter(
-    (team) => team.localPlayerSlot !== null,
-  );
+  const [teams, structure] = await Promise.all([
+    listTeams(ctx, league.id),
+    getStructure(ctx, league.id),
+  ]);
+  const franchises = teams.filter((team) => team.localPlayerSlot !== null);
   return (
     <div className="flex max-w-prose flex-col gap-6">
       <SettingsCard title="Name">
         <RenameLeagueForm leagueId={league.id} current={league.name} />
+      </SettingsCard>
+      <SettingsCard
+        title="Conferences and divisions"
+        description="Rename them whenever you like. Only the names change: teams, schedules and records stay exactly as they are."
+      >
+        <RenameStructureForm leagueId={league.id} structure={structure} />
       </SettingsCard>
       {franchises.length > 0 ? (
         <SettingsCard

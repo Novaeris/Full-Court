@@ -3,6 +3,7 @@ import {
   DeleteLeagueResponseSchema,
   LeagueListSchema,
   LeagueSchema,
+  LeagueStructureSchema,
   TeamDetailSchema,
   TeamListSchema,
   type ChooseTeamRequest,
@@ -11,7 +12,9 @@ import {
   type CreateLeagueRequest,
   type League,
   type LeagueList,
+  type LeagueStructure,
   type RenameLeagueRequest,
+  type RenameStructureRequest,
   DeleteAccountResponseSchema,
   HealthResponseSchema,
   ProfileSchema,
@@ -121,6 +124,22 @@ export function createApiClient(options: ApiClientOptions) {
       teams: (id: string): Promise<{ teams: Team[] }> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/teams`, (b) =>
           TeamListSchema.parse(b),
+        ),
+      /** Conferences and divisions, with their stable ids and display names. */
+      structure: (id: string): Promise<LeagueStructure> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/structure`, (b) =>
+          LeagueStructureSchema.parse(b),
+        ),
+      /** Renames conferences and divisions; ids never change. */
+      renameStructure: (
+        id: string,
+        input: RenameStructureRequest,
+      ): Promise<LeagueStructure> =>
+        request(
+          "PATCH",
+          `/leagues/${encodeURIComponent(id)}/structure`,
+          (b) => LeagueStructureSchema.parse(b),
+          input,
         ),
       /** One team and its roster. */
       team: (id: string, teamId: string): Promise<TeamDetail> =>

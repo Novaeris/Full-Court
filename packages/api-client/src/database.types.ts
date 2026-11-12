@@ -487,6 +487,14 @@ export type Database = {
       }
       delete_own_account: { Args: never; Returns: undefined }
       league_limit: { Args: never; Returns: number }
+      rename_structure: {
+        Args: {
+          conference_names: Json
+          division_names: Json
+          target_league: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
