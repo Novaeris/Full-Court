@@ -11,6 +11,7 @@ describe("account schemas", () => {
     displayName: "  Coach  ",
     email: " coach@example.test ",
     password: "correct horse",
+    acceptTerms: true,
   };
 
   it("accepts and trims a valid sign-up", () => {
@@ -18,7 +19,14 @@ describe("account schemas", () => {
       displayName: "Coach",
       email: "coach@example.test",
       password: "correct horse",
+      acceptTerms: true,
     });
+  });
+
+  it("requires the Terms checkbox", () => {
+    expect(
+      SignUpRequestSchema.safeParse({ ...valid, acceptTerms: false }).success,
+    ).toBe(false);
   });
 
   it("rejects short passwords, bad emails and long names", () => {

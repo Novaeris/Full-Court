@@ -18,13 +18,17 @@
 
 The repository is public. Secrets live only in the Render dashboard and in git-ignored local files (`apps/web/.env.local`).
 
-| Name                                   | Where                 | Notes                                                                                                         |
-| -------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Render web, local     | Public                                                                                                        |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Render web, local     | Public by design; RLS protects data                                                                           |
-| `SITE_URL`                             | Local only            | Origin for auth email links. On Render, `RENDER_EXTERNAL_URL` is used                                         |
-| `SUPABASE_SECRET_KEY`                  | Render web, local     | Bypasses RLS. Used only by `apps/web/src/server/admin` to write generated league worlds. Never `NEXT_PUBLIC_` |
-| Supabase database password             | Your password manager | Needed only for direct database connections                                                                   |
+| Name                                   | Where                    | Notes                                                                                                                |
+| -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Render web, local        | Public                                                                                                               |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Render web, local        | Public by design; RLS protects data                                                                                  |
+| `SITE_URL`                             | Local only               | Origin for auth email links. On Render, `RENDER_EXTERNAL_URL` is used                                                |
+| `SUPABASE_SECRET_KEY`                  | Render web, local        | Bypasses RLS. Used only by `apps/web/src/server/admin` to write generated league worlds. Never `NEXT_PUBLIC_`        |
+| Supabase database password             | Your password manager    | Needed only for direct database connections                                                                          |
+| `RATE_LIMIT_SECRET`                    | Render web, local        | 32+ random characters. Keys the IP hashes and form stamps for the support form. Rotating it only resets the counters |
+| `RESEND_API_KEY`                       | Render web               | Optional. Support form notifications to the support inbox. Can be a separate Resend key from the SMTP one            |
+| `SUPPORT_EMAIL_FROM`                   | Render web               | Optional. Sender for support notifications, on a Resend-verified domain                                              |
+| `MAINTENANCE_MODE`                     | Render web (when needed) | Set to `on` to show the maintenance page; remove it to reopen. Not in `render.yaml`                                  |
 
 ## Auth configuration
 
@@ -40,9 +44,16 @@ Auth settings live in `supabase/config.toml` and are versioned with the code. Th
 | Sign-in/sign-up limit | 1000 per 5 min (so e2e is not throttled)                     | 30 per 5 min (hosted default)                |
 
 - Apply staging auth settings with `supabase config push`, and staging migrations with `supabase db push`.
-- **Staging email limits.** Without custom SMTP, Supabase's built-in mailer only delivers to members of the Supabase organisation, and only a few emails an hour. That's enough to test with your own address. Custom SMTP (for example Resend) is a launch gate.
+- **Staging email.** Staging sends auth email through Resend SMTP (`[remotes.staging.auth.email.smtp]`), limited to 30 emails an hour by `[remotes.staging.auth.rate_limit]`. The open alpha runs on staging, so raise that limit (and check the Resend plan's quota) if sign-ups queue up.
 
 Mobile and desktop schemes (`fullcourt://…`) are added to the allowlist when those apps start.
+
+## Open alpha operations
+
+- **Support requests** are stored in `app_private.support_requests` (Supabase Studio → Table editor → schema `app_private`). With `RESEND_API_KEY` and `SUPPORT_EMAIL_FROM` set, each one is also emailed to the support inbox; reply from there. Delete inbox copies 12 months after they arrive (the Privacy Policy promises this; the database deletes its copies itself).
+- **Usage totals** are in `app_private.analytics_daily`, e.g. `select day, event, path, hits from app_private.analytics_daily order by day desc, hits desc;`.
+- **Maintenance:** add `MAINTENANCE_MODE=on` in the Render dashboard (the service restarts), do the work, remove it.
+- **Releases:** add an entry to `apps/web/src/content/changelog.ts`. Material policy changes: edit the page, then bump the version in `apps/web/src/content/policies.ts`.
 
 ## Common tasks
 

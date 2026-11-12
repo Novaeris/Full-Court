@@ -15,7 +15,14 @@ export default function NotFound() {
           icon="ball"
           title="Air ball"
           description="We couldn't find that page. It may have moved, or the link may be wrong."
-          action={<ButtonLink href="/">Back to home</ButtonLink>}
+          action={
+            <div className="flex flex-col gap-3 tablet:flex-row">
+              <ButtonLink href="/">Back to home</ButtonLink>
+              <ButtonLink href="/support" variant="secondary">
+                Report a broken link
+              </ButtonLink>
+            </div>
+          }
         />
       </Page>
     </SiteChrome>

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, type Page } from "@playwright/test";
+import { ALPHA_NOTICE, TERMS } from "../../apps/web/src/content/policies";
 
 /**
  * Helpers for auth e2e tests against local Supabase (`supabase start`).
@@ -57,10 +58,16 @@ export async function emailLink(to: string, subject: string): Promise<string> {
   return link!;
 }
 
-/** Creates a confirmed account without going through the UI. */
+/**
+ * Creates a confirmed account without going through the UI. By default it has
+ * accepted the current Terms and acknowledged the alpha notice, so the
+ * first-sign-in introduction stays out of the way; pass `acknowledged: false`
+ * for an account that has done neither (one that predates the Terms).
+ */
 export async function createConfirmedUser(
   label: string,
   displayName = "Test Coach",
+  { acknowledged = true }: { acknowledged?: boolean } = {},
 ): Promise<{ email: string; password: string }> {
   const email = uniqueEmail(label);
   const client = supabase();
@@ -68,7 +75,10 @@ export async function createConfirmedUser(
     email,
     password: PASSWORD,
     options: {
-      data: { display_name: displayName },
+      data: {
+        display_name: displayName,
+        ...(acknowledged ? { terms_version: String(TERMS.version) } : {}),
+      },
       emailRedirectTo: "http://localhost:3100/auth/confirm?next=%2Fleagues",
     },
   });
@@ -81,6 +91,13 @@ export async function createConfirmedUser(
     token_hash: link.searchParams.get("token_hash") ?? "",
   });
   if (verifyError) throw verifyError;
+  if (acknowledged) {
+    // verifyOtp signed the client in as the new user.
+    const { error: ackError } = await client.rpc("acknowledge_alpha_notice", {
+      acknowledged_version: ALPHA_NOTICE.version,
+    });
+    if (ackError) throw ackError;
+  }
   return { email, password: PASSWORD };
 }
 

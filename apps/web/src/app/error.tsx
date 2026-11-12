@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { Page } from "@/components/layout/primitives";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -38,6 +39,16 @@ export default function ErrorPage({
             {digest ? (
               <p className="mt-2 font-mono text-sm">Reference: {digest}</p>
             ) : null}
+            <p className="mt-2">
+              If it keeps happening, tell us through{" "}
+              <Link
+                href="/support"
+                className="font-semibold text-accent underline underline-offset-4"
+              >
+                Contact &amp; Support
+              </Link>
+              {digest ? " and include the reference" : null}.
+            </p>
           </>
         }
         action={

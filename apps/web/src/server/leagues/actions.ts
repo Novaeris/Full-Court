@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import type { FormState } from "@/components/forms/form";
 import { getUserContext } from "@/server/auth/session";
 import { invalid, serviceMessage, text } from "@/server/forms";
+import { trackEvent } from "@/server/analytics/track";
 import { chooseTeam } from "@/server/services/world";
 import {
   createLeague,
@@ -38,6 +39,7 @@ export async function createLeagueAction(
   let leagueId: string;
   try {
     leagueId = (await createLeague(ctx, parsed.data)).id;
+    await trackEvent("league_created");
   } catch (error) {
     return { status: "error", message: serviceMessage(error), values };
   }
@@ -95,5 +97,6 @@ export async function chooseTeamAction(form: FormData): Promise<void> {
   const ctx = await getUserContext();
   if (!ctx) redirect(`/login?next=/leagues/${encodeURIComponent(leagueId)}`);
   await chooseTeam(ctx, leagueId, { teamId: text(form, "teamId") });
+  await trackEvent("team_selected");
   redirect(`/leagues/${encodeURIComponent(leagueId)}?notice=team-chosen`);
 }

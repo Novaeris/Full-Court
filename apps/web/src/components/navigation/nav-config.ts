@@ -19,9 +19,36 @@ export const APP_NAV: readonly NavItem[] = [
 
 /** Secondary links: sidebar footer on desktop, "More" sheet on phones. */
 export const SECONDARY_NAV: readonly NavItem[] = [
+  { href: "/support", label: "Contact & Support", icon: "mail" },
+  { href: "/changelog", label: "Changelog", icon: "list" },
   { href: "/about", label: "About", icon: "info" },
-  { href: "/privacy", label: "Privacy", icon: "shield" },
-  { href: "/terms", label: "Terms", icon: "file" },
+];
+
+/** Policies: linked from every footer, the sidebar and the "More" sheet. */
+export const LEGAL_NAV: readonly NavItem[] = [
+  { href: "/terms", label: "Terms of Service", icon: "file" },
+  { href: "/privacy", label: "Privacy Policy", icon: "shield" },
+  { href: "/alpha", label: "Alpha Disclaimer", icon: "alert" },
+  { href: "/acceptable-use", label: "Acceptable Use", icon: "flag" },
+];
+
+/** The public site footer, in columns. */
+export const FOOTER_NAV: readonly {
+  title: string;
+  items: readonly NavItem[];
+}[] = [
+  {
+    title: "Full Court",
+    items: [
+      { href: "/about", label: "About", icon: "info" },
+      { href: "/changelog", label: "Changelog", icon: "list" },
+    ],
+  },
+  {
+    title: "Help",
+    items: [{ href: "/support", label: "Contact & Support", icon: "mail" }],
+  },
+  { title: "Legal", items: LEGAL_NAV },
 ];
 
 /** Public site header links. */

@@ -2,6 +2,7 @@ import { Card, Page, Section } from "@/components/layout/primitives";
 import { ButtonLink } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { SiteAuthActions } from "@/components/navigation/site-auth-actions";
+import { ALPHA_NOTICE } from "@/content/policies";
 
 const FEATURES: readonly { icon: IconName; title: string; body: string }[] = [
   {
@@ -33,7 +34,7 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-content items-center gap-10 px-4 py-12 tablet:px-6 tablet:py-16 desktop:grid-cols-[1.1fr_1fr] desktop:px-8 desktop:py-24">
           <div>
             <p className="inline-flex rounded-full bg-accent-soft px-3 py-1 text-sm font-semibold text-on-accent-soft">
-              In development
+              Open alpha
             </p>
             <h1 className="mt-4 text-4xl font-black tracking-tight text-balance tablet:text-5xl">
               Own the franchise. Build a dynasty.
@@ -52,6 +53,8 @@ export default function HomePage() {
       </section>
 
       <Page>
+        <AlphaAnnouncement />
+
         <Section
           title="What you'll do"
           description="Full Court is being built in the open. These systems are on the roadmap."
@@ -83,6 +86,47 @@ export default function HomePage() {
         </Section>
       </Page>
     </>
+  );
+}
+
+/** Open-alpha announcement: what to expect before signing up. */
+function AlphaAnnouncement() {
+  return (
+    <section
+      aria-labelledby="alpha-announcement"
+      className="mb-10 rounded-lg border border-accent bg-surface p-5 tablet:p-6"
+    >
+      <div className="flex items-start gap-4">
+        <span className="hidden size-11 shrink-0 items-center justify-center rounded-md bg-accent-soft text-on-accent-soft tablet:flex">
+          <Icon name="alert" className="size-6" />
+        </span>
+        <div className="min-w-0">
+          <h2
+            id="alpha-announcement"
+            className="text-2xl font-bold tracking-tight"
+          >
+            {ALPHA_NOTICE.title}
+          </h2>
+          <p className="mt-2 max-w-prose text-text-muted">
+            Anyone can sign up and play while the game is being built.{" "}
+            {ALPHA_NOTICE.summary}
+          </p>
+          <ul className="mt-3 ml-5 flex list-disc flex-col gap-1">
+            {ALPHA_NOTICE.points.map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+          <div className="mt-4 flex flex-col gap-3 tablet:flex-row">
+            <ButtonLink href="/alpha" variant="secondary">
+              Read the Alpha Disclaimer
+            </ButtonLink>
+            <ButtonLink href="/changelog" variant="secondary">
+              See what&apos;s new
+            </ButtonLink>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

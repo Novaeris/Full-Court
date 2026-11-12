@@ -2,6 +2,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { createCookieClient } from "@/lib/supabase/server";
+import { trackEvent } from "@/server/analytics/track";
 import { safeNextPath } from "@/server/auth/redirects";
 
 const ALLOWED_TYPES: readonly EmailOtpType[] = [
@@ -29,6 +30,10 @@ export async function GET(request: NextRequest) {
       token_hash: tokenHash,
     });
     if (!error) {
+      // Confirming the sign-up email is when registration completes.
+      if (type === "signup" || type === "email") {
+        await trackEvent("registration_completed");
+      }
       redirect(next);
     }
   }

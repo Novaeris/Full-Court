@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { ALPHA_NOTICE } from "@/content/policies";
+import { SITE } from "@/content/site";
+import { sendAnalyticsEvent } from "@/components/analytics/send-event";
 import {
+  CheckboxField,
   Field,
   FormMessage,
   IDLE,
@@ -97,8 +101,14 @@ export function SignUpForm() {
     );
   }
   return (
-    <form action={action} className="flex flex-col gap-4" noValidate>
+    <form
+      action={action}
+      className="flex flex-col gap-4"
+      noValidate
+      onFocusCapture={registrationStarted}
+    >
       <FormMessage state={state} />
+      <AlphaConditions />
       <Field
         label="Display name"
         name="displayName"
@@ -129,10 +139,67 @@ export function SignUpForm() {
         hint={PASSWORD_HINT}
         error={state.fieldErrors?.password}
       />
+      <CheckboxField
+        name="acceptTerms"
+        required
+        error={state.fieldErrors?.acceptTerms}
+        label={
+          <>
+            I am at least {SITE.minimumAge}, I agree to the{" "}
+            <PolicyLink href="/terms">Terms of Service</PolicyLink> and{" "}
+            <PolicyLink href="/acceptable-use">
+              Acceptable Use Policy
+            </PolicyLink>
+            , and I have read the{" "}
+            <PolicyLink href="/alpha">Alpha Disclaimer</PolicyLink> and{" "}
+            <PolicyLink href="/privacy">Privacy Policy</PolicyLink>.
+          </>
+        }
+      />
       <SubmitButton pendingLabel="Creating account…" className="w-full">
         Create account
       </SubmitButton>
     </form>
+  );
+}
+
+/** Counts one "registration started" the first time someone uses the form. */
+let registrationCounted = false;
+function registrationStarted() {
+  if (registrationCounted) return;
+  registrationCounted = true;
+  sendAnalyticsEvent("registration_started");
+}
+
+/** The alpha conditions, stated before anyone signs up. */
+function AlphaConditions() {
+  return (
+    <div
+      role="note"
+      aria-label="Open alpha"
+      className="rounded-md border border-border bg-accent-soft px-4 py-3 text-on-accent-soft"
+    >
+      <p className="font-semibold">{ALPHA_NOTICE.title}</p>
+      <ul className="mt-2 ml-5 flex list-disc flex-col gap-1 text-sm">
+        {ALPHA_NOTICE.points.map((point) => (
+          <li key={point}>{point}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Policy links in the sign-up form open in a new tab so the form keeps its input. */
+function PolicyLink({ href, children }: { href: string; children: string }) {
+  return (
+    <Link
+      href={href}
+      target="_blank"
+      className="font-semibold underline underline-offset-4"
+    >
+      {children}
+      <span className="sr-only"> (opens in a new tab)</span>
+    </Link>
   );
 }
 
