@@ -19,7 +19,11 @@ export function Brand({
         <Icon name="ball" className="size-6" />
       </span>
       <span
-        className={compact ? "sr-only desktop:not-sr-only text-xl" : "text-xl"}
+        className={
+          compact
+            ? "sr-only text-xl desktop:not-sr-only desktop:whitespace-nowrap!"
+            : "text-xl"
+        }
       >
         Full Court
       </span>

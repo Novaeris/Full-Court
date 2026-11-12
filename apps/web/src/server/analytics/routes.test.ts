@@ -8,6 +8,7 @@ describe("routePattern", () => {
     expect(routePattern("/")).toBe("/");
     expect(routePattern("/leagues/new")).toBe("/leagues/new");
     expect(routePattern("/privacy?x=1#top")).toBe("/privacy");
+    expect(routePattern("/modes")).toBe("/modes");
   });
 
   it("replaces ids with route parameters", () => {

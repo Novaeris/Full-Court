@@ -14,6 +14,21 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "0.6.0-alpha",
+    date: "2026-11-11",
+    title: "Game modes",
+    added: [
+      "Choose Your Game Mode: the new home of the app after you sign in, with Owner, Career and Dynasty Mode.",
+      "An Owner Mode page for starting a new world and opening your saved leagues.",
+      "Career Mode and Dynasty Mode pages. Both are in development and not playable yet.",
+    ],
+    improved: [
+      "The app navigation now leads with the game modes.",
+      "A tidier sidebar: account settings, theme, help, legal and sign out now live in one account menu under your name.",
+      "Policies, the changelog and support now open inside the game when you're signed in, and the Full Court logo takes you back to your game modes instead of the home page.",
+    ],
+  },
+  {
     version: "0.5.0-alpha",
     date: "2026-11-11",
     title: "Open alpha",

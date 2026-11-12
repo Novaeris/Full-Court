@@ -148,6 +148,14 @@ test("the five-league limit shows in the UI and the API", async ({
   await expect(page.getByText("You've used all 5 league slots.")).toBeVisible();
   await page.goto("/leagues/new");
   await expect(page.getByText("the most an account can keep")).toBeVisible();
+
+  // Owner Mode shows the same limit and can't start another world.
+  await page.goto("/owner");
+  await expect(page.getByText("5 of 5 save slots used.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "New World" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "New World" }),
+  ).toHaveAccessibleDescription(/used all 5 save slots/);
 });
 
 test("one user can't see or touch another user's league", async ({

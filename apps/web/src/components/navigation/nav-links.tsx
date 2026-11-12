@@ -75,7 +75,7 @@ function NavList({
   return (
     <ul className={classes.list}>
       {items.map((item) => {
-        const active = pathname !== null && isActive(pathname, item.href);
+        const active = pathname !== null && isActive(pathname, item);
         return (
           <li key={item.href} className={form === "tabs" ? "flex flex-1" : ""}>
             <Link
