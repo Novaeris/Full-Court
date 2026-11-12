@@ -32,6 +32,8 @@ export const LeagueSchema = z.object({
   size: StoredLeagueSizeSchema,
   /** The player's own team, once chosen. */
   userTeamId: z.uuid().nullable(),
+  /** How many local players share this league; 0 until a team is chosen in a league made the original way. */
+  localPlayerCount: z.number().int().min(0),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

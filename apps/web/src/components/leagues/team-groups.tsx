@@ -1,6 +1,7 @@
 import type { Team } from "@fullcourt/validation";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { controlLabel } from "./control";
 import { TeamBadge, teamName } from "./team-badge";
 
 /**
@@ -10,15 +11,18 @@ import { TeamBadge, teamName } from "./team-badge";
 export function TeamGroups({
   leagueId,
   teams,
-  highlightTeamId,
   action,
 }: {
   leagueId: string;
   teams: readonly Team[];
-  highlightTeamId?: string | null;
   action?: (team: Team) => ReactNode;
 }) {
   const conferences = groupBy(teams, (t) => t.conferenceId);
+  const localPlayers = new Set(
+    teams.flatMap((t) =>
+      t.localPlayerSlot === null ? [] : [t.localPlayerSlot],
+    ),
+  ).size;
   return (
     <div className="flex flex-col gap-8">
       {[...conferences].map(([conferenceId, inConference]) => (
@@ -39,7 +43,7 @@ export function TeamGroups({
                         key={team.id}
                         className={[
                           "flex flex-wrap items-center gap-3 rounded-lg border bg-surface p-3",
-                          team.id === highlightTeamId
+                          team.localPlayerSlot !== null
                             ? "border-accent"
                             : "border-border",
                         ].join(" ")}
@@ -55,8 +59,8 @@ export function TeamGroups({
                             </span>
                             <span className="block text-sm text-text-muted">
                               Strength {team.strength}
-                              {team.id === highlightTeamId
-                                ? " · Your team"
+                              {team.localPlayerSlot !== null
+                                ? ` · ${controlLabel(team.localPlayerSlot, localPlayers)}`
                                 : ""}
                             </span>
                           </span>

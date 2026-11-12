@@ -6,6 +6,7 @@ import {
   createConfirmedUser,
   signInThroughUi,
 } from "./support/auth";
+import { standardSetup } from "./support/league";
 
 async function expectAccessible(page: Page) {
   await expect(page).toHaveTitle(/\S/);
@@ -141,8 +142,12 @@ test("customise a franchise, shuffle and rename, then create", async ({
   await franchise.getByLabel("Team name").fill("Orcas");
   await franchise.getByLabel("Primary colour").fill("#0b3d91");
   await franchise.getByLabel("Secondary colour").fill("#ffd200");
-  // The radio is visually hidden behind its logo tile, which is what people click.
-  await franchise.getByRole("radio", { name: "Anchor" }).check({ force: true });
+  // The radio is visually hidden behind its logo tile, which is what people
+  // click. Click it directly: on a phone the sticky header can sit over the
+  // tile's position after scrolling, which would swallow a coordinate click.
+  await franchise
+    .getByRole("radio", { name: "Anchor" })
+    .evaluate((el) => (el as HTMLInputElement).click());
   await expect(franchise.getByRole("radio", { name: "Anchor" })).toBeChecked();
   await noOverflow(page);
   await expectAccessible(page);
@@ -275,6 +280,38 @@ test("several franchises for one player and one for another", async ({
   await page.getByRole("button", { name: "Create league" }).click();
   await expect(page).toHaveURL(/\/leagues\/([0-9a-f-]{36})$/);
   const leagueId = page.url().split("/").pop() as string;
+
+  // The league page shows every team people run, grouped by player.
+  const mine = page.getByRole("region", { name: "Your teams" });
+  await expect(mine).toBeVisible();
+  const player1 = mine.getByRole("heading", { name: "Player 1" });
+  await expect(player1).toBeVisible();
+  await expect(mine.getByRole("heading", { name: "Player 2" })).toBeVisible();
+  await expect(mine.getByRole("link", { name: "View roster" })).toHaveCount(3);
+  for (const city of ["Paris", "Rome", "Madrid"]) {
+    await expect(
+      mine.getByRole("heading", { name: new RegExp(city) }),
+    ).toBeVisible();
+  }
+  await noOverflow(page);
+  await expectAccessible(page);
+
+  // The roster tab lets you pick which of your teams to open.
+  await page
+    .getByRole("navigation", { name: "League" })
+    .getByRole("link", { name: "Roster" })
+    .click();
+  const rosters = page.getByRole("region", { name: "Your teams" });
+  await expect(rosters.getByRole("link")).toHaveCount(3);
+  await rosters.getByRole("link", { name: /Madrid/ }).click();
+  await expect(page.getByRole("region", { name: "Team" })).toContainText(
+    "Player 2",
+  );
+
+  // The teams list marks each team with the player who runs it.
+  await page.goto(`/leagues/${leagueId}/teams`);
+  await expect(page.getByText(/· Player 1/)).toHaveCount(2);
+  await expect(page.getByText(/· Player 2/)).toHaveCount(1);
 
   const api = createApiClient({
     baseUrl: baseURL ?? "",
@@ -477,4 +514,45 @@ test("AI Assist is off by default, set per franchise, and saved with it", async 
   for (const t of teams.filter((t) => t.localPlayerSlot === null)) {
     expect(on(t)).toEqual([]);
   }
+});
+
+test("one player running several teams sees them all", async ({
+  page,
+  baseURL,
+}) => {
+  const { email, password } = await createConfirmedUser("setup-solo-multi");
+  const api = createApiClient({
+    baseUrl: baseURL ?? "",
+    fetch,
+    getAccessToken: async () => accessToken(email, password),
+  });
+  const league = await api.leagues.create({
+    name: "Dynasty Empire",
+    setup: {
+      ...standardSetup(),
+      franchises: [
+        { localPlayerSlot: 1, cityId: "na-us-new-york" },
+        { localPlayerSlot: 1, cityId: "na-us-chicago" },
+      ],
+    },
+  });
+  expect(league.localPlayerCount).toBe(1);
+  await signInThroughUi(page, email, password);
+  await page.goto(`/leagues/${league.id}`);
+
+  // "Your teams", with no player headings since only one person is playing.
+  const mine = page.getByRole("region", { name: "Your teams" });
+  await expect(mine.getByRole("link", { name: "View roster" })).toHaveCount(2);
+  await expect(mine.getByRole("heading", { name: /^Player/ })).toHaveCount(0);
+  await expect(mine).toContainText("New York");
+  await expect(mine).toContainText("Chicago");
+  await noOverflow(page);
+  await expectAccessible(page);
+
+  await page.goto(`/leagues/${league.id}/roster`);
+  await expect(
+    page.getByRole("region", { name: "Your teams" }).getByRole("link"),
+  ).toHaveCount(2);
+  await page.goto(`/leagues/${league.id}/teams`);
+  await expect(page.getByText(/· Your team/)).toHaveCount(2);
 });

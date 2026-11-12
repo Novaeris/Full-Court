@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import type { Team } from "@fullcourt/validation";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { TeamGroups } from "@/components/leagues/team-groups";
 import { buttonClasses, ButtonLink } from "@/components/ui/button";
@@ -71,9 +72,10 @@ async function Overview({
     );
   }
 
-  const mine = teams.find((t) => t.id === league.userTeamId);
+  const myTeams = teams.filter((t) => t.localPlayerSlot !== null);
   const ranked = [...teams].sort((a, b) => b.strength - a.strength);
-  const rank = mine ? ranked.findIndex((t) => t.id === mine.id) + 1 : 0;
+  const rankOf = (team: Team) => ranked.findIndex((t) => t.id === team.id) + 1;
+  const first = myTeams[0];
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,37 +84,56 @@ async function Overview({
           role="status"
           className="rounded-md border border-win bg-surface px-4 py-3"
         >
-          You&apos;re now running the {mine ? teamName(mine) : "team"}. Good
+          You&apos;re now running the {first ? teamName(first) : "team"}. Good
           luck!
         </p>
       ) : null}
-      {mine ? (
+      {myTeams.length === 1 && first ? (
         <section
           aria-label="Your team"
-          className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5 tablet:flex-row tablet:items-center tablet:justify-between"
+          className="rounded-lg border border-border bg-surface p-5"
         >
-          <div className="flex items-center gap-4">
-            <TeamBadge team={mine} size="lg" />
-            <div>
-              <p className="text-sm font-semibold text-text-muted">Your team</p>
-              <h2 className="text-2xl font-bold">{teamName(mine)}</h2>
-              <p className="text-text-muted">
-                {mine.conference} Conference · {mine.division} Division ·
-                Strength {mine.strength} (#{rank} of {teams.length})
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 tablet:flex-row">
-            <ButtonLink href={`/leagues/${league.id}/teams/${mine.id}`}>
-              View roster
-            </ButtonLink>
-            <ButtonLink
-              href={`/leagues/${league.id}/teams`}
-              variant="secondary"
-            >
-              All teams
-            </ButtonLink>
-          </div>
+          <MyTeam
+            leagueId={league.id}
+            team={first}
+            rank={rankOf(first)}
+            total={teams.length}
+            heading="Your team"
+          />
+        </section>
+      ) : null}
+      {myTeams.length > 1 ? (
+        <section aria-label="Your teams" className="flex flex-col gap-4">
+          <h2 className="text-2xl font-bold">Your teams</h2>
+          {Array.from(new Set(myTeams.map((t) => t.localPlayerSlot)))
+            .sort((a, b) => (a ?? 0) - (b ?? 0))
+            .map((slot) => (
+              <div key={slot} className="flex flex-col gap-3">
+                {league.localPlayerCount > 1 ? (
+                  <h3 className="text-lg font-bold">Player {slot}</h3>
+                ) : null}
+                {myTeams
+                  .filter((t) => t.localPlayerSlot === slot)
+                  .map((team) => (
+                    <div
+                      key={team.id}
+                      className="rounded-lg border border-border bg-surface p-5"
+                    >
+                      <MyTeam
+                        leagueId={league.id}
+                        team={team}
+                        rank={rankOf(team)}
+                        total={teams.length}
+                        heading={
+                          league.localPlayerCount > 1
+                            ? `Player ${slot}`
+                            : "Your team"
+                        }
+                      />
+                    </div>
+                  ))}
+              </div>
+            ))}
         </section>
       ) : null}
       <p className="text-text-muted">
@@ -125,6 +146,45 @@ async function Overview({
         </Link>
         .
       </p>
+    </div>
+  );
+}
+
+/** One team a person runs, with the way to its roster. */
+function MyTeam({
+  leagueId,
+  team,
+  rank,
+  total,
+  heading,
+}: {
+  leagueId: string;
+  team: Team;
+  rank: number;
+  total: number;
+  heading: string;
+}) {
+  return (
+    <div className="flex flex-col gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
+      <div className="flex items-center gap-4">
+        <TeamBadge team={team} size="lg" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-text-muted">{heading}</p>
+          <h3 className="text-2xl font-bold break-words">{teamName(team)}</h3>
+          <p className="text-text-muted">
+            {team.conference} Conference · {team.division} Division · Strength{" "}
+            {team.strength} (#{rank} of {total})
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 tablet:flex-row">
+        <ButtonLink href={`/leagues/${leagueId}/teams/${team.id}`}>
+          View roster
+        </ButtonLink>
+        <ButtonLink href={`/leagues/${leagueId}/teams`} variant="secondary">
+          All teams
+        </ButtonLink>
+      </div>
     </div>
   );
 }

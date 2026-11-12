@@ -37,7 +37,7 @@ import type { UserContext } from "@/server/auth/session";
 type LeagueRow = Database["public"]["Tables"]["leagues"]["Row"];
 
 const COLUMNS =
-  "id, name, status, size, user_team_id, created_at, updated_at" as const;
+  "id, name, status, size, user_team_id, created_at, updated_at, league_local_players(count)" as const;
 
 function toLeague(
   row: Pick<
@@ -49,7 +49,8 @@ function toLeague(
     | "user_team_id"
     | "created_at"
     | "updated_at"
-  >,
+  > & { league_local_players?: { count: number }[] },
+  localPlayerCount: number = row.league_local_players?.[0]?.count ?? 0,
 ): League {
   return {
     id: row.id,
@@ -57,6 +58,7 @@ function toLeague(
     status: row.status as League["status"],
     size: row.size as League["size"],
     userTeamId: row.user_team_id,
+    localPlayerCount,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -79,7 +81,7 @@ export async function listLeagues(ctx: UserContext): Promise<LeagueList> {
     .eq("owner_id", ctx.user.id)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return { leagues: data.map(toLeague), limit: LEAGUE_LIMIT };
+  return { leagues: data.map((row) => toLeague(row)), limit: LEAGUE_LIMIT };
 }
 
 export async function getLeague(ctx: UserContext, id: string): Promise<League> {
@@ -133,7 +135,7 @@ export async function createLeague(
       seed,
       world,
     });
-    return toLeague(row);
+    return toLeague(row, 0);
   } catch (error) {
     if (isLimitError(error)) throw limitReached();
     throw error;
@@ -223,7 +225,7 @@ async function createOwnerLeague(
       seed,
       world,
     });
-    return toLeague(row);
+    return toLeague(row, world.localPlayers.length);
   } catch (error) {
     if (isLimitError(error)) throw limitReached();
     throw error;
