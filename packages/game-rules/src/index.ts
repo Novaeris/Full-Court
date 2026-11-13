@@ -27,5 +27,6 @@ export * from "./owner-mode/structure";
 export * from "./owner-mode/playoffs";
 export * from "./owner-mode/franchises";
 export * from "./owner-mode/setup";
+export * from "./season/court";
 export * from "./season/schedule";
 export * from "./season/standings";

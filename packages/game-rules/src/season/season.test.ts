@@ -1,5 +1,6 @@
 import { DEFAULT_SCHEDULE_TIERS } from "@fullcourt/game-types";
 import { describe, expect, it } from "vitest";
+import { attacksRight } from "./court";
 import { equalStructure } from "../owner-mode/structure";
 import {
   gamesForTeam,
@@ -172,5 +173,21 @@ describe("schedule presets", () => {
       standard: 76,
       long: 86,
     });
+  });
+});
+
+describe("attacksRight", () => {
+  it("swaps baskets after the first half and keeps them in overtime", () => {
+    expect([1, 2, 3, 4, 5, 6].map((p) => attacksRight(p, true))).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    for (const period of [1, 2, 3, 4, 5]) {
+      expect(attacksRight(period, true)).not.toBe(attacksRight(period, false));
+    }
   });
 });

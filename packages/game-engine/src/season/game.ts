@@ -1,5 +1,6 @@
+import { attacksRight } from "@fullcourt/game-rules";
 import {
-  BASKET_POINT,
+  COURT_LENGTH,
   OVERTIME_SECONDS,
   PERIOD_SECONDS,
   REGULATION_PERIODS,
@@ -22,21 +23,24 @@ const TRIP_SECONDS: Record<Pace, number> = {
   normal: 15.5,
   fast: 13.5,
 };
+/** Half-court frame used while simulating: basket 5.25 ft from the baseline. */
+const BASKET_LOCAL_Y = 5.25;
+const FREE_THROW_SPOT: CourtPoint = { x: 0, y: 19 };
 const MAX_OVERTIMES = 20;
 const FOUL_OUT = 6;
 const BONUS_FOULS = 5;
 
 /** Make-chance before ratings, by zone. */
 const BASE_MAKE: Record<ShotZone, number> = {
-  inside: 0.5,
-  "mid-range": 0.35,
-  three: 0.305,
+  inside: 0.465,
+  "mid-range": 0.335,
+  three: 0.31,
 };
 /** Chance a missed shot is really a shooting foul, by zone. */
 const FOUL_ON_MISS: Record<ShotZone, number> = {
-  inside: 0.24,
-  "mid-range": 0.09,
-  three: 0.05,
+  inside: 0.21,
+  "mid-range": 0.08,
+  three: 0.045,
 };
 const AND_ONE: Record<ShotZone, number> = {
   inside: 0.07,
@@ -49,9 +53,9 @@ const ASSISTED: Record<ShotZone, number> = {
   three: 0.82,
 };
 const BLOCKED: Record<ShotZone, number> = {
-  inside: 0.18,
-  "mid-range": 0.07,
-  three: 0.02,
+  inside: 0.25,
+  "mid-range": 0.1,
+  three: 0.03,
 };
 const THREE_FOCUS = { low: 0.65, normal: 1, high: 1.45 } as const;
 
@@ -123,6 +127,7 @@ export function simulateGame(
       shotZone: null,
       made: null,
       offensive: null,
+      transition: false,
       points,
       homeScore: homeSide.score,
       awayScore: awaySide.score,
@@ -216,10 +221,33 @@ export function simulateGame(
     }
   };
 
+  /** Maps a half-court spot (see `shotPoint`) onto the full court. */
+  const place = (side: Side, local: CourtPoint): CourtPoint =>
+    attacksRight(period, side.home)
+      ? { x: round1(COURT_LENGTH - local.y), y: round1(25 + local.x) }
+      : { x: round1(local.y), y: round1(25 - local.x) };
+
+  const foul = (
+    side: Side,
+    player: SimPlayer,
+    spot: CourtPoint,
+    opponent: Side,
+    fastBreak: boolean,
+  ): void => {
+    side.fouls.set(player.id, (side.fouls.get(player.id) ?? 0) + 1);
+    side.periodFouls++;
+    emit("foul", side, {
+      playerId: player.id,
+      transition: fastBreak,
+      at: place(opponent, spot),
+    });
+  };
+
   const freeThrows = (
     offense: Side,
     shooter: SimPlayer,
     count: number,
+    fastBreak: boolean,
   ): "made" | "miss" => {
     let last: "made" | "miss" = "made";
     for (let n = 1; n <= count; n++) {
@@ -233,6 +261,8 @@ export function simulateGame(
         playerId: shooter.id,
         made,
         points: made ? 1 : 0,
+        transition: fastBreak,
+        at: place(offense, FREE_THROW_SPOT),
       });
       last = made ? "made" : "miss";
     }
@@ -243,7 +273,8 @@ export function simulateGame(
     offense: Side,
     defense: Side,
     offensiveChance: number,
-  ): boolean => {
+    shotSpot: CourtPoint,
+  ): { offensive: boolean; player: SimPlayer } => {
     const off = rng.next() < offensiveChance;
     const side = off ? offense : defense;
     const key: RatingKey = off ? "offRebound" : "defRebound";
@@ -253,34 +284,58 @@ export function simulateGame(
         (p) => [p, weight(effective(side, p, key)) ** 1.5] as const,
       ),
     );
-    emit("rebound", side, { playerId: player.id, offensive: off });
-    return off;
+    const spot = {
+      x: clamp(shotSpot.x * 0.3 + (rng.next() - 0.5) * 10, -9, 9),
+      y: BASKET_LOCAL_Y + rng.next() * 7,
+    };
+    emit("rebound", side, {
+      playerId: player.id,
+      offensive: off,
+      at: place(offense, spot),
+    });
+    return { offensive: off, player };
   };
 
   /**
-   * One trip. Returns the side with the ball next and whether play stopped
-   * for a dead ball (when substitutions may happen).
+   * One trip. Returns the side with the ball next, whether play stopped for a
+   * dead ball (when substitutions may happen) and how the next possession
+   * began, which decides how likely a fast break is.
    */
   const trip = (
     offense: Side,
     defense: Side,
     continuation: boolean,
-  ): { next: Side; deadBall: boolean } => {
-    const flip = (deadBall: boolean) => ({ next: defense, deadBall });
-    const keep = (deadBall: boolean) => ({ next: offense, deadBall });
+    origin: Origin,
+  ): Outcome => {
+    const flip = (deadBall: boolean, next: Origin = OTHER): Outcome => ({
+      next: defense,
+      deadBall,
+      origin: next,
+    });
+    const keep = (deadBall: boolean): Outcome => ({
+      next: offense,
+      deadBall,
+      origin: OTHER,
+    });
 
-    const mean = continuation ? 7 : TRIP_SECONDS[offense.team.strategy.pace];
+    const fb =
+      !continuation && rng.next() < transitionChance(offense, defense, origin);
+    const mean = continuation
+      ? 7
+      : fb
+        ? 6
+        : TRIP_SECONDS[offense.team.strategy.pace];
     const seconds = clamp(
-      Math.round(normal(rng, mean, continuation ? 3 : 3.5)),
-      continuation ? 2 : 4,
-      continuation ? 14 : 24,
+      Math.round(normal(rng, mean, continuation ? 3 : fb ? 2 : 3.5)),
+      continuation ? 2 : fb ? 3 : 4,
+      continuation ? 14 : fb ? 11 : 24,
     );
 
     // A non-shooting foul stops play early.
-    if (rng.next() < 0.13) {
+    if (rng.next() < (fb ? 0.06 : 0.115)) {
       spend(Math.min(seconds, 6));
-      const fouler = pick(rng, defense.onCourt);
-      foul(defense, fouler);
+      const spot = { x: (rng.next() - 0.5) * 40, y: 14 + rng.next() * 26 };
+      foul(defense, pick(rng, defense.onCourt), spot, offense, false);
       if (defense.periodFouls >= BONUS_FOULS) {
         const shooter = weighted(
           rng,
@@ -288,9 +343,12 @@ export function simulateGame(
             (p) => [p, weight(effective(offense, p, "freeThrow"))] as const,
           ),
         );
-        const result = freeThrows(offense, shooter, 2);
+        const result = freeThrows(offense, shooter, 2, false);
         if (result === "made") return flip(true);
-        return rebound(offense, defense, 0.13) ? keep(false) : flip(false);
+        const board = rebound(offense, defense, 0.13, FREE_THROW_SPOT);
+        return board.offensive
+          ? keep(false)
+          : flip(false, { kind: "rebound", player: board.player });
       }
       return keep(true);
     }
@@ -299,64 +357,108 @@ export function simulateGame(
     // Turnover.
     const handle = avg(offense, "ballHandling");
     const pressure = avg(defense, "perimeterD");
-    const pace = offense.team.strategy.pace === "fast" ? 0.01 : 0;
-    if (
-      rng.next() <
-      clamp(0.133 + (pressure - handle) * 0.0018 + pace, 0.06, 0.25)
-    ) {
+    const pace = offense.team.strategy.pace === "fast" ? 0.012 : 0;
+    const turnoverChance =
+      clamp(0.15 + (pressure - handle) * 0.0018 + pace, 0.06, 0.27) *
+      (fb ? 0.45 : 1);
+    if (rng.next() < turnoverChance) {
       const loser = weighted(
         rng,
         offense.onCourt.map(
           (p) => [p, 130 - effective(offense, p, "ballHandling")] as const,
         ),
       );
-      const stolen = rng.next() < 0.5;
-      const thief = stolen
-        ? weighted(
-            rng,
-            defense.onCourt.map(
-              (p) => [p, weight(effective(defense, p, "perimeterD"))] as const,
-            ),
-          )
-        : null;
+      const thief =
+        rng.next() < 0.55
+          ? weighted(
+              rng,
+              defense.onCourt.map(
+                (p) =>
+                  [p, weight(effective(defense, p, "perimeterD"))] as const,
+              ),
+            )
+          : null;
+      const spot = {
+        x: (rng.next() - 0.5) * 40,
+        y: (fb ? 24 : 14) + rng.next() * (fb ? 18 : 26),
+      };
       emit("turnover", offense, {
         playerId: loser.id,
         stealPlayerId: thief?.id ?? null,
+        transition: fb,
+        at: place(offense, spot),
       });
-      return flip(true);
+      // A steal is a live ball, so nobody substitutes before the break.
+      return thief ? flip(false, { kind: "steal", player: thief }) : flip(true);
     }
 
     // Shot.
-    const shooter = weighted(
-      rng,
-      offense.onCourt.map((p) => [p, weight(p.overall)] as const),
-    );
-    const zone = chooseZone(rng, offense, shooter);
-    const at = shotPoint(rng, zone);
-    const made = rng.next() < makeChance(offense, defense, shooter, zone);
+    const lead =
+      fb &&
+      origin.player &&
+      offense.onCourt.some((p) => p.id === origin.player?.id)
+        ? origin.player
+        : null;
+    const shooter =
+      lead && rng.next() < 0.4
+        ? lead
+        : weighted(
+            rng,
+            offense.onCourt.map(
+              (p) =>
+                [
+                  p,
+                  weight(
+                    fb
+                      ? (p.overall + effective(offense, p, "speed")) / 2
+                      : p.overall,
+                  ),
+                ] as const,
+            ),
+          );
+    const zone = fb
+      ? weighted<ShotZone>(rng, [
+          ["inside", 68],
+          ["mid-range", 6],
+          ["three", 26 * THREE_FOCUS[offense.team.strategy.threePointFocus]],
+        ])
+      : chooseZone(rng, offense, shooter);
+    const spot = shotPoint(rng, zone);
+    const at = place(offense, spot);
+    const made = rng.next() < makeChance(offense, defense, shooter, zone, fb);
 
     if (made) {
-      const passer = assistant(rng, offense, shooter, zone);
+      const passer =
+        lead && lead.id !== shooter.id && rng.next() < 0.7
+          ? lead
+          : assistant(rng, offense, shooter, zone);
       emit("made-shot", offense, {
         playerId: shooter.id,
         assistPlayerId: passer?.id ?? null,
         shotZone: zone,
         points: zone === "three" ? 3 : 2,
         made: true,
+        transition: fb,
         at,
       });
-      if (rng.next() < AND_ONE[zone]) {
-        foul(defense, pick(rng, defense.onCourt));
-        freeThrows(offense, shooter, 1);
+      if (rng.next() < AND_ONE[zone] * (fb ? 1.5 : 1)) {
+        foul(defense, pick(rng, defense.onCourt), spot, offense, fb);
+        freeThrows(offense, shooter, 1, fb);
       }
       return flip(true);
     }
 
-    if (rng.next() < FOUL_ON_MISS[zone]) {
-      foul(defense, pick(rng, defense.onCourt));
-      const result = freeThrows(offense, shooter, zone === "three" ? 3 : 2);
+    if (
+      rng.next() <
+      FOUL_ON_MISS[zone] * (fb && zone === "inside" ? 1.25 : 1)
+    ) {
+      foul(defense, pick(rng, defense.onCourt), spot, offense, fb);
+      const result = freeThrows(offense, shooter, zone === "three" ? 3 : 2, fb);
       if (result === "made") return flip(true);
-      return rebound(offense, defense, 0.13) ? keep(false) : flip(false);
+      const board = rebound(offense, defense, 0.13, spot);
+      return board.offensive
+        ? keep(false)
+        : flip(false, { kind: "rebound", player: board.player });
     }
 
     const blockChance = BLOCKED[zone] * (avg(defense, "interiorD") / 60) ** 1.5;
@@ -374,6 +476,7 @@ export function simulateGame(
       blockPlayerId: blocker?.id ?? null,
       shotZone: zone,
       made: false,
+      transition: fb,
       at,
     });
     const offensiveChance = clamp(
@@ -381,15 +484,10 @@ export function simulateGame(
       0.15,
       0.4,
     );
-    return rebound(offense, defense, offensiveChance)
+    const board = rebound(offense, defense, offensiveChance, spot);
+    return board.offensive
       ? keep(false)
-      : flip(false);
-  };
-
-  const foul = (side: Side, player: SimPlayer): void => {
-    side.fouls.set(player.id, (side.fouls.get(player.id) ?? 0) + 1);
-    side.periodFouls++;
-    emit("foul", side, { playerId: player.id });
+      : flip(false, { kind: "rebound", player: board.player });
   };
 
   // ---- Game flow ----
@@ -416,12 +514,14 @@ export function simulateGame(
           ? awaySide
           : homeSide;
     let continuation = false;
+    let origin: Origin = OTHER;
     while (clock > 0) {
       const defense = offense === homeSide ? awaySide : homeSide;
-      const outcome = trip(offense, defense, continuation);
+      const outcome = trip(offense, defense, continuation, origin);
       continuation = !outcome.deadBall && outcome.next === offense;
+      origin = outcome.origin;
       offense = outcome.next;
-      if (clock > 0 && !continuation) {
+      if (clock > 0 && outcome.deadBall) {
         substitute(homeSide);
         substitute(awaySide);
       }
@@ -531,6 +631,7 @@ function makeChance(
   defense: Side,
   shooter: SimPlayer,
   zone: ShotZone,
+  fastBreak = false,
 ): number {
   const skill =
     zone === "inside"
@@ -559,12 +660,16 @@ function makeChance(
             ? 0.01
             : 0
         : 0;
-  const homeEdge = offense.home ? 0.015 : 0;
+  const open = fastBreak
+    ? { inside: 0.13, "mid-range": 0.04, three: 0.03 }[zone]
+    : 0;
+  const homeEdge = offense.home ? 0.025 : 0;
   return clamp(
     BASE_MAKE[zone] +
       (skill - 55) * 0.0042 -
       (guard - 55) * 0.0032 +
       styleAdjust +
+      open +
       homeEdge,
     0.15,
     0.88,
@@ -598,7 +703,7 @@ function shotPoint(rng: Rng, zone: ShotZone): CourtPoint {
         ? 9 + rng.next() * 12
         : 23.75 + rng.next() * 3.5;
   let x = radius * Math.cos(theta);
-  let y = BASKET_POINT.y + radius * Math.sin(theta);
+  let y = BASKET_LOCAL_Y + radius * Math.sin(theta);
   if (zone === "three" && Math.abs(x) > 22) {
     // Corner three: a straight 22-foot line.
     x = x < 0 ? -22 : 22;
@@ -610,4 +715,32 @@ function shotPoint(rng: Rng, zone: ShotZone): CourtPoint {
 /** A positive pick weight from a rating: 20 below the rating, never under 1. */
 function weight(rating: number): number {
   return Math.max(1, rating - 20);
+}
+
+// ---- Possessions ----
+
+/** How the ball came to the team now on offence. */
+type Origin = {
+  kind: "steal" | "rebound" | "other";
+  player: SimPlayer | null;
+};
+const OTHER: Origin = { kind: "other", player: null };
+type Outcome = { next: Side; deadBall: boolean; origin: Origin };
+
+/**
+ * Chance the offence gets out on a fast break. Steals and defensive boards
+ * start them most often; faster teams and a fast pace start more.
+ */
+function transitionChance(
+  offense: Side,
+  defense: Side,
+  origin: Origin,
+): number {
+  const base =
+    origin.kind === "steal" ? 0.5 : origin.kind === "rebound" ? 0.17 : 0.06;
+  const speed = (avg(offense, "speed") - avg(defense, "speed")) * 0.004;
+  const pace = { slow: -0.05, normal: 0, fast: 0.07 }[
+    offense.team.strategy.pace
+  ];
+  return clamp(base + speed + pace, 0.02, 0.85);
 }

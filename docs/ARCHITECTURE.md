@@ -195,6 +195,7 @@ Owner Mode is how a league is set up before it starts: structure, region, playof
 Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces live:
 
 - `game-types/src/season.ts`: `SeasonState`, `ScheduleTiers`, `Game`, `PlayerGameLine`, `BoxScore`, `TeamStrategy` and their defaults.
+  - Plays are placed on a full court in feet (`CourtPoint`: x 0 to 94 along the court, y 0 to 50 across; `LEFT_BASKET`, `RIGHT_BASKET`). `attacksRight(period, home)` in `game-rules/src/season/court.ts` says which basket a team attacks: home attacks right in periods 1 and 2, left afterwards. `PlayEvent.transition` flags fast-break plays.
 - `game-rules/src/season/schedule.ts`: matchup tiers, opponent counts, `seasonLength` and `validateScheduleTiers`.
 - `game-rules/src/season/standings.ts`: `rankStandings` (deterministic tiebreakers). Its rows extend `StandingEntry`, so they pass straight to `seedPlayoffTeams`.
 - `game-engine/src/season/` (Phase 11):
@@ -202,7 +203,8 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
   - `simulateGame(game, home, away, rng)` plays a game possession by possession and returns `{ game, plays, boxScore, starters }`. Inputs are `SimTeam` (id, roster of `SimPlayer`, `TeamStrategy`), so the engine needs no database rows.
   - `buildBoxScore(gameId, plays, starters, teamOf)` derives the box score from the plays alone. `simulateGame` uses it, and the tests check that lines add up to the score.
   - `simulateDay({ games, teams, rngState })` returns `{ games, plays, boxScores, rngState }`: only the rows that changed. Games run in the order given and share one RNG.
-  - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, fouls, starter minutes, home edge) inside loose bounds, so a change that wrecks the balance fails a test.
+  - A possession starts from an `Origin` (steal, defensive rebound or other). `transitionChance` turns that, the teams' speed ratings and pace into the chance of a fast break; breaks use a shorter clock, a rim-heavy shot mix and a make-chance bonus. Substitutions only happen on dead balls.
+  - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, threes, free throws, fouls, steals, blocks, assists, turnovers, rebounds, fast-break share, starter minutes, home edge) inside NBA 2010 to 2020 bounds, so a change that wrecks the balance fails a test.
 - Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
 - Still to come: the season tables and `sim_jobs`, `apps/worker`, and the season pages.
 

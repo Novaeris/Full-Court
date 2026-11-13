@@ -135,13 +135,18 @@ export const PERIOD_SECONDS = 720;
 export const OVERTIME_SECONDS = 300;
 
 /**
- * A spot on the offensive half court, in feet. `x` runs across the court from
- * -25 to 25 (0 is the centre line); `y` is the distance from the baseline,
- * 0 to 47. The basket is at (0, 5.25). Both teams are drawn attacking the
- * same basket; a viewer mirrors one team for a full-court view.
+ * A spot on the full court, in feet. `x` runs the length of the court from
+ * 0 (left baseline) to 94 (right baseline); `y` runs across it from 0 to 50.
+ * The baskets are at `LEFT_BASKET` and `RIGHT_BASKET`. The home team attacks
+ * the right basket in periods 1 and 2 and the left one after that
+ * (`attacksRight` in game-rules), so a viewer can draw every play where it
+ * happened without mirroring anything.
  */
 export type CourtPoint = { x: number; y: number };
-export const BASKET_POINT: Readonly<CourtPoint> = { x: 0, y: 5.25 };
+export const COURT_LENGTH = 94;
+export const COURT_WIDTH = 50;
+export const LEFT_BASKET: Readonly<CourtPoint> = { x: 5.25, y: 25 };
+export const RIGHT_BASKET: Readonly<CourtPoint> = { x: 88.75, y: 25 };
 
 /**
  * One event. Which fields are set depends on `kind`:
@@ -151,6 +156,8 @@ export const BASKET_POINT: Readonly<CourtPoint> = { x: 0, y: 5.25 };
  * - `free-throw`: `playerId` shot it; `made` says if it went in.
  * - `rebound`: `playerId` got it; `offensive` says which end.
  * - `turnover`: `playerId` lost the ball; `stealPlayerId` took it, if anyone.
+ *   A steal usually starts a fast break, so the next shot is `transition` and
+ *   its `assistPlayerId` is often the stealer or rebounder who led it.
  * - `foul`: `playerId` committed it; `teamId` is the fouling team.
  * - `substitution`: `playerId` came on and `outPlayerId` went off.
  * - `period-start` and `period-end` have no team or player.
@@ -177,7 +184,17 @@ export type PlayEvent = {
   points: number;
   homeScore: number;
   awayScore: number;
-  /** Where a shot was taken; null for everything else. */
+  /**
+   * True when the play happened on a fast break: the offence got the ball
+   * moving before the defence could set up. Set on the turnover, shot, foul
+   * and free-throw events of that possession.
+   */
+  transition: boolean;
+  /**
+   * Where it happened: the shot, the board, the spot a ball was lost or a
+   * foul called, or the free-throw line. Null for substitutions and for
+   * period starts and ends.
+   */
   at: CourtPoint | null;
 };
 
