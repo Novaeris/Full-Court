@@ -234,7 +234,7 @@ export async function advanceOffseason(
         if ((held.count ?? 0) === 0) {
           await holdLotteryStep(ctx, league.id, season);
         } else {
-          await simulatePicks(ctx, league.id, season, false);
+          await simulatePicks(ctx, league.id, season, "advance");
         }
         break;
       }

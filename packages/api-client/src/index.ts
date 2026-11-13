@@ -314,7 +314,7 @@ export function createApiClient(options: ApiClientOptions) {
       /** The computer teams pick until one of yours is on the clock. */
       simDraft: (
         id: string,
-        input: DraftSimRequest = { autoMine: false },
+        input: DraftSimRequest = { mode: "my-pick" },
       ): Promise<DraftResponse> =>
         request(
           "POST",

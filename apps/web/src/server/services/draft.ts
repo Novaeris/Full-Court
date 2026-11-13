@@ -201,16 +201,19 @@ export async function holdLotteryStep(
   );
 }
 
+export type SimMode = "my-pick" | "advance" | "auto";
+
 /**
- * Makes the computer teams' picks, in order, until one of the owner's teams is
- * on the clock (unless that team's drafting is on AI Assist, or `autoMine`).
- * Returns the number of picks made.
+ * Makes the computer teams' picks, in order. It stops at the next pick of a
+ * team the owner runs when `mode` is `my-pick` (always, so the owner can take
+ * it themselves, with AI Assist or not) or `advance` (only if that team's
+ * drafting is not on AI Assist); `auto` never stops. Returns the picks made.
  */
 export async function simulatePicks(
   ctx: UserContext,
   leagueId: string,
   season: SeasonRow,
-  autoMine: boolean,
+  mode: SimMode,
 ): Promise<number> {
   const [slots, prospects, players, staff, owned] = await Promise.all([
     loadSlots(ctx, leagueId, season.year),
@@ -231,7 +234,11 @@ export async function simulatePicks(
   const batch: { pick: number; player_id: string }[] = [];
   for (const slot of slots.filter((s) => s.player_id === null)) {
     const team = mine.get(slot.team_id);
-    if (team && !team.assist.drafting && !autoMine) break;
+    if (
+      team &&
+      (mode === "my-pick" || (mode === "advance" && !team.assist.drafting))
+    )
+      break;
     if (available.size === 0) break;
     const rng: Rng = createRng(
       seedState(`${leagueId}:pick:${season.year}:${slot.pick}`),
@@ -359,6 +366,7 @@ export async function getDraft(
           yourPick:
             owned.some((t) => t.id === onTheClockSlot.team_id) &&
             !flag(owned.find((t) => t.id === onTheClockSlot.team_id)),
+          mine: owned.some((t) => t.id === onTheClockSlot.team_id),
         }
       : null,
     suggestion:
@@ -447,7 +455,7 @@ export async function pickProspect(
   return getDraft(ctx, league.id, next.team_id);
 }
 
-/** The computer teams pick until one of yours is on the clock; `autoMine` picks for yours too. */
+/** The computer teams pick until one of yours is on the clock; `mode` says where to stop (see DraftSimRequestSchema). */
 export async function simDraft(
   ctx: UserContext,
   leagueIdParam: string,
@@ -460,7 +468,7 @@ export async function simDraft(
     if ((await loadSlots(ctx, league.id, season.year)).length === 0) {
       await holdLotteryStep(ctx, league.id, season);
     }
-    await simulatePicks(ctx, league.id, season, input.autoMine);
+    await simulatePicks(ctx, league.id, season, input.mode);
   } catch (error) {
     refusal(error);
   }

@@ -79,16 +79,16 @@ type DraftApi = {
   leagues: {
     simDraft: (
       id: string,
-      input?: { autoMine: boolean },
+      input?: { mode: "my-pick" | "advance" | "auto" },
     ) => Promise<{
-      onTheClock: { yourPick: boolean } | null;
+      onTheClock: { yourPick: boolean; mine: boolean } | null;
       suggestion: string | null;
     }>;
     draftPick: (
       id: string,
       input: { prospectId: string },
     ) => Promise<{
-      onTheClock: { yourPick: boolean } | null;
+      onTheClock: { yourPick: boolean; mine: boolean } | null;
       suggestion: string | null;
     }>;
     roster: (id: string) => Promise<{
@@ -111,14 +111,14 @@ type DraftApi = {
  * suggestion, and so on to the last pick.
  */
 export async function playDraft(api: DraftApi, leagueId: string) {
-  let draft = await api.leagues.simDraft(leagueId, { autoMine: false });
+  let draft = await api.leagues.simDraft(leagueId, { mode: "my-pick" });
   for (let i = 0; i < 10 && draft.onTheClock; i++) {
     draft =
-      draft.onTheClock.yourPick && draft.suggestion
+      draft.onTheClock.mine && draft.suggestion
         ? await api.leagues.draftPick(leagueId, {
             prospectId: draft.suggestion,
           })
-        : await api.leagues.simDraft(leagueId, { autoMine: false });
+        : await api.leagues.simDraft(leagueId, { mode: "my-pick" });
   }
 }
 

@@ -104,7 +104,7 @@ What happens between one season and the next, in order. Each step is a button th
 
 ### AI Assist
 
-AI Assist is for owners who want a less hands-on game, or who simulate through a stretch and don't want to do a job they find tedious. Each franchise the user runs has five switches. **On means the AI does that job for the franchise, with the same rules as a computer team; off means the owner does it and the game waits for them.** The switches can be changed at any time, from the Offseason page or from the league's settings.
+AI Assist is for owners who want a less hands-on game, or who simulate through a stretch and don't want to do a job they find tedious. Each franchise the user runs has five switches. **On means the AI does that job for the franchise when the owner simulates or moves on, with the same rules as a computer team; off means the owner has to do it and the game waits. Either way the owner can always do the job themselves first: AI Assist only takes over what the owner leaves undone.** The switches can be changed at any time, from the Offseason page or from the league's settings.
 
 | Switch            | When on, the AI                                                                                       | When off, the owner                                                                                   |
 | ----------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

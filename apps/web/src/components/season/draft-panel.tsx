@@ -101,6 +101,11 @@ export function DraftPanel({
           ) : null}{" "}
           {clock.yourPick ? (
             <span className="font-semibold">is on the clock: your pick.</span>
+          ) : clock.mine ? (
+            <span className="font-semibold">
+              is on the clock: your pick (AI Assist will make it if you simulate
+              on, or you can).
+            </span>
           ) : (
             "is on the clock."
           )}
@@ -111,14 +116,14 @@ export function DraftPanel({
         <Button
           variant="secondary"
           disabled={busy}
-          onClick={() => send("sim", { autoMine: false })}
+          onClick={() => send("sim", { mode: "my-pick" })}
         >
           Sim to my pick
         </Button>
         <Button
           variant="secondary"
           disabled={busy}
-          onClick={() => send("sim", { autoMine: true })}
+          onClick={() => send("sim", { mode: "auto" })}
         >
           Auto-pick the rest for me
         </Button>
@@ -158,7 +163,7 @@ export function DraftPanel({
                   scouted {p.overall} overall, {p.potential} potential
                 </span>
               </p>
-              {clock?.yourPick ? (
+              {clock?.mine ? (
                 <Button
                   variant="primary"
                   disabled={busy}

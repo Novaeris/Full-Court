@@ -9,12 +9,12 @@ type ErrorBody = { error?: { message?: string } };
 
 /** What each switch does in the offseason, for the jobs that exist so far. */
 const EFFECT: Record<(typeof AI_ASSIST_KEYS)[number], string> = {
-  drafting: "Makes your draft picks. Off, the draft waits for you.",
-  scouting: "Ranks the draft board for your needs. Off, you rank it yourself.",
+  drafting: "Makes your picks when you simulate the draft. You can still pick.",
+  scouting: "Shows the best pick for your needs on the board.",
   rosterManagement:
-    "Signs and releases players for you in free agency and the preseason.",
+    "Signs and releases players for you as free agency and the preseason end. You can still make your own moves.",
   rosterCoverage:
-    "Keeps your roster at 12 to 15 players with every position covered.",
+    "Keeps your roster at 12 to 15 players with every position covered, whatever you leave it at.",
   trades: "Not built yet.",
 };
 
@@ -75,8 +75,9 @@ export function AiAssistPanel({
       </h2>
       <p className="mt-1 text-text-muted">
         For when you would rather not do a job yourself, or want to simulate
-        through. Switched on, the AI does that job for your team; switched off,
-        you do it and the offseason waits for you.
+        through. Switched on, the AI does that job for your team whenever you
+        simulate or move on, and you can still do it yourself first. Switched
+        off, the offseason waits for you.
       </p>
       <ul className="mt-3">
         {AI_ASSIST_KEYS.map((key) => {

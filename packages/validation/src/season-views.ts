@@ -385,6 +385,8 @@ export const DraftResponseSchema = z.object({
       teamId: z.uuid(),
       /** The team is yours and its drafting is not on AI Assist. */
       yourPick: z.boolean(),
+      /** The team is yours (whatever AI Assist is set to), so you can make its pick. */
+      mine: z.boolean(),
     })
     .nullable(),
   suggestion: z.uuid().nullable(),
@@ -412,11 +414,13 @@ export type DraftPickRequest = z.infer<typeof DraftPickRequestSchema>;
 
 /**
  * POST /api/v1/leagues/:leagueId/draft/sim: the computer teams make their
- * picks until one of yours is on the clock. With `autoMine` your teams' picks
- * are made for you too, to the end of the draft.
+ * picks. `mode` says where to stop: `my-pick` at the next pick of any team you
+ * run, so you can make it yourself (AI Assist or not); `advance` at the next
+ * pick of a team of yours whose drafting is not on AI Assist (AI Assist makes
+ * the others); `auto` never, so your teams' picks are made for you too.
  */
 export const DraftSimRequestSchema = z.object({
-  autoMine: z.boolean().default(false),
+  mode: z.enum(["my-pick", "advance", "auto"]).default("my-pick"),
 });
 export type DraftSimRequest = z.infer<typeof DraftSimRequestSchema>;
 

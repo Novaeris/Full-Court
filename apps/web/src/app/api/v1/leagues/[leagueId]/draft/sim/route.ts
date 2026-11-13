@@ -8,7 +8,7 @@ import { simDraft } from "@/server/services/draft";
 
 /**
  * POST /api/v1/leagues/:leagueId/draft/sim: the computer teams pick until one
- * of yours is on the clock; with `autoMine`, your teams picks are made too.
+ * of yours is on the clock; with `mode: "auto"`, your teams picks are made too.
  */
 export const POST = apiRoute({
   body: DraftSimRequestSchema,
