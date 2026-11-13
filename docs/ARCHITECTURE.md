@@ -206,12 +206,44 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
   - A possession starts from an `Origin` (steal, defensive rebound or other). `transitionChance` turns that, the teams' speed ratings and pace into the chance of a fast break; breaks use a shorter clock, a rim-heavy shot mix and a make-chance bonus. Substitutions only happen on dead balls.
   - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, threes, free throws, fouls, steals, blocks, assists, turnovers, rebounds, fast-break share, starter minutes, home edge) inside NBA 2010 to 2020 bounds, so a change that wrecks the balance fails a test.
 - Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
-- Still to come: the season tables and `sim_jobs`, `apps/worker`, and the season pages.
+- Still to come: `apps/worker` and the season pages.
 
-### Simulation (Phase 6)
+### Season tables and the simulation queue (Phase 12)
 
-1. Clients call `POST /api/v1/leagues/:id/sim`, which adds a row to a `sim_jobs` queue.
-2. `apps/worker` claims jobs with `FOR UPDATE SKIP LOCKED`, runs the engine, and commits each simulated day as a small transaction.
+Migration `20261112150000_season_core.sql`. Every table hangs off `league_id` with `on delete cascade`, is read-only for the league owner under RLS, and is written only by service-role functions.
+
+| Table             | Holds                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `seasons`         | `year`, `phase` (`regular-season`, `playoffs`, `complete`), `day` (next day to simulate), `last_day`, and the schedule preset and tiers used       |
+| `games`           | One row per scheduled game: day, home and away team, `status`, scores and overtimes. Scores exist only when final, and there are no ties           |
+| `play_events`     | The play-by-play, one row per `PlayEvent` (snake_case columns, `at_x`/`at_y` on the full court). Primary key `(game_id, seq)`                      |
+| `box_score_lines` | One row per player who played, derived from the plays. The lines of each team add up to the game's score (checked on commit)                       |
+| `sim_jobs`        | The queue: `kind` (`day`, `week`, `season`), `status`, `days_requested`, `days_done`, `error`, `worker` and a heartbeat. One active job per league |
+
+Rules that keep it consistent:
+
+- **Same-league references.** Games, plays, lines and jobs reference seasons, teams and players by `(league_id, id)`, so nothing can point into another league. `players` gained `unique (league_id, id)` for this.
+- **The calendar.** A season is in `regular-season` exactly while `day <= last_day`. Committing the last day moves it to `playoffs`.
+- **Schedule choice.** The preset and tiers are stored on the season. The league setup does not collect them yet; until it does, the server creates seasons with the standard preset.
+
+Functions:
+
+| Function                                                         | Caller       | Does                                                                                                                                                                                                              |
+| ---------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enqueue_sim_job(league, kind)`                                  | owner (RPC)  | Queues a day, week (capped at the days left) or the rest of the regular season. Needs an active league and a running season; refuses a second active job                                                          |
+| `cancel_sim_job(job)`                                            | owner (RPC)  | Cancels a queued or running job. Days already committed stay                                                                                                                                                      |
+| `admin_create_season(league, year, preset, tiers, schedule)`     | service role | Creates the season and its games in one transaction; refuses an empty schedule or a team playing twice in a day                                                                                                   |
+| `admin_claim_sim_job(worker)`                                    | worker       | Claims the oldest queued job with `FOR UPDATE SKIP LOCKED`, or returns nothing                                                                                                                                    |
+| `admin_commit_sim_day(job, day, rng_state, games, plays, lines)` | worker       | Commits one day atomically: results, plays, box scores, the league's RNG state, the calendar and job progress. Refuses a repeat, an out-of-order day, a cancelled job or a box score that doesn't match the score |
+| `admin_fail_sim_job(job, message)`                               | worker       | Marks a job failed with a trimmed error                                                                                                                                                                           |
+| `admin_requeue_stale_sim_jobs(max_age)`                          | worker       | Puts running jobs whose heartbeat is older than `max_age` back in the queue; committed days are never repeated, so the next worker resumes                                                                        |
+
+`sim_jobs` and `seasons` are in the `supabase_realtime` publication, so a client sees progress and the calendar change as days commit.
+
+### Simulation (Phase 13)
+
+1. Clients call `POST /api/v1/leagues/:id/sim`, which calls `enqueue_sim_job`.
+2. `apps/worker` calls `admin_claim_sim_job`, then for each day: reads the day's games, teams and rosters, runs `simulateDay` from `@fullcourt/game-engine` with the league's saved RNG state, and calls `admin_commit_sim_day`. It maps engine rows to the snake_case columns the function expects, and checks for cancellation by the commit being refused.
 3. Clients follow progress through Supabase Realtime.
 
 Long simulations never run inside an HTTP request or on a client device.

@@ -9,6 +9,169 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      box_score_lines: {
+        Row: {
+          assists: number
+          blocks: number
+          fga: number
+          fgm: number
+          fouls: number
+          fta: number
+          ftm: number
+          game_id: string
+          league_id: string
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          started: boolean
+          steals: number
+          team_id: string
+          tpa: number
+          tpm: number
+          turnovers: number
+        }
+        Insert: {
+          assists: number
+          blocks: number
+          fga: number
+          fgm: number
+          fouls: number
+          fta: number
+          ftm: number
+          game_id: string
+          league_id: string
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          started: boolean
+          steals: number
+          team_id: string
+          tpa: number
+          tpm: number
+          turnovers: number
+        }
+        Update: {
+          assists?: number
+          blocks?: number
+          fga?: number
+          fgm?: number
+          fouls?: number
+          fta?: number
+          ftm?: number
+          game_id?: string
+          league_id?: string
+          minutes?: number
+          player_id?: string
+          points?: number
+          rebounds?: number
+          started?: boolean
+          steals?: number
+          team_id?: string
+          tpa?: number
+          tpm?: number
+          turnovers?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_score_lines_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "box_score_lines_league_id_game_id_fkey"
+            columns: ["league_id", "game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "box_score_lines_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "box_score_lines_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
+      games: {
+        Row: {
+          away_score: number | null
+          away_team_id: string
+          day: number
+          home_score: number | null
+          home_team_id: string
+          id: string
+          league_id: string
+          overtimes: number
+          season_id: string
+          status: string
+        }
+        Insert: {
+          away_score?: number | null
+          away_team_id: string
+          day: number
+          home_score?: number | null
+          home_team_id: string
+          id?: string
+          league_id: string
+          overtimes?: number
+          season_id: string
+          status?: string
+        }
+        Update: {
+          away_score?: number | null
+          away_team_id?: string
+          day?: number
+          home_score?: number | null
+          home_team_id?: string
+          id?: string
+          league_id?: string
+          overtimes?: number
+          season_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "games_league_id_away_team_id_fkey"
+            columns: ["league_id", "away_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "games_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "games_league_id_home_team_id_fkey"
+            columns: ["league_id", "home_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "games_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       league_conferences: {
         Row: {
           id: string
@@ -149,6 +312,107 @@ export type Database = {
           },
         ]
       }
+      play_events: {
+        Row: {
+          assist_player_id: string | null
+          at_x: number | null
+          at_y: number | null
+          away_score: number
+          block_player_id: string | null
+          clock: number
+          game_id: string
+          home_score: number
+          kind: string
+          league_id: string
+          made: boolean | null
+          offensive: boolean | null
+          out_player_id: string | null
+          period: number
+          player_id: string | null
+          points: number
+          seq: number
+          shot_zone: string | null
+          steal_player_id: string | null
+          team_id: string | null
+          transition: boolean
+        }
+        Insert: {
+          assist_player_id?: string | null
+          at_x?: number | null
+          at_y?: number | null
+          away_score: number
+          block_player_id?: string | null
+          clock: number
+          game_id: string
+          home_score: number
+          kind: string
+          league_id: string
+          made?: boolean | null
+          offensive?: boolean | null
+          out_player_id?: string | null
+          period: number
+          player_id?: string | null
+          points?: number
+          seq: number
+          shot_zone?: string | null
+          steal_player_id?: string | null
+          team_id?: string | null
+          transition?: boolean
+        }
+        Update: {
+          assist_player_id?: string | null
+          at_x?: number | null
+          at_y?: number | null
+          away_score?: number
+          block_player_id?: string | null
+          clock?: number
+          game_id?: string
+          home_score?: number
+          kind?: string
+          league_id?: string
+          made?: boolean | null
+          offensive?: boolean | null
+          out_player_id?: string | null
+          period?: number
+          player_id?: string | null
+          points?: number
+          seq?: number
+          shot_zone?: string | null
+          steal_player_id?: string | null
+          team_id?: string | null
+          transition?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "play_events_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "play_events_league_id_game_id_fkey"
+            columns: ["league_id", "game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "play_events_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "play_events_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       players: {
         Row: {
           age: number
@@ -281,6 +545,113 @@ export type Database = {
         }
         Relationships: []
       }
+      seasons: {
+        Row: {
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          phase: string
+          schedule_preset: string
+          schedule_tiers: Json
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          day?: number
+          id?: string
+          last_day: number
+          league_id: string
+          phase?: string
+          schedule_preset?: string
+          schedule_tiers: Json
+          year: number
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          id?: string
+          last_day?: number
+          league_id?: string
+          phase?: string
+          schedule_preset?: string
+          schedule_tiers?: Json
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seasons_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sim_jobs: {
+        Row: {
+          created_at: string
+          days_done: number
+          days_requested: number
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at: string | null
+          status: string
+          worker: string | null
+        }
+        Insert: {
+          created_at?: string
+          days_done?: number
+          days_requested: number
+          error?: string | null
+          finished_at?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at?: string | null
+          status?: string
+          worker?: string | null
+        }
+        Update: {
+          created_at?: string
+          days_done?: number
+          days_requested?: number
+          error?: string | null
+          finished_at?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          kind?: string
+          league_id?: string
+          season_id?: string
+          started_at?: string | null
+          status?: string
+          worker?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sim_jobs_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sim_jobs_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           abbreviation: string
@@ -380,6 +751,61 @@ export type Database = {
         Args: { acknowledged_version: number }
         Returns: undefined
       }
+      admin_claim_sim_job: {
+        Args: { worker_name: string }
+        Returns: {
+          created_at: string
+          days_done: number
+          days_requested: number
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at: string | null
+          status: string
+          worker: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "sim_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      admin_commit_sim_day: {
+        Args: {
+          day_games: Json
+          day_lines: Json
+          day_plays: Json
+          new_rng_state: number[]
+          sim_day: number
+          target_job: string
+        }
+        Returns: {
+          created_at: string
+          days_done: number
+          days_requested: number
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at: string | null
+          status: string
+          worker: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sim_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_create_league: {
         Args: {
           league_name: string
@@ -446,9 +872,63 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_create_season: {
+        Args: {
+          preset: string
+          schedule: Json
+          season_year: number
+          target_league: string
+          tiers: Json
+        }
+        Returns: {
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          phase: string
+          schedule_preset: string
+          schedule_tiers: Json
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_fail_sim_job: {
+        Args: { message: string; target_job: string }
+        Returns: {
+          created_at: string
+          days_done: number
+          days_requested: number
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at: string | null
+          status: string
+          worker: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sim_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_record_event: {
         Args: { event_name: string; event_path?: string }
         Returns: undefined
+      }
+      admin_requeue_stale_sim_jobs: {
+        Args: { max_age: string }
+        Returns: number
       }
       admin_submit_support_request: {
         Args: {
@@ -461,6 +941,30 @@ export type Database = {
           sender_user: string
         }
         Returns: string
+      }
+      cancel_sim_job: {
+        Args: { target_job: string }
+        Returns: {
+          created_at: string
+          days_done: number
+          days_requested: number
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at: string | null
+          status: string
+          worker: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sim_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       choose_team: {
         Args: { target_league: string; target_team: string }
@@ -486,6 +990,30 @@ export type Database = {
         }
       }
       delete_own_account: { Args: never; Returns: undefined }
+      enqueue_sim_job: {
+        Args: { sim_kind: string; target_league: string }
+        Returns: {
+          created_at: string
+          days_done: number
+          days_requested: number
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string | null
+          id: string
+          kind: string
+          league_id: string
+          season_id: string
+          started_at: string | null
+          status: string
+          worker: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sim_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       league_limit: { Args: never; Returns: number }
       rename_structure: {
         Args: {
