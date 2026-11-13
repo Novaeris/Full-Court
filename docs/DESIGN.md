@@ -77,19 +77,20 @@ The playoffs follow the league's setup choices (how many teams qualify, conferen
 
 ## The calendar (Owner Mode)
 
-A league has dates. The calendar is the same every year, so it is easy to learn, and a season is named for the year it starts in: the 2026 season runs from October 2026 to June 2027 and its draft is the 2027 draft. _Dates are tunable._
+A league has dates. The calendar is built around one rule: **opening night is always the second Monday of October.** Every other date is a whole number of weeks from it, so each year has the same shape and the weekdays always line up (a Monday start, a Sunday finish, a Thursday draft). A season is named for the year it starts in: the 2026 season opens on Oct 12, 2026, and its draft is the 2027 draft. _The week counts are tunable._
 
-| When            | What                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------ |
-| Oct 20          | The regular season opens (game day 1). Its days are spread evenly to Apr 12          |
-| Apr 18          | The playoffs open. A playoff day is two calendar days, so the finals end in mid June |
-| Jun 17          | The offseason begins: players age and some retire                                    |
-| Jun 25          | The draft lottery and the draft                                                      |
-| Jul 1 to Sep 23 | Free agency and the staff market                                                     |
-| Sep 24 to Oct 6 | Training camp                                                                        |
-| Oct 7 to Oct 19 | Preseason: rosters are final, camp results are in, the new schedule is ready         |
+| When (weeks from opening night)                 | What                                                                                                      |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Week 0, a Monday (Oct 8 to 14)                  | The regular season opens (game day 1)                                                                     |
+| Week 26, a Sunday                               | The regular season ends. Its game days are spread evenly over the 26 weeks, however many the schedule has |
+| The Saturday after                              | The playoffs open. A playoff day is two calendar days, so even the longest finals end by mid June         |
+| Week 35, a Monday (about Jun 14 to 20)          | The offseason begins: players age and some retire                                                         |
+| Week 36, the Thursday (about Jun 24 to 30)      | The draft lottery and the draft                                                                           |
+| Week 37, a Monday, to four weeks before opening | Free agency and the staff market (ten to eleven weeks)                                                    |
+| Four weeks before, a Monday, for two weeks      | Training camp                                                                                             |
+| Two weeks before, a Monday, for two weeks       | Preseason: rosters are final, camp results are in, the new schedule is ready                              |
 
-There are no exhibition games: the preseason is the week-and-a-half in which the owner reviews the roster and the camp report before the opener. The start date does not change from year to year and is the same for every league.
+The offseason's weeks are counted from the opening night before it (the draft is 36 weeks after last season's opening); camp and the preseason are counted back from the opening night they lead into. Because a year is 52 or 53 weeks, the offseason is a week longer in some years. There are no exhibition games: the preseason is the two weeks in which the owner reviews the roster and the camp report before the opener. The rule is the same for every league.
 
 ## The offseason (Owner Mode)
 

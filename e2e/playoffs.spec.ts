@@ -116,7 +116,11 @@ test.describe("playoffs", () => {
     });
     // The offseason begins in the calendar's fixed place, and no playoffs are
     // left over from the season before.
-    expect(next.season?.date).toBe(`${next.season?.year}-06-25`);
+    // The draft is a Thursday in late June.
+    const draftDay = new Date(`${next.season?.date}T00:00:00Z`);
+    expect(draftDay.getUTCDay()).toBe(4);
+    expect(draftDay.getUTCMonth()).toBe(5);
+    expect(draftDay.getUTCFullYear()).toBe(next.season?.year);
     expect((await api.leagues.playoffs(league.id)).series).toEqual([]);
     await expect(api.leagues.startNextSeason(league.id)).rejects.toMatchObject({
       status: 409,
@@ -202,7 +206,7 @@ test.describe("playoffs", () => {
       expect(detail.players.length).toBeLessThanOrEqual(15);
     }
 
-    // The season opens on October 20 with its schedule ready.
+    // The season opens with its schedule ready.
     await page
       .getByRole("button", { name: "Start the regular season" })
       .click();
@@ -211,7 +215,12 @@ test.describe("playoffs", () => {
       .toBe("regular-season");
     const opened = (await api.leagues.simulation(league.id)).season;
     expect(opened).toMatchObject({ stage: null, day: 1 });
-    expect(opened?.date).toBe(`${opened?.year}-10-20`);
+    // Opening night is the second Monday of October.
+    const opening = new Date(`${opened?.date}T00:00:00Z`);
+    expect(opening.getUTCDay()).toBe(1);
+    expect(opening.getUTCMonth()).toBe(9);
+    expect(opening.getUTCDate()).toBeGreaterThanOrEqual(8);
+    expect(opening.getUTCDate()).toBeLessThanOrEqual(14);
   });
 
   test("the playoff pages fit the screen, pass axe and have big enough targets", async ({
