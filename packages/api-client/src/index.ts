@@ -7,6 +7,7 @@ import {
   LeagueStructureSchema,
   GameDetailSchema,
   GamePlaysSchema,
+  OffseasonResponseSchema,
   PlayoffsResponseSchema,
   SeasonSchema,
   ScheduleResponseSchema,
@@ -18,6 +19,7 @@ import {
   type ChooseTeamRequest,
   type GameDetail,
   type GamePlays,
+  type OffseasonResponse,
   type PlayoffsResponse,
   type Season,
   type ScheduleResponse,
@@ -223,6 +225,11 @@ export function createApiClient(options: ApiClientOptions) {
           `/leagues/${encodeURIComponent(id)}/next-season`,
           (b) => SeasonSchema.parse(b),
           {},
+        ),
+      /** What the latest offseason did: the draft, retirements and the biggest movers. */
+      offseason: (id: string): Promise<OffseasonResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/offseason`, (b) =>
+          OffseasonResponseSchema.parse(b),
         ),
       /** The game's plays, replayed by the server. */
       gamePlays: (id: string, gameId: string): Promise<GamePlays> =>

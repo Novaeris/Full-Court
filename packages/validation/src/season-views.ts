@@ -197,3 +197,36 @@ export const PlayoffsResponseSchema = z.object({
   series: z.array(PlayoffSeriesSchema),
 });
 export type PlayoffsResponse = z.infer<typeof PlayoffsResponseSchema>;
+
+/** A player in an offseason report: who they are and what the offseason did to them. */
+export const OffseasonPlayerSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  position: z.enum(["PG", "SG", "SF", "PF", "C"]),
+  age: z.number().int(),
+  overall: z.number().int(),
+  potential: z.number().int(),
+  teamId: z.uuid().nullable(),
+});
+export type OffseasonPlayer = z.infer<typeof OffseasonPlayerSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/offseason: what the latest offseason did.
+ * `year` is the year of the season it led into, or null before the first
+ * offseason. Movers compare each player's overall before and after.
+ */
+export const OffseasonResponseSchema = z.object({
+  year: z.number().int().nullable(),
+  draft: z.array(
+    z.object({
+      pick: z.number().int(),
+      round: z.number().int(),
+      teamId: z.uuid(),
+      player: OffseasonPlayerSchema,
+    }),
+  ),
+  retired: z.array(OffseasonPlayerSchema),
+  risers: z.array(OffseasonPlayerSchema.extend({ change: z.number().int() })),
+  fallers: z.array(OffseasonPlayerSchema.extend({ change: z.number().int() })),
+});
+export type OffseasonResponse = z.infer<typeof OffseasonResponseSchema>;

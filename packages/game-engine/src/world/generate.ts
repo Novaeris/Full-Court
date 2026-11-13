@@ -252,7 +252,11 @@ function generateAge(rng: Rng): number {
   return rng.int(30, 36);
 }
 
-function generatePotential(rng: Rng, age: number, overall: number): number {
+export function generatePotential(
+  rng: Rng,
+  age: number,
+  overall: number,
+): number {
   const growth =
     age <= 20
       ? rng.int(8, 22)
@@ -266,7 +270,7 @@ function generatePotential(rng: Rng, age: number, overall: number): number {
   return Math.max(overall, clampRating(overall + growth));
 }
 
-function generateRatings(
+export function generateRatings(
   rng: Rng,
   position: Position,
   target: number,
@@ -284,7 +288,7 @@ function generateRatings(
   return ratings;
 }
 
-function uniqueName(
+export function uniqueName(
   rng: Rng,
   taken: Set<string>,
 ): { firstName: string; lastName: string } {
@@ -298,6 +302,27 @@ function uniqueName(
     }
   }
   throw new Error("Ran out of unique player names");
+}
+
+/** A plausible height and weight for a position. */
+export function generateBody(
+  rng: Rng,
+  position: Position,
+): { heightInches: number; weightPounds: number } {
+  const [heightMean, heightSd] = HEIGHT[position];
+  // Clamped so a rare extreme draw can't produce an implausible body (or break
+  // the database's sanity checks).
+  const heightInches = clamp(
+    Math.round(normal(rng, heightMean, heightSd)),
+    heightMean - 5,
+    heightMean + 5,
+  );
+  const weightPounds = clamp(
+    Math.round(normal(rng, 215 + (heightInches - 78) * 7.5, 12)),
+    BODY_WEIGHT.min,
+    BODY_WEIGHT.max,
+  );
+  return { heightInches, weightPounds };
 }
 
 /**
@@ -326,19 +351,7 @@ export function generateRosters(
       const ratings = generateRatings(rng, position, targets[slot] as number);
       const overall = computeOverall(position, ratings);
       const age = generateAge(rng);
-      const [heightMean, heightSd] = HEIGHT[position];
-      // Clamped so a rare extreme draw can't produce an implausible body
-      // (or break the database's sanity checks).
-      const heightInches = clamp(
-        Math.round(normal(rng, heightMean, heightSd)),
-        heightMean - 5,
-        heightMean + 5,
-      );
-      const weightPounds = clamp(
-        Math.round(normal(rng, 215 + (heightInches - 78) * 7.5, 12)),
-        BODY_WEIGHT.min,
-        BODY_WEIGHT.max,
-      );
+      const { heightInches, weightPounds } = generateBody(rng, position);
       players.push({
         team: team.abbreviation,
         ...uniqueName(rng, names),

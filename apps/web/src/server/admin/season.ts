@@ -88,3 +88,22 @@ export async function archiveSeason(input: {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Stores one offseason (progression, retirements, the draft, roster moves) in
+ * one transaction, through public.admin_apply_offseason().
+ */
+export async function applyOffseason(input: {
+  seasonId: string;
+  changes: readonly Record<string, unknown>[];
+}): Promise<SeasonRow> {
+  const { data, error } = await createAdminClient().rpc(
+    "admin_apply_offseason",
+    {
+      target_season: input.seasonId,
+      changes: input.changes as never,
+    },
+  );
+  if (error) throw error;
+  return data;
+}

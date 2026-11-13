@@ -104,6 +104,55 @@ export type Database = {
           },
         ]
       }
+      draft_picks: {
+        Row: {
+          league_id: string
+          pick: number
+          player_id: string
+          round: number
+          season_year: number
+          team_id: string
+        }
+        Insert: {
+          league_id: string
+          pick: number
+          player_id: string
+          round: number
+          season_year: number
+          team_id: string
+        }
+        Update: {
+          league_id?: string
+          pick?: number
+          player_id?: string
+          round?: number
+          season_year?: number
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "draft_picks_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "draft_picks_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "draft_picks_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       game_replays: {
         Row: {
           engine_version: number
@@ -367,6 +416,61 @@ export type Database = {
           },
         ]
       }
+      player_ratings_history: {
+        Row: {
+          age: number
+          league_id: string
+          overall: number
+          player_id: string
+          potential: number
+          previous_overall: number | null
+          season_year: number
+          team_id: string | null
+        }
+        Insert: {
+          age: number
+          league_id: string
+          overall: number
+          player_id: string
+          potential: number
+          previous_overall?: number | null
+          season_year: number
+          team_id?: string | null
+        }
+        Update: {
+          age?: number
+          league_id?: string
+          overall?: number
+          player_id?: string
+          potential?: number
+          previous_overall?: number | null
+          season_year?: number
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_ratings_history_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_ratings_history_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_ratings_history_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       player_season_stats: {
         Row: {
           assists: number
@@ -533,6 +637,9 @@ export type Database = {
           age: number
           ball_handling: number
           def_rebound: number
+          draft_pick: number | null
+          draft_round: number | null
+          draft_year: number | null
           first_name: string
           free_throw: number
           height_inches: number
@@ -549,8 +656,10 @@ export type Database = {
           perimeter_d: number
           position: string
           potential: number
+          retired_year: number | null
           speed: number
           stamina: number
+          status: string
           strength: number
           team_id: string | null
           three_point: number
@@ -560,6 +669,9 @@ export type Database = {
           age: number
           ball_handling: number
           def_rebound: number
+          draft_pick?: number | null
+          draft_round?: number | null
+          draft_year?: number | null
           first_name: string
           free_throw: number
           height_inches: number
@@ -576,8 +688,10 @@ export type Database = {
           perimeter_d: number
           position: string
           potential: number
+          retired_year?: number | null
           speed: number
           stamina: number
+          status?: string
           strength: number
           team_id?: string | null
           three_point: number
@@ -587,6 +701,9 @@ export type Database = {
           age?: number
           ball_handling?: number
           def_rebound?: number
+          draft_pick?: number | null
+          draft_round?: number | null
+          draft_year?: number | null
           first_name?: string
           free_throw?: number
           height_inches?: number
@@ -603,8 +720,10 @@ export type Database = {
           perimeter_d?: number
           position?: string
           potential?: number
+          retired_year?: number | null
           speed?: number
           stamina?: number
+          status?: string
           strength?: number
           team_id?: string | null
           three_point?: number
@@ -810,6 +929,7 @@ export type Database = {
           id: string
           last_day: number
           league_id: string
+          offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
           schedule_preset: string
@@ -823,6 +943,7 @@ export type Database = {
           id?: string
           last_day: number
           league_id: string
+          offseason_done_at?: string | null
           phase?: string
           playoff_config?: Json | null
           schedule_preset?: string
@@ -836,6 +957,7 @@ export type Database = {
           id?: string
           last_day?: number
           league_id?: string
+          offseason_done_at?: string | null
           phase?: string
           playoff_config?: Json | null
           schedule_preset?: string
@@ -1159,6 +1281,29 @@ export type Database = {
         Args: { acknowledged_version: number }
         Returns: undefined
       }
+      admin_apply_offseason: {
+        Args: { changes: Json; target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          offseason_done_at: string | null
+          phase: string
+          playoff_config: Json | null
+          schedule_preset: string
+          schedule_tiers: Json
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_archive_season: {
         Args: { standings_order: string[]; target_season: string }
         Returns: {
@@ -1168,6 +1313,7 @@ export type Database = {
           id: string
           last_day: number
           league_id: string
+          offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
           schedule_preset: string
@@ -1311,6 +1457,7 @@ export type Database = {
           id: string
           last_day: number
           league_id: string
+          offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
           schedule_preset: string
@@ -1339,6 +1486,7 @@ export type Database = {
           id: string
           last_day: number
           league_id: string
+          offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
           schedule_preset: string

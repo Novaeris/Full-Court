@@ -14,6 +14,7 @@ import type {
 import { archiveSeason, insertPlayoffs } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
+import { runSeasonOffseason } from "./offseason";
 import { getLeague, getSettings, parseLeagueId } from "./leagues";
 import { createSeason } from "./season-create";
 import { latestSeason, seasonView } from "./season-shared";
@@ -147,8 +148,8 @@ export async function getPlayoffs(
 
 /**
  * From a complete season: archives it into history (a summary of every player
- * and team, then its games are deleted) and creates the next season with a new
- * schedule. Rosters carry over unchanged for now.
+ * and team, then its games are deleted) runs the offseason (players age, some retire, the draft, rosters refill)
+ * and creates the next season with a new schedule.
  */
 export async function startNextSeason(
   ctx: UserContext,
@@ -176,13 +177,13 @@ export async function startNextSeason(
 
   // A season whose archive already ran (a retry after a failure) only needs
   // its successor.
+  const standings = await getStandings(ctx, league.id);
+  const standingsOrder = standings.rows.map((r) => r.teamId);
   if (!season.archived_at) {
-    const standings = await getStandings(ctx, league.id);
-    await archiveSeason({
-      seasonId: season.id,
-      standingsOrder: standings.rows.map((r) => r.teamId),
-    });
+    await archiveSeason({ seasonId: season.id, standingsOrder });
   }
+  // The offseason runs once; a retry after a failure skips it.
+  await runSeasonOffseason(ctx, league.id, season, standingsOrder);
   try {
     await createSeason(ctx, league, season.year + 1);
   } catch (error) {

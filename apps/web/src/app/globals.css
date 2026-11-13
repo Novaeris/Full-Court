@@ -49,6 +49,6 @@
   }
 }
 
-[popover]:popover-open {
+.fc-pop-out:popover-open {
   animation: fc-pop-out 160ms ease-out;
 }

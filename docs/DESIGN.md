@@ -72,8 +72,20 @@ The playoffs follow the league's setup choices (how many teams qualify, conferen
 - **The calendar.** Every series plays one game a day. A round is over when all its series are, and the next round starts the following day. There is no play-in tournament.
 - **The end.** The team that wins the final series is the champion and the loser the finalist; both are recorded as the season's awards. The season is then complete.
 - **Simulating.** The simulation controls work through the playoffs the same way: a day, a week, or to the end of the playoffs. The playoff bracket page shows every series, its games and the score as it stands.
-- **Starting the next season.** From a completed season, one action archives it into history and creates the next season with a new schedule. Rosters carry over unchanged for now: ageing, the draft, free agency and contracts are later systems.
+- **Starting the next season.** From a completed season, one action archives it into history and creates the next season with a new schedule. The offseason runs in between (next section); free agency, contracts and trades are later systems.
 - **History.** A season's history keeps playoff statistics apart from the regular season's, and records how far each team went.
+
+## The offseason (Owner Mode)
+
+What happens between one season and the next. This first slice is automatic, so the world keeps moving and every league can play for 50 seasons; the owner's choices (draft picks, free agency, contracts, trades) are added on top in later phases. Numbers marked _tunable_ are expected to change after play-testing.
+
+- **Ageing.** Every player is a year older. Players under 25 improve towards their potential, most quickly at 19 to 21; players peak around 26 to 28; from 29 athletic ratings (speed, strength, stamina) fade first while shooting and passing hold; after 33 the decline steepens. Each player's result is the age curve plus luck, so some young players stall and some veterans hold on. _tunable_
+- **Retirement.** Nobody retires young. Weak players of 31 or more may. After 33 the chance climbs each year and everyone has retired by 40. Free agents of 28 or more, and weak free agents of any age, retire sooner. A retired player stays in the history (his statistics and awards remain) but is off every roster and out of the pool.
+- **The draft.** Two rounds, one pick per team in each. A class of rookies aged 19 to 22 is created with names not used before in the league: mostly 40s and 50s overall with high potential, a few in the 60s and 70s. Teams that missed the playoffs pick first, worst record first, except that the first four of those picks are a weighted lottery (the worst teams have the best odds, not a guarantee). Playoff teams pick after, worst record first. Every team takes the best prospect on the board, a blend of overall and potential that leans on potential for the young, with a little noise so teams don't all agree.
+- **Rosters.** Every team ends at 15 players. A team above 15 releases its weakest into free agency. A team below 15 signs free agents, worst team first, preferring positions it is short of. Undrafted rookies join the pool.
+- **The free-agent pool** stays small (two per team) so a league's data stays bounded: the weakest players beyond that retire, but anyone picked in the current draft stays on the books.
+- **What the owner sees.** An **Offseason** page after each new season starts: the draft pick by pick (with the lottery's result in the order), the biggest improvements and declines, and who retired. Players' ratings for each season are kept, so their development can be shown later.
+- **Not yet.** Choosing your own picks, free agency with offers and contracts, the salary cap, trades and owner finances. Until those exist, the owner's team is run by the same rules as every other.
 
 ## Saves and history (Owner Mode)
 
@@ -92,15 +104,15 @@ The playoffs follow the league's setup choices (how many teams qualify, conferen
 
 The phases below are Owner Mode's product roadmap. Engineering work is numbered separately: branches `phase-1` to `phase-9` were the league setup, and the season core continues from `phase-10` (design and rules), `phase-11` (schedule and game engine), `phase-12` (season tables), `phase-13` (simulation worker) and `phase-14` (season pages). Together they deliver roadmap phases 5 and 6.
 
-| Phase | Scope                                                                                         |
-| ----- | --------------------------------------------------------------------------------------------- |
-| 0     | Monorepo foundations, architecture checks, hosting connected                                  |
-| 1     | Website shell: landing pages, responsive layout system, design tokens                         |
-| 2     | Accounts: sign up, confirm, log in, reset, profile, delete account                            |
-| 3     | Save slots: create, rename, delete and open leagues                                           |
-| 4     | World generation: teams, players, ratings                                                     |
-| 5     | Game simulation, schedule, standings, box scores                                              |
-| 6     | Simulation worker: advance day/week/season with live progress                                 |
-| 7+    | Playoffs, then the offseason and owner loop (draft, free agency, contracts, trades, finances) |
+| Phase | Scope                                                                                                              |
+| ----- | ------------------------------------------------------------------------------------------------------------------ |
+| 0     | Monorepo foundations, architecture checks, hosting connected                                                       |
+| 1     | Website shell: landing pages, responsive layout system, design tokens                                              |
+| 2     | Accounts: sign up, confirm, log in, reset, profile, delete account                                                 |
+| 3     | Save slots: create, rename, delete and open leagues                                                                |
+| 4     | World generation: teams, players, ratings                                                                          |
+| 5     | Game simulation, schedule, standings, box scores                                                                   |
+| 6     | Simulation worker: advance day/week/season with live progress                                                      |
+| 7+    | Playoffs (done), the offseason: ageing, retirement, draft (done), then free agency, contracts, trades and finances |
 
 Game-design detail for each system is written here before that system is built.

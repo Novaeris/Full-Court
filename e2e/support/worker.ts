@@ -13,3 +13,24 @@ export function runWorker(): void {
     env: { ...process.env },
   });
 }
+
+/**
+ * Runs the worker until this league's simulation job has finished. Other tests
+ * run workers too, and one of them may have claimed the job: wait for it.
+ */
+export async function finishJob(
+  api: {
+    leagues: {
+      simulation: (id: string) => Promise<{ job: { status: string } | null }>;
+    };
+  },
+  leagueId: string,
+): Promise<void> {
+  for (let i = 0; i < 120; i++) {
+    runWorker();
+    const { job } = await api.leagues.simulation(leagueId);
+    if (!job || !["queued", "running"].includes(job.status)) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error("The simulation never finished.");
+}

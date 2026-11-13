@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimJob, SimKind, SimulationStatus } from "@fullcourt/validation";
@@ -250,7 +251,8 @@ export function SimPanel({
         <div className="mt-4 flex flex-col gap-3">
           <p className="text-text-muted">
             The season is over. Starting the next one saves this season&apos;s
-            statistics and awards and creates a new schedule.
+            statistics and awards, then runs the offseason: players age and
+            change, some retire, the draft is held and rosters are refilled.
           </p>
           <div>
             <Button variant="primary" disabled={busy} onClick={startNext}>
@@ -287,7 +289,22 @@ export function SimPanel({
       ) : null}
 
       <div aria-live="polite" className="mt-3 min-h-6">
-        {message ? <p className="text-win">{message}</p> : null}
+        {message ? (
+          <p className="text-win">
+            {message}
+            {message.startsWith("Started the") ? (
+              <>
+                {" "}
+                <Link
+                  href={`/leagues/${leagueId}/offseason`}
+                  className="font-semibold underline"
+                >
+                  See what changed in the offseason.
+                </Link>
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </div>
       {error ? (
         <p role="alert" className="mt-1 font-semibold text-danger">

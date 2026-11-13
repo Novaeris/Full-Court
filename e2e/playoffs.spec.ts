@@ -6,7 +6,7 @@ import {
   startedLeague,
   touchTargets,
 } from "./support/season";
-import { runWorker } from "./support/worker";
+import { finishJob, runWorker } from "./support/worker";
 
 /**
  * The playoffs, from the end of the regular season to a champion, and the
@@ -119,6 +119,24 @@ test.describe("playoffs", () => {
       status: 409,
       code: "season_not_complete",
     });
+
+    // The offseason happened in between: a draft with a pick for every team in
+    // every round, rosters back to full size, and a page that shows it.
+    const report = await api.leagues.offseason(league.id);
+    expect(report.year).toBe(next.season?.year);
+    expect(report.draft).toHaveLength(24);
+    expect(report.draft.map((d) => d.pick)).toEqual(
+      Array.from({ length: 24 }, (_, i) => i + 1),
+    );
+    const { teams } = await api.leagues.teams(league.id);
+    for (const t of teams) {
+      const detail = await api.leagues.team(league.id, t.id);
+      expect(detail.players).toHaveLength(15);
+    }
+    await page.goto(`/leagues/${league.id}/offseason`);
+    await expect(
+      page.getByRole("heading", { name: `${report.year} draft` }),
+    ).toBeVisible();
   });
 
   test("the playoff pages fit the screen, pass axe and have big enough targets", async ({
@@ -127,9 +145,9 @@ test.describe("playoffs", () => {
     test.setTimeout(240_000);
     const { user, api, league } = await startedLeague("playofflayout");
     await api.leagues.simulate(league.id, { kind: "season" });
-    runWorker();
+    await finishJob(api, league.id);
     await api.leagues.simulate(league.id, { kind: "season" });
-    runWorker();
+    await finishJob(api, league.id);
     expect((await api.leagues.simulation(league.id)).season?.phase).toBe(
       "complete",
     );
@@ -138,10 +156,7 @@ test.describe("playoffs", () => {
     const base = `/leagues/${league.id}`;
     await signInThroughUi(page, user.email, user.password, `${base}/playoffs`);
 
-    for (const path of [
-      `${base}/playoffs`,
-      `${base}/games/${gameId}?tab=box`,
-    ]) {
+    async function check(path: string) {
       await page.goto(path);
       await expect(page.getByRole("heading").first()).toBeVisible();
       await noOverflow(page);
@@ -160,6 +175,12 @@ test.describe("playoffs", () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.emulateMedia({ colorScheme: null, reducedMotion: null });
     }
+
+    await check(`${base}/playoffs`);
+    await check(`${base}/games/${gameId}?tab=box`);
+    // The offseason page exists once the next season has been started.
+    await api.leagues.startNextSeason(league.id);
+    await check(`${base}/offseason`);
   });
 });
 
@@ -185,5 +206,34 @@ test.describe("playoffs API", () => {
       rounds: [],
       series: [],
     });
+  });
+
+  test("three seasons in a row: every offseason drafts, retires and refills", async () => {
+    test.setTimeout(420_000);
+    const { api, league } = await startedLeague("threeseasons");
+    let first = 0;
+    for (let i = 0; i < 3; i++) {
+      await api.leagues.simulate(league.id, { kind: "season" });
+      if (i === 0) {
+        first = (await api.leagues.simulation(league.id)).season?.year ?? 0;
+      }
+      await finishJob(api, league.id);
+      await api.leagues.simulate(league.id, { kind: "season" });
+      await finishJob(api, league.id);
+      await api.leagues.startNextSeason(league.id);
+      const report = await api.leagues.offseason(league.id);
+      expect(report.year).toBe(first + i + 1);
+      expect(report.draft).toHaveLength(24);
+    }
+    const { teams } = await api.leagues.teams(league.id);
+    for (const t of teams) {
+      const detail = await api.leagues.team(league.id, t.id);
+      expect(detail.players).toHaveLength(15);
+      const numbers = detail.players.map((p) => p.jersey);
+      expect(new Set(numbers).size).toBe(numbers.length);
+    }
+    // The league has aged three years and gained its draft classes.
+    const state = await api.leagues.simulation(league.id);
+    expect(state.season?.year).toBe(first + 3);
   });
 });
