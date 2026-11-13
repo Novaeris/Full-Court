@@ -124,6 +124,26 @@ An **Offseason** page: the stage and calendar at the top with the button for the
 
 Choosing your own draft picks, signing players (offers and contracts), the salary cap, trades and owner finances. Until then your team's draft and roster moves are run by the same rules as every other team.
 
+## What is missing, and the order to build it (Owner Mode)
+
+An audit after Phase 17, before the next phase. Each gap is something the owner should be able to do or see and can't yet.
+
+**1. AI Assist is stored but not used, so the owner has no say.** Every team has five AI Assist switches (trades, roster coverage, roster management, scouting, drafting), and the setup screen saves them, but nothing reads them. The offseason runs your team's draft and roster moves with the computer teams' rules whatever the switches say. The intended meaning is the opposite: with a switch off the owner decides, with it on the AI decides for that job. This is the first thing to fix because every other owner action hangs on it.
+
+**2. Draft and roster moves.** The draft class doesn't exist until the draft is held, so there is nothing to scout, rank or choose from. The owner can't pick, can't trade picks, can't release or sign a player (the free agents are listed nowhere), can't set the roster before free agency ends, and has no say in who retires or is cut when a team is over 15. During the season there are no roster moves at all.
+
+**3. Player signings, and with them money.** Players have no contract, no salary and no length, so there is nothing to offer, extend, let expire or cap. Free agency is only the computer filling rosters. Signings need a money model first: a salary for every player, contract years, a salary cap (soft or hard, and the rules for exceptions), the draft's rookie scale, and how a free agent chooses between offers. Without it "sign a player" would be a button with no consequence.
+
+**4. Staff salaries are only a budget check.** Staff have salaries and contracts, but nothing is ever paid, because the league has no finances: no revenue (tickets, TV, merchandise), no payroll, no owner profit, no budget that changes with success or market size. Every team has the same $10 million, forever. The staff budget should become part of the same finances as player salaries (one payroll, one cap or tax rule, a budget that depends on the team).
+
+**5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. `TeamStrategy` (pace, three-point focus, defence) exists in the engine but is the same default for every team and can't be set, stored or changed, and starters are chosen automatically. A head coach, lineups and a strategy page belong together.
+
+**6. Smaller gaps.** Only the champion and the finalist are recorded as awards (no MVP, rookie of the year, all-league teams, scoring titles); no injuries; no all-star game; no record book or league history page; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
+
+**Order.** (a) Make AI Assist real and move the offseason's decisions to the owner: a draft board that exists before the draft, choosing picks, roster moves in free agency and the preseason. (b) Finances and contracts: salaries, the cap, rookie scale, owner budget, staff payroll folded into it. (c) Free agency with offers and negotiation, extensions, releases. (d) In-season roster moves and trades. (e) Strategy, lineups and the head coach's effect on games. (f) Awards and history.
+
+Decisions the design needs from the owner are listed with each phase when it is planned.
+
 ## Saves and history (Owner Mode)
 
 - **Limits.** Each account has up to 5 saves (leagues), and each league can play up to 50 seasons.
