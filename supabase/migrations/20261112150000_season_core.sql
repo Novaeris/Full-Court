@@ -182,8 +182,11 @@ create index box_score_lines_team_idx on public.box_score_lines (league_id, team
 
 -- A player's totals for one season with one team (a traded player has a row per
 -- team). Per-game averages are these totals divided by `games_played`.
--- `high_points`, `double_doubles` and `triple_doubles` can't be recovered from
--- totals, which is why they are captured here, from the box scores, at archive time.
+-- The single-game highs (`high_*`, each with the day it happened and the
+-- opponent) and the double- and triple-double counts can't be recovered from
+-- totals, so they are captured here, from the box scores, at archive time.
+-- A season high is the best of these across the league, and a career high the
+-- best across seasons: both are queries, not tables.
 create table public.player_season_stats (
   league_id uuid not null references public.leagues (id) on delete cascade,
   season_id uuid not null,
@@ -206,6 +209,24 @@ create table public.player_season_stats (
   ftm integer not null check (ftm >= 0),
   fta integer not null check (fta >= 0),
   high_points smallint not null check (high_points >= 0),
+  high_points_day smallint not null check (high_points_day >= 1),
+  high_points_opponent_id uuid not null,
+  high_rebounds smallint not null check (high_rebounds >= 0),
+  high_rebounds_day smallint not null check (high_rebounds_day >= 1),
+  high_rebounds_opponent_id uuid not null,
+  high_assists smallint not null check (high_assists >= 0),
+  high_assists_day smallint not null check (high_assists_day >= 1),
+  high_assists_opponent_id uuid not null,
+  high_steals smallint not null check (high_steals >= 0),
+  high_steals_day smallint not null check (high_steals_day >= 1),
+  high_steals_opponent_id uuid not null,
+  high_blocks smallint not null check (high_blocks >= 0),
+  high_blocks_day smallint not null check (high_blocks_day >= 1),
+  high_blocks_opponent_id uuid not null,
+  -- Three-pointers made.
+  high_threes smallint not null check (high_threes >= 0),
+  high_threes_day smallint not null check (high_threes_day >= 1),
+  high_threes_opponent_id uuid not null,
   double_doubles smallint not null check (double_doubles between 0 and games_played),
   triple_doubles smallint not null check (triple_doubles between 0 and double_doubles),
   primary key (season_id, player_id, team_id),
@@ -241,6 +262,29 @@ create table public.team_season_stats (
   rank_overall smallint not null check (rank_overall >= 1),
   rank_conference smallint not null check (rank_conference >= 1),
   rank_division smallint not null check (rank_division >= 1),
+  -- Single-game highs and lows, each with the day it happened and the opponent.
+  -- Null for a team that played no games (or has no win or no loss yet).
+  -- Margins are positive: the size of the biggest win and of the worst loss.
+  high_points smallint,
+  high_points_day smallint,
+  high_points_opponent_id uuid,
+  low_points smallint,
+  low_points_day smallint,
+  low_points_opponent_id uuid,
+  high_points_allowed smallint,
+  high_points_allowed_day smallint,
+  high_points_allowed_opponent_id uuid,
+  low_points_allowed smallint,
+  low_points_allowed_day smallint,
+  low_points_allowed_opponent_id uuid,
+  biggest_win smallint,
+  biggest_win_day smallint,
+  biggest_win_opponent_id uuid,
+  worst_loss smallint,
+  worst_loss_day smallint,
+  worst_loss_opponent_id uuid,
+  longest_win_streak smallint not null default 0 check (longest_win_streak >= 0),
+  longest_loss_streak smallint not null default 0 check (longest_loss_streak >= 0),
   primary key (season_id, team_id),
   foreign key (league_id, season_id)
     references public.seasons (league_id, id) on delete cascade,
@@ -248,7 +292,20 @@ create table public.team_season_stats (
     references public.teams (league_id, id) on delete cascade,
   check (home_wins <= wins and home_losses <= losses),
   check (division_wins <= wins and division_losses <= losses),
-  check (conference_wins <= wins and conference_losses <= losses)
+  check (conference_wins <= wins and conference_losses <= losses),
+  -- Each high or low has its day and opponent, or none of the three.
+  check ((high_points is null) = (high_points_day is null)
+     and (high_points is null) = (high_points_opponent_id is null)),
+  check ((low_points is null) = (low_points_day is null)
+     and (low_points is null) = (low_points_opponent_id is null)),
+  check ((high_points_allowed is null) = (high_points_allowed_day is null)
+     and (high_points_allowed is null) = (high_points_allowed_opponent_id is null)),
+  check ((low_points_allowed is null) = (low_points_allowed_day is null)
+     and (low_points_allowed is null) = (low_points_allowed_opponent_id is null)),
+  check ((biggest_win is null) = (biggest_win_day is null)
+     and (biggest_win is null) = (biggest_win_opponent_id is null)),
+  check ((worst_loss is null) = (worst_loss_day is null)
+     and (worst_loss is null) = (worst_loss_opponent_id is null))
 );
 
 create index team_season_stats_team_idx
@@ -824,20 +881,29 @@ begin
     raise exception 'invalid_standings_order' using errcode = '22023';
   end if;
 
-  -- Team records and scoring.
+  -- Team records, scoring, single-game highs and lows, and streaks. Ties for a
+  -- high or low go to the earliest day (then the game id), so it is repeatable.
   insert into public.team_season_stats (
     league_id, season_id, team_id, wins, losses, home_wins, home_losses,
     division_wins, division_losses, conference_wins, conference_losses,
-    points_for, points_against, rank_overall, rank_conference, rank_division
+    points_for, points_against, rank_overall, rank_conference, rank_division,
+    high_points, high_points_day, high_points_opponent_id,
+    low_points, low_points_day, low_points_opponent_id,
+    high_points_allowed, high_points_allowed_day, high_points_allowed_opponent_id,
+    low_points_allowed, low_points_allowed_day, low_points_allowed_opponent_id,
+    biggest_win, biggest_win_day, biggest_win_opponent_id,
+    worst_loss, worst_loss_day, worst_loss_opponent_id,
+    longest_win_streak, longest_loss_streak
   )
   with results as (
-    select g.home_team_id as team_id, g.away_team_id as opponent_id,
-           true as at_home, g.home_score as scored, g.away_score as allowed,
+    select g.id as game_id, g.day, g.home_team_id as team_id,
+           g.away_team_id as opponent_id, true as at_home,
+           g.home_score as scored, g.away_score as allowed,
            g.home_score > g.away_score as won
     from public.games g where g.season_id = target_season
     union all
-    select g.away_team_id, g.home_team_id, false, g.away_score, g.home_score,
-           g.away_score > g.home_score
+    select g.id, g.day, g.away_team_id, g.home_team_id, false,
+           g.away_score, g.home_score, g.away_score > g.home_score
     from public.games g where g.season_id = target_season
   ),
   totals as (
@@ -851,11 +917,52 @@ begin
            count(*) filter (where r.won and t.conference_id = o.conference_id) as conference_wins,
            count(*) filter (where not r.won and t.conference_id = o.conference_id) as conference_losses,
            sum(r.scored) as points_for,
-           sum(r.allowed) as points_against
+           sum(r.allowed) as points_against,
+           max(r.scored) as high_points,
+           (array_agg(r.day order by r.scored desc, r.day, r.game_id))[1] as high_points_day,
+           (array_agg(r.opponent_id order by r.scored desc, r.day, r.game_id))[1] as high_points_opponent_id,
+           min(r.scored) as low_points,
+           (array_agg(r.day order by r.scored, r.day, r.game_id))[1] as low_points_day,
+           (array_agg(r.opponent_id order by r.scored, r.day, r.game_id))[1] as low_points_opponent_id,
+           max(r.allowed) as high_points_allowed,
+           (array_agg(r.day order by r.allowed desc, r.day, r.game_id))[1] as high_points_allowed_day,
+           (array_agg(r.opponent_id order by r.allowed desc, r.day, r.game_id))[1] as high_points_allowed_opponent_id,
+           min(r.allowed) as low_points_allowed,
+           (array_agg(r.day order by r.allowed, r.day, r.game_id))[1] as low_points_allowed_day,
+           (array_agg(r.opponent_id order by r.allowed, r.day, r.game_id))[1] as low_points_allowed_opponent_id,
+           max(r.scored - r.allowed) filter (where r.won) as biggest_win,
+           (array_agg(r.day order by (r.scored - r.allowed) desc, r.day, r.game_id)
+              filter (where r.won))[1] as biggest_win_day,
+           (array_agg(r.opponent_id order by (r.scored - r.allowed) desc, r.day, r.game_id)
+              filter (where r.won))[1] as biggest_win_opponent_id,
+           max(r.allowed - r.scored) filter (where not r.won) as worst_loss,
+           (array_agg(r.day order by (r.allowed - r.scored) desc, r.day, r.game_id)
+              filter (where not r.won))[1] as worst_loss_day,
+           (array_agg(r.opponent_id order by (r.allowed - r.scored) desc, r.day, r.game_id)
+              filter (where not r.won))[1] as worst_loss_opponent_id
     from results r
     join public.teams t on t.id = r.team_id
     join public.teams o on o.id = r.opponent_id
     group by r.team_id
+  ),
+  -- Longest runs of wins and of losses: consecutive games share a group when
+  -- the row number overall and the row number within the result move together.
+  runs as (
+    select team_id, won, count(*) as length
+    from (
+      select r.team_id, r.won,
+             row_number() over (partition by r.team_id order by r.day)
+             - row_number() over (partition by r.team_id, r.won order by r.day) as run
+      from results r
+    ) numbered
+    group by team_id, won, run
+  ),
+  streaks as (
+    select team_id,
+           coalesce(max(length) filter (where won), 0) as longest_win_streak,
+           coalesce(max(length) filter (where not won), 0) as longest_loss_streak
+    from runs
+    group by team_id
   ),
   ordered as (
     select u.team_id, u.place::integer as rank_overall
@@ -869,17 +976,32 @@ begin
          coalesce(a.points_for, 0), coalesce(a.points_against, 0),
          o.rank_overall,
          row_number() over (partition by t.conference_id order by o.rank_overall),
-         row_number() over (partition by t.division_id order by o.rank_overall)
+         row_number() over (partition by t.division_id order by o.rank_overall),
+         a.high_points, a.high_points_day, a.high_points_opponent_id,
+         a.low_points, a.low_points_day, a.low_points_opponent_id,
+         a.high_points_allowed, a.high_points_allowed_day, a.high_points_allowed_opponent_id,
+         a.low_points_allowed, a.low_points_allowed_day, a.low_points_allowed_opponent_id,
+         a.biggest_win, a.biggest_win_day, a.biggest_win_opponent_id,
+         a.worst_loss, a.worst_loss_day, a.worst_loss_opponent_id,
+         coalesce(s.longest_win_streak, 0), coalesce(s.longest_loss_streak, 0)
   from public.teams t
   join ordered o on o.team_id = t.id
   left join totals a on a.team_id = t.id
+  left join streaks s on s.team_id = t.id
   where t.league_id = archived.league_id;
 
-  -- Player totals, plus what totals can't give back later.
+  -- Player totals and single-game highs, plus what totals can't give back later.
   insert into public.player_season_stats (
     league_id, season_id, player_id, team_id, games_played, games_started,
     minutes, points, rebounds, assists, steals, blocks, turnovers, fouls,
-    fgm, fga, tpm, tpa, ftm, fta, high_points, double_doubles, triple_doubles
+    fgm, fga, tpm, tpa, ftm, fta,
+    high_points, high_points_day, high_points_opponent_id,
+    high_rebounds, high_rebounds_day, high_rebounds_opponent_id,
+    high_assists, high_assists_day, high_assists_opponent_id,
+    high_steals, high_steals_day, high_steals_opponent_id,
+    high_blocks, high_blocks_day, high_blocks_opponent_id,
+    high_threes, high_threes_day, high_threes_opponent_id,
+    double_doubles, triple_doubles
   )
   select archived.league_id, target_season, l.player_id, l.team_id,
          count(*), count(*) filter (where l.started),
@@ -887,6 +1009,23 @@ begin
          sum(l.steals), sum(l.blocks), sum(l.turnovers), sum(l.fouls),
          sum(l.fgm), sum(l.fga), sum(l.tpm), sum(l.tpa), sum(l.ftm), sum(l.fta),
          max(l.points),
+         (array_agg(g.day order by l.points desc, g.day, g.id))[1],
+         (array_agg(cats.opponent_id order by l.points desc, g.day, g.id))[1],
+         max(l.rebounds),
+         (array_agg(g.day order by l.rebounds desc, g.day, g.id))[1],
+         (array_agg(cats.opponent_id order by l.rebounds desc, g.day, g.id))[1],
+         max(l.assists),
+         (array_agg(g.day order by l.assists desc, g.day, g.id))[1],
+         (array_agg(cats.opponent_id order by l.assists desc, g.day, g.id))[1],
+         max(l.steals),
+         (array_agg(g.day order by l.steals desc, g.day, g.id))[1],
+         (array_agg(cats.opponent_id order by l.steals desc, g.day, g.id))[1],
+         max(l.blocks),
+         (array_agg(g.day order by l.blocks desc, g.day, g.id))[1],
+         (array_agg(cats.opponent_id order by l.blocks desc, g.day, g.id))[1],
+         max(l.tpm),
+         (array_agg(g.day order by l.tpm desc, g.day, g.id))[1],
+         (array_agg(cats.opponent_id order by l.tpm desc, g.day, g.id))[1],
          count(*) filter (where cats.n >= 2),
          count(*) filter (where cats.n >= 3)
   from public.box_score_lines l
@@ -894,7 +1033,9 @@ begin
   cross join lateral (
     select (l.points >= 10)::integer + (l.rebounds >= 10)::integer
          + (l.assists >= 10)::integer + (l.steals >= 10)::integer
-         + (l.blocks >= 10)::integer as n
+         + (l.blocks >= 10)::integer as n,
+           case when l.team_id = g.home_team_id then g.away_team_id
+                else g.home_team_id end as opponent_id
   ) cats
   where g.season_id = target_season
   group by l.player_id, l.team_id;

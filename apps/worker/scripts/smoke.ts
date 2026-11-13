@@ -406,6 +406,20 @@ async function main(): Promise<void> {
 
     // Archive the finished season into history. Playoffs aren't built yet, so
     // the season is marked complete by hand.
+    // The real extremes, read before the box scores are deleted.
+    const bestLine = must(
+      await admin
+        .from("box_score_lines")
+        .select("points, rebounds, assists")
+        .eq("league_id", leagueId)
+        .order("points", { ascending: false })
+        .limit(1),
+    )[0];
+    const biggestMargin = Math.max(
+      ...all.map((g) =>
+        Math.abs((g.home_score as number) - (g.away_score as number)),
+      ),
+    );
     const pointsInGames = all.reduce(
       (s, g) => s + (g.home_score as number) + (g.away_score as number),
       0,
@@ -428,7 +442,9 @@ async function main(): Promise<void> {
     const teamStats = must(
       await owner
         .from("team_season_stats")
-        .select("team_id, wins, losses, points_for, rank_overall")
+        .select(
+          "team_id, wins, losses, points_for, rank_overall, biggest_win, worst_loss, low_points, high_points, longest_win_streak",
+        )
         .eq("season_id", season.id),
     );
     check(teamStats.length === 30, "all 30 teams have season records");
@@ -445,7 +461,9 @@ async function main(): Promise<void> {
     const playerStats = must(
       await owner
         .from("player_season_stats")
-        .select("player_id, games_played, points, high_points")
+        .select(
+          "player_id, games_played, points, high_points, high_rebounds, high_assists, high_threes",
+        )
         .eq("season_id", season.id),
     );
     check(
@@ -456,6 +474,39 @@ async function main(): Promise<void> {
     console.log(
       `     top scorer: ${((top?.points ?? 0) / (top?.games_played ?? 1)).toFixed(1)} per game, best game ${top?.high_points}`,
     );
+    const seasonHigh = (
+      key: "high_points" | "high_rebounds" | "high_assists" | "high_threes",
+    ) => Math.max(...playerStats.map((p) => p[key]));
+    console.log(
+      `     season highs: ${seasonHigh("high_points")} points, ${seasonHigh("high_rebounds")} rebounds, ${seasonHigh("high_assists")} assists, ${seasonHigh("high_threes")} threes`,
+    );
+    check(
+      seasonHigh("high_points") === bestLine?.points,
+      "the season's highest-scoring game is among the players' highs",
+    );
+    check(
+      playerStats.every((p) => p.high_points * 1 <= (bestLine?.points ?? 0)) &&
+        playerStats.every((p) => p.high_points <= p.points),
+      "no player's best game is more than the league's best or his own total",
+    );
+    check(
+      Math.max(...teamStats.map((t) => t.biggest_win ?? 0)) === biggestMargin,
+      `the biggest win in the league (${biggestMargin}) is the best of the teams' biggest wins`,
+    );
+    check(
+      teamStats.every(
+        (t) =>
+          (t.low_points ?? 0) <= (t.high_points ?? 0) &&
+          t.longest_win_streak >= 1 &&
+          (t.biggest_win ?? 0) >= 1 &&
+          (t.worst_loss ?? 0) >= 1,
+      ),
+      "every team has sensible highs, lows and a win streak",
+    );
+    const streak = [...teamStats].sort(
+      (a, b) => b.longest_win_streak - a.longest_win_streak,
+    )[0];
+    console.log(`     longest win streak: ${streak?.longest_win_streak}`);
 
     const left = await Promise.all(
       ["game_replays", "box_score_lines", "games"].map(async (table) => {

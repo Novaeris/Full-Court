@@ -3,7 +3,7 @@
 begin;
 \ir helpers.psql
 
-select plan(84);
+select plan(90);
 
 -- Fixtures ---------------------------------------------------------------------------------------
 
@@ -69,16 +69,20 @@ create function pg_temp.day_replays(season uuid, d integer) returns jsonb langua
   where g.season_id = season and g.day = d;
 $$;
 
--- One line per team: the home team scores 100, the away team 90.
+-- One line per team: the home team scores 100, the away team 90. The other
+-- numbers grow with the day so each single-game high has a known day: rebounds
+-- 7, 10, 13; assists 2, 4, 6; steals 1, 2, 3; threes 1, 2, 3; blocks stay at 2
+-- (a tie, which goes to the earliest day). Points stay 100 and 90 whatever the
+-- day, because a three-pointer replaces a free throw and a two.
 create function pg_temp.day_lines(season uuid, d integer) returns jsonb language sql as $$
   select coalesce(jsonb_agg(jsonb_build_object(
     'game_id', g.id,
     'player_id', (select p.id from public.players p where p.team_id = s.team_id
                   order by p.jersey, p.id limit 1),
     'team_id', s.team_id, 'started', true, 'minutes', 48,
-    'points', s.pts, 'rebounds', 0, 'assists', 0, 'steals', 0, 'blocks', 0,
-    'turnovers', 0, 'fouls', 0, 'fgm', s.fgm, 'fga', 80, 'tpm', 0, 'tpa', 0,
-    'ftm', 20, 'fta', 25
+    'points', s.pts, 'rebounds', 4 + 3 * d, 'assists', 2 * d, 'steals', d,
+    'blocks', 2, 'turnovers', 0, 'fouls', 0, 'fgm', s.fgm, 'fga', 80,
+    'tpm', d, 'tpa', 10, 'ftm', 20 - d, 'fta', 25
   )), '[]'::jsonb)
   from public.games g
   cross join lateral (values
@@ -586,13 +590,72 @@ select is(
           || ':' || p.high_points || ':' || p.double_doubles
    from player_season_stats p join teams tm on tm.id = p.team_id
    where tm.league_id = pg_temp.league_id('Season') and tm.abbreviation = 'T01'),
-  '3:3:144:290:100:0',
+  '3:3:144:290:100:2',
   'a player''s games, minutes, points and best game are summed'
 );
 select is(
   (select count(*)::int from player_season_stats where league_id = pg_temp.league_id('Season')),
   4,
   'only players who played get season stats'
+);
+select is(
+  (select p.high_points || '@' || p.high_points_day
+          || ' ' || p.high_rebounds || '@' || p.high_rebounds_day
+          || ' ' || p.high_assists || '@' || p.high_assists_day
+          || ' ' || p.high_steals || '@' || p.high_steals_day
+          || ' ' || p.high_blocks || '@' || p.high_blocks_day
+          || ' ' || p.high_threes || '@' || p.high_threes_day
+   from player_season_stats p join teams tm on tm.id = p.team_id
+   where tm.league_id = pg_temp.league_id('Season') and tm.abbreviation = 'T01'),
+  '100@1 13@3 6@3 3@3 2@1 3@3',
+  'a player''s single-game highs are kept with their day, and ties go to the earliest day'
+);
+select is(
+  (select p.high_points_day = 2 and p.high_rebounds_day = 3
+      and p.high_points_opponent_id =
+          (select id from teams where league_id = pg_temp.league_id('Season') and abbreviation = 'T04')
+      and p.high_rebounds_opponent_id =
+          (select id from teams where league_id = pg_temp.league_id('Season') and abbreviation = 'T01')
+   from player_season_stats p join teams tm on tm.id = p.team_id
+   where tm.league_id = pg_temp.league_id('Season') and tm.abbreviation = 'T02'),
+  true,
+  'each high remembers which team it came against'
+);
+select is(
+  (select t.high_points || '@' || t.high_points_day
+          || ' ' || t.low_points || '@' || t.low_points_day
+          || ' ' || t.high_points_allowed || '@' || t.high_points_allowed_day
+          || ' ' || t.low_points_allowed || '@' || t.low_points_allowed_day
+          || ' +' || t.biggest_win || '@' || t.biggest_win_day
+          || ' -' || t.worst_loss || '@' || t.worst_loss_day
+          || ' streaks ' || t.longest_win_streak || '/' || t.longest_loss_streak
+   from team_season_stats t join teams tm on tm.id = t.team_id
+   where tm.league_id = pg_temp.league_id('Season') and tm.abbreviation = 'T01'),
+  '100@1 90@3 100@3 90@1 +10@1 -10@3 streaks 2/1',
+  'a team''s highs and lows in scoring, its biggest win, worst loss and streaks are kept'
+);
+select is(
+  (select t.longest_win_streak || '/' || t.longest_loss_streak
+   from team_season_stats t join teams tm on tm.id = t.team_id
+   where tm.league_id = pg_temp.league_id('Season') and tm.abbreviation = 'T04'),
+  '1/2',
+  'a streak is the longest run, wherever in the season it falls'
+);
+select is(
+  (select t.high_points is null and t.low_points is null and t.biggest_win is null
+      and t.worst_loss is null and t.longest_win_streak = 0 and t.longest_loss_streak = 0
+   from team_season_stats t join teams tm on tm.id = t.team_id
+   where tm.league_id = pg_temp.league_id('Season') and tm.abbreviation = 'T07'),
+  true,
+  'a team that played no games has no highs, lows or streaks'
+);
+select is(
+  (select p.high_rebounds || '@' || p.high_rebounds_day
+   from player_season_stats p
+   where p.league_id = pg_temp.league_id('Season')
+   order by p.high_rebounds desc, p.high_rebounds_day limit 1),
+  '13@3',
+  'the season high is the best of the players'' highs'
 );
 select is(
   (select (select count(*) from games where league_id = pg_temp.league_id('Season'))

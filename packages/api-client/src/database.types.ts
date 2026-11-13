@@ -363,7 +363,24 @@ export type Database = {
           ftm: number
           games_played: number
           games_started: number
+          high_assists: number
+          high_assists_day: number
+          high_assists_opponent_id: string
+          high_blocks: number
+          high_blocks_day: number
+          high_blocks_opponent_id: string
           high_points: number
+          high_points_day: number
+          high_points_opponent_id: string
+          high_rebounds: number
+          high_rebounds_day: number
+          high_rebounds_opponent_id: string
+          high_steals: number
+          high_steals_day: number
+          high_steals_opponent_id: string
+          high_threes: number
+          high_threes_day: number
+          high_threes_opponent_id: string
           league_id: string
           minutes: number
           player_id: string
@@ -388,7 +405,24 @@ export type Database = {
           ftm: number
           games_played: number
           games_started: number
+          high_assists: number
+          high_assists_day: number
+          high_assists_opponent_id: string
+          high_blocks: number
+          high_blocks_day: number
+          high_blocks_opponent_id: string
           high_points: number
+          high_points_day: number
+          high_points_opponent_id: string
+          high_rebounds: number
+          high_rebounds_day: number
+          high_rebounds_opponent_id: string
+          high_steals: number
+          high_steals_day: number
+          high_steals_opponent_id: string
+          high_threes: number
+          high_threes_day: number
+          high_threes_opponent_id: string
           league_id: string
           minutes: number
           player_id: string
@@ -413,7 +447,24 @@ export type Database = {
           ftm?: number
           games_played?: number
           games_started?: number
+          high_assists?: number
+          high_assists_day?: number
+          high_assists_opponent_id?: string
+          high_blocks?: number
+          high_blocks_day?: number
+          high_blocks_opponent_id?: string
           high_points?: number
+          high_points_day?: number
+          high_points_opponent_id?: string
+          high_rebounds?: number
+          high_rebounds_day?: number
+          high_rebounds_opponent_id?: string
+          high_steals?: number
+          high_steals_day?: number
+          high_steals_opponent_id?: string
+          high_threes?: number
+          high_threes_day?: number
+          high_threes_opponent_id?: string
           league_id?: string
           minutes?: number
           player_id?: string
@@ -761,14 +812,31 @@ export type Database = {
       }
       team_season_stats: {
         Row: {
+          biggest_win: number | null
+          biggest_win_day: number | null
+          biggest_win_opponent_id: string | null
           conference_losses: number
           conference_wins: number
           division_losses: number
           division_wins: number
+          high_points: number | null
+          high_points_allowed: number | null
+          high_points_allowed_day: number | null
+          high_points_allowed_opponent_id: string | null
+          high_points_day: number | null
+          high_points_opponent_id: string | null
           home_losses: number
           home_wins: number
           league_id: string
+          longest_loss_streak: number
+          longest_win_streak: number
           losses: number
+          low_points: number | null
+          low_points_allowed: number | null
+          low_points_allowed_day: number | null
+          low_points_allowed_opponent_id: string | null
+          low_points_day: number | null
+          low_points_opponent_id: string | null
           points_against: number
           points_for: number
           rank_conference: number
@@ -777,16 +845,36 @@ export type Database = {
           season_id: string
           team_id: string
           wins: number
+          worst_loss: number | null
+          worst_loss_day: number | null
+          worst_loss_opponent_id: string | null
         }
         Insert: {
+          biggest_win?: number | null
+          biggest_win_day?: number | null
+          biggest_win_opponent_id?: string | null
           conference_losses: number
           conference_wins: number
           division_losses: number
           division_wins: number
+          high_points?: number | null
+          high_points_allowed?: number | null
+          high_points_allowed_day?: number | null
+          high_points_allowed_opponent_id?: string | null
+          high_points_day?: number | null
+          high_points_opponent_id?: string | null
           home_losses: number
           home_wins: number
           league_id: string
+          longest_loss_streak?: number
+          longest_win_streak?: number
           losses: number
+          low_points?: number | null
+          low_points_allowed?: number | null
+          low_points_allowed_day?: number | null
+          low_points_allowed_opponent_id?: string | null
+          low_points_day?: number | null
+          low_points_opponent_id?: string | null
           points_against: number
           points_for: number
           rank_conference: number
@@ -795,16 +883,36 @@ export type Database = {
           season_id: string
           team_id: string
           wins: number
+          worst_loss?: number | null
+          worst_loss_day?: number | null
+          worst_loss_opponent_id?: string | null
         }
         Update: {
+          biggest_win?: number | null
+          biggest_win_day?: number | null
+          biggest_win_opponent_id?: string | null
           conference_losses?: number
           conference_wins?: number
           division_losses?: number
           division_wins?: number
+          high_points?: number | null
+          high_points_allowed?: number | null
+          high_points_allowed_day?: number | null
+          high_points_allowed_opponent_id?: string | null
+          high_points_day?: number | null
+          high_points_opponent_id?: string | null
           home_losses?: number
           home_wins?: number
           league_id?: string
+          longest_loss_streak?: number
+          longest_win_streak?: number
           losses?: number
+          low_points?: number | null
+          low_points_allowed?: number | null
+          low_points_allowed_day?: number | null
+          low_points_allowed_opponent_id?: string | null
+          low_points_day?: number | null
+          low_points_opponent_id?: string | null
           points_against?: number
           points_for?: number
           rank_conference?: number
@@ -813,6 +921,9 @@ export type Database = {
           season_id?: string
           team_id?: string
           wins?: number
+          worst_loss?: number | null
+          worst_loss_day?: number | null
+          worst_loss_opponent_id?: string | null
         }
         Relationships: [
           {

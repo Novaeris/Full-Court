@@ -67,12 +67,13 @@ Design for the season core. Phase 10 fixes the types and rules (`@fullcourt/game
 - **Limits.** Each account has up to 5 saves (leagues), and each league can play up to 50 seasons.
 - **The current season is kept in full.** Every game's score, every player's box score, and a replay of every game, so you can watch any game of the season you are in. Games are stored as a recipe the engine replays rather than as plays (see [ARCHITECTURE.md](./ARCHITECTURE.md#season-tables-replays-and-history-phase-12-and-13)).
 - **Past seasons are summarised.** When the next season starts, the finished one is archived: its game detail is removed and what is kept forever is
-  - each player's season totals, with per-game averages (points, rebounds, assists and so on), their best scoring game and their double-doubles and triple-doubles,
-  - each team's record (overall, home, division and conference), points for and against, and where it finished,
+  - each player's season totals, with per-game averages (points, rebounds, assists and so on), their season highs (best game in points, rebounds, assists, steals, blocks and threes, with the day and the opponent) and their double-doubles and triple-doubles,
+  - each team's record (overall, home, division and conference), points for and against, where it finished, its highs and lows (most and fewest points scored and allowed, biggest win, worst loss, each with day and opponent) and its longest win and loss streaks,
   - award winners, including the champion.
-- **Not kept for past seasons:** individual game scores and schedules, box scores, replays, head-to-head history and player game logs. If one of these matters, it has to be added to the summary before a season is archived, because it can't be recovered afterwards.
+- **Not kept for past seasons:** individual game scores and schedules, box scores, replays, head-to-head history and player game logs (apart from each player's and team's single-game highs above). If one of these matters, it has to be added to the summary before a season is archived, because it can't be recovered afterwards.
 - **Replays and updates.** If the game engine is updated in a way that changes results, games already played keep their scores and box scores, but their replays may no longer be available.
-- **Size.** About 9 MB for a save while a season is being played, plus about 0.35 MB for each finished season. Five saves each at 50 seasons come to roughly 130 MB.
+- **Highs and records.** A season high is the best of the players' or teams' highs that season, and a career high or all-time record is the best across seasons, so a record book can be built from this history.
+- **Size.** About 9 MB for a save while a season is being played, plus about 0.3 MB for each finished season. Five saves each at 50 seasons come to roughly 120 MB.
 
 ## Roadmap
 

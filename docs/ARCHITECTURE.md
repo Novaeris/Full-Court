@@ -221,16 +221,16 @@ Migration `20261112150000_season_core.sql`. Every table hangs off `league_id` wi
 | History (summary of every past season) | `player_season_stats`, `team_season_stats`, `season_awards` | Forever (and `seasons`, marked `archived`) |
 | Queue                                  | `sim_jobs`                                                  | Forever (a few rows)                       |
 
-| Table                 | Holds                                                                                                                                                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `seasons`             | `year`, `phase` (`regular-season`, `playoffs`, `complete`), `day` (next day to simulate), `last_day`, the schedule preset and tiers, and `archived_at`                                                                                            |
-| `games`               | One row per game: day, teams, `status`, scores, overtimes. Scores exist only when final, and there are no ties                                                                                                                                    |
-| `game_replays`        | The recipe to replay a game: `snapshot` (both rosters' ratings and strategies as they were), `rng_state` (the league's RNG just before the game) and `engine_version`. **No plays are stored**                                                    |
-| `box_score_lines`     | One row per player who played, derived from the plays. Each team's lines add up to its score (checked on commit)                                                                                                                                  |
-| `player_season_stats` | A player's season totals per team: games, starts, minutes, points, rebounds, assists, steals, blocks, turnovers, fouls, shooting splits, plus `high_points`, `double_doubles` and `triple_doubles`. Per-game averages are totals divided by games |
-| `team_season_stats`   | A team's record (overall, home, division, conference), points for and against, and where it finished (overall, conference, division)                                                                                                              |
-| `season_awards`       | Award winners per season (`award` is free text such as `champion`, with a team and/or player). Empty until playoffs and awards exist                                                                                                              |
-| `sim_jobs`            | The queue: `kind` (`day`, `week`, `season`), `status`, `days_requested`, `days_done`, `error`, `worker` and a heartbeat. One active job per league                                                                                                |
+| Table                 | Holds                                                                                                                                                                                                                                                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `seasons`             | `year`, `phase` (`regular-season`, `playoffs`, `complete`), `day` (next day to simulate), `last_day`, the schedule preset and tiers, and `archived_at`                                                                                                                                                                                         |
+| `games`               | One row per game: day, teams, `status`, scores, overtimes. Scores exist only when final, and there are no ties                                                                                                                                                                                                                                 |
+| `game_replays`        | The recipe to replay a game: `snapshot` (both rosters' ratings and strategies as they were), `rng_state` (the league's RNG just before the game) and `engine_version`. **No plays are stored**                                                                                                                                                 |
+| `box_score_lines`     | One row per player who played, derived from the plays. Each team's lines add up to its score (checked on commit)                                                                                                                                                                                                                               |
+| `player_season_stats` | A player's season totals per team: games, starts, minutes, points, rebounds, assists, steals, blocks, turnovers, fouls, shooting splits, plus single-game highs in points, rebounds, assists, steals, blocks and threes (each with its day and opponent), `double_doubles` and `triple_doubles`. Per-game averages are totals divided by games |
+| `team_season_stats`   | A team's record (overall, home, division, conference), points for and against, where it finished (overall, conference, division), its single-game highs and lows (most and fewest points scored and allowed, biggest win and worst loss, each with day and opponent) and its longest win and loss streaks                                      |
+| `season_awards`       | Award winners per season (`award` is free text such as `champion`, with a team and/or player). Empty until playoffs and awards exist                                                                                                                                                                                                           |
+| `sim_jobs`            | The queue: `kind` (`day`, `week`, `season`), `status`, `days_requested`, `days_done`, `error`, `worker` and a heartbeat. One active job per league                                                                                                                                                                                             |
 
 **Plays are replayed, not stored.** The engine is deterministic, so a game's recipe gives back the exact plays, score and box score (`replayGame` in `@fullcourt/game-engine`, about 1.3 ms a game, on a server, in a browser or on a phone). Storing 416 plays a game as rows cost 105 MB a season; the recipe costs about 3 MB.
 
@@ -238,6 +238,8 @@ Migration `20261112150000_season_core.sql`. Every table hangs off `league_id` wi
 - **Self-check.** The worker replays every game of a day (after a JSON round trip, as the database stores it) and compares the plays and box score with the originals before committing. A recipe that doesn't reproduce its game fails the job instead of being stored.
 - **Cross-device caveat.** Node against Node reproduces exactly (tested). The engine uses `Math.log` and `Math.cos`, which the JavaScript specification doesn't require to give identical results in every browser engine. A viewer should check that its replay ends on the stored final score and, if it doesn't, ask the server to regenerate the game.
 - **A snapshot must hold everything that affects a game.** Features that add inputs (injuries, lineup settings) have to add them to `ReplaySnapshot`.
+
+**Highs, lows and records.** A season high is the best of the players' (or teams') highs in that season, and a career high or an all-time record is the best across seasons: both are queries over the history tables, so they need no tables of their own. Ties go to the earliest day, then the game id, so they are repeatable.
 
 **Archiving.** `admin_archive_season(season, standings_order)` runs in one transaction. It computes player and team summaries from the stored games and box scores, takes only the ranking from `rankStandings` (so the tiebreakers stay in one place), checks that each team's points equal its players' points and that wins equal losses, and only then deletes the season's games (their box scores and replays go with them). It needs the season to be `complete`. `admin_create_season` refuses to start a season while an earlier one isn't archived, so detail for more than one season never builds up. **What archiving doesn't summarise is lost for good**, so change the history tables before a season is archived. The offseason flow (Phase 7+) calls it when starting the next season; until playoffs exist nothing marks a season `complete`, so nothing is archived yet.
 
@@ -249,17 +251,17 @@ Migration `20261112150000_season_core.sql`. Every table hangs off `league_id` wi
 | `game_replays`                      | 3.4 MB                        |
 | `box_score_lines` (21,700 lines)    | 4.6 MB                        |
 | **Detail of the current season**    | **8.7 MB**                    |
-| History per archived season         | about 0.35 MB                 |
+| History per archived season         | about 0.3 MB                  |
 | Time to simulate and store a season | about 8 seconds on the worker |
 
-So a slot costs about 9 MB plus 0.35 MB for each archived season, and an account's five slots at the same point cost:
+So a slot costs about 9 MB plus 0.3 MB for each archived season, and an account's five slots at the same point cost:
 
 | Seasons simulated | One slot | Five slots |
 | ----------------- | -------- | ---------- |
 | 1                 | 9 MB     | 46 MB      |
-| 10                | 12 MB    | 62 MB      |
-| 20                | 16 MB    | 79 MB      |
-| 50 (the limit)    | 26 MB    | 132 MB     |
+| 10                | 12 MB    | 60 MB      |
+| 20                | 15 MB    | 75 MB      |
+| 50 (the limit)    | 24 MB    | 120 MB     |
 
 Box scores are the largest piece of the current season. They could be regenerated from the replays on demand (saving about 4.6 MB a slot), but then they'd disappear for older games after an engine update, so they're stored for now.
 
