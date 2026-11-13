@@ -93,7 +93,7 @@ shared  ←  game-types  ←  game-rules  ←  game-engine
   - Game time is passed in as data and never read from the clock.
   - A pinned-sequence test locks the RNG output across releases and platforms.
 - **JSON-safe data.** Values that cross a package boundary are plain objects, arrays, strings, numbers and booleans. No `Map`, `Set`, class instances or `bigint`. The same value can then be a Postgres row, an API response or mobile storage.
-- **Rows in, rows out.** Simulation functions take only the rows they need and return only the rows that changed, e.g. `simulateDay(input) → { games, boxScores, playerUpdates, rngState }`. There is no whole-league save object.
+- **Rows in, rows out.** Simulation functions take only the rows they need and return only the rows that changed, e.g. `simulateDay(input) → { games, plays, boxScores, rngState }`. There is no whole-league save object.
 
 ## 3. Shared backend
 
@@ -197,7 +197,14 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
 - `game-types/src/season.ts`: `SeasonState`, `ScheduleTiers`, `Game`, `PlayerGameLine`, `BoxScore`, `TeamStrategy` and their defaults.
 - `game-rules/src/season/schedule.ts`: matchup tiers, opponent counts, `seasonLength` and `validateScheduleTiers`.
 - `game-rules/src/season/standings.ts`: `rankStandings` (deterministic tiebreakers). Its rows extend `StandingEntry`, so they pass straight to `seedPlayoffTeams`.
-- Still to come: the schedule generator and `simulateDay` in `game-engine`, the season tables and `sim_jobs`, `apps/worker`, and the season pages.
+- `game-engine/src/season/` (Phase 11):
+  - `generateSchedule({ structure, teams, tiers }, rng)` returns every regular-season `Game`. Pairs with an odd meeting count get their extra home game along an Euler circuit, so each team's home and away totals differ by at most one. Games go on the earliest day both teams are free.
+  - `simulateGame(game, home, away, rng)` plays a game possession by possession and returns `{ game, plays, boxScore, starters }`. Inputs are `SimTeam` (id, roster of `SimPlayer`, `TeamStrategy`), so the engine needs no database rows.
+  - `buildBoxScore(gameId, plays, starters, teamOf)` derives the box score from the plays alone. `simulateGame` uses it, and the tests check that lines add up to the score.
+  - `simulateDay({ games, teams, rngState })` returns `{ games, plays, boxScores, rngState }`: only the rows that changed. Games run in the order given and share one RNG.
+  - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, fouls, starter minutes, home edge) inside loose bounds, so a change that wrecks the balance fails a test.
+- Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
+- Still to come: the season tables and `sim_jobs`, `apps/worker`, and the season pages.
 
 ### Simulation (Phase 6)
 
