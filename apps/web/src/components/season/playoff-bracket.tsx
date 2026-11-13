@@ -1,185 +1,11 @@
-import Link from "next/link";
 import type {
   PlayoffSeries,
   PlayoffsResponse,
   Team,
 } from "@fullcourt/validation";
-import { TeamBadge, teamName } from "@/components/leagues/team-badge";
+import { TeamBadge } from "@/components/leagues/team-badge";
 
 type Round = PlayoffsResponse["rounds"][number];
-
-/** One team's line in a series: seed, name, and games won. */
-function SeriesTeam({
-  team,
-  seed,
-  wins,
-  winner,
-  eliminated,
-}: {
-  team: Team | undefined;
-  seed: number;
-  wins: number;
-  winner: boolean;
-  eliminated: boolean;
-}) {
-  if (!team) return null;
-  return (
-    <div
-      className={[
-        "flex items-center gap-2 px-3 py-2",
-        winner ? "font-bold" : "",
-        eliminated ? "text-text-muted" : "",
-      ].join(" ")}
-    >
-      <TeamBadge team={team} size="sm" />
-      <span className="min-w-0 flex-1">
-        <span className="mr-1 text-sm text-text-muted">{seed}</span>
-        {teamName(team)}
-        {team.localPlayerSlot !== null ? (
-          <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-xs font-bold text-on-accent-soft">
-            You
-          </span>
-        ) : null}
-      </span>
-      <span className="text-lg tabular-nums">{wins}</span>
-    </div>
-  );
-}
-
-function SeriesCard({
-  leagueId,
-  series,
-  teams,
-}: {
-  leagueId: string;
-  series: PlayoffSeries;
-  teams: ReadonlyMap<string, Team>;
-}) {
-  const a = teams.get(series.a.teamId);
-  const b = teams.get(series.b.teamId);
-  const done = series.winnerTeamId !== null;
-  const leader =
-    series.a.wins === series.b.wins
-      ? null
-      : series.a.wins > series.b.wins
-        ? a
-        : b;
-  const status = done
-    ? `${teamName((series.winnerTeamId === series.a.teamId ? a : b) as Team)} win ${Math.max(series.a.wins, series.b.wins)}–${Math.min(series.a.wins, series.b.wins)}`
-    : series.a.wins + series.b.wins === 0
-      ? `Best of ${series.bestOf}`
-      : leader
-        ? `${teamName(leader)} lead ${Math.max(series.a.wins, series.b.wins)}–${Math.min(series.a.wins, series.b.wins)}`
-        : `Series tied ${series.a.wins}–${series.b.wins}`;
-  const next = series.games.find((g) => g.status === "scheduled");
-  return (
-    <li className="rounded-lg border border-border bg-surface">
-      <div className="divide-y divide-border">
-        <SeriesTeam
-          team={a}
-          seed={series.a.seed}
-          wins={series.a.wins}
-          winner={series.winnerTeamId === series.a.teamId}
-          eliminated={done && series.winnerTeamId !== series.a.teamId}
-        />
-        <SeriesTeam
-          team={b}
-          seed={series.b.seed}
-          wins={series.b.wins}
-          winner={series.winnerTeamId === series.b.teamId}
-          eliminated={done && series.winnerTeamId !== series.b.teamId}
-        />
-      </div>
-      <p className="border-t border-border px-3 py-2 text-sm font-semibold text-text-muted">
-        {status}
-        {!done && next
-          ? ` · Game ${next.gameNumber} at ${teamName(teams.get(next.homeTeamId) as Team)}`
-          : ""}
-      </p>
-      {series.games.some((g) => g.status === "final") ? (
-        <ol
-          aria-label="Games"
-          className="flex flex-wrap gap-1 border-t border-border px-3 py-2"
-        >
-          {series.games
-            .filter((g) => g.status === "final")
-            .map((g) => {
-              const winnerIsHome = (g.homeScore ?? 0) > (g.awayScore ?? 0);
-              const winner = teams.get(
-                winnerIsHome ? g.homeTeamId : g.awayTeamId,
-              );
-              return (
-                <li key={g.id}>
-                  <Link
-                    href={`/leagues/${leagueId}/games/${g.id}`}
-                    className="inline-flex min-h-touch items-center rounded-md border border-border px-3 text-sm font-semibold hover:bg-surface-muted"
-                  >
-                    G{g.gameNumber} {winner?.abbreviation}{" "}
-                    {Math.max(g.homeScore ?? 0, g.awayScore ?? 0)}–
-                    {Math.min(g.homeScore ?? 0, g.awayScore ?? 0)}
-                  </Link>
-                </li>
-              );
-            })}
-        </ol>
-      ) : null}
-    </li>
-  );
-}
-
-/**
- * The playoff bracket. Each round is a column on wide screens (scrolling
- * inside its own region) and stacks on phones and tablets. A round that
- * hasn't started yet shows only the rounds before it.
- */
-function PlayoffRounds({
-  leagueId,
-  rounds,
-  series,
-  teams,
-}: {
-  leagueId: string;
-  rounds: readonly Round[];
-  series: readonly PlayoffSeries[];
-  teams: readonly Team[];
-}) {
-  const teamMap = new Map(teams.map((t) => [t.id, t]));
-  const played = rounds.filter((r) => series.some((s) => s.round === r.round));
-  return (
-    <div
-      role="region"
-      aria-label="Playoff bracket"
-      tabIndex={0}
-      className="overflow-x-auto"
-    >
-      <div className="flex flex-col gap-8 desktop:min-w-max desktop:flex-row">
-        {played.map((r) => (
-          <section
-            key={r.round}
-            aria-labelledby={`round-${r.round}`}
-            className="desktop:w-80"
-          >
-            <h2 id={`round-${r.round}`} className="mb-3 text-xl font-bold">
-              {r.label}
-            </h2>
-            <ul className="flex flex-col gap-3">
-              {series
-                .filter((s) => s.round === r.round)
-                .map((s) => (
-                  <SeriesCard
-                    key={s.id}
-                    leagueId={leagueId}
-                    series={s}
-                    teams={teamMap}
-                  />
-                ))}
-            </ul>
-          </section>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /** One side of a series in the bracket diagram: seed, badge, abbreviation, wins. */
 function MiniTeam({
@@ -198,7 +24,7 @@ function MiniTeam({
   return (
     <div
       className={[
-        "flex items-center gap-2 px-2 py-1.5 text-sm",
+        "flex items-center gap-2 px-3 py-2 text-base",
         winner ? "font-bold" : "",
         eliminated ? "text-text-muted" : "",
       ].join(" ")}
@@ -233,9 +59,9 @@ function MiniSeries({
 }) {
   const done = series?.winnerTeamId != null;
   return (
-    <div className="w-44 rounded-lg border border-border bg-surface">
+    <div className="w-52 rounded-lg border border-border bg-surface">
       {[series?.a, series?.b].map((side, i) => (
-        <div key={i} className={i === 1 ? "border-t border-border" : ""}>
+        <div key={i} className={i === 1 ? "border-t border-text-muted" : ""}>
           <MiniTeam
             team={side ? teams.get(side.teamId) : undefined}
             seed={side?.seed}
@@ -253,18 +79,19 @@ function MiniSeries({
  * The bracket diagram, drawn like the broadcast graphic: the first round on
  * the outer edges, each round meeting in the middle at the finals. A round
  * that hasn't been created yet shows empty slots so the shape is always
- * complete. Series cards are summaries; every game links from the round
- * lists below.
+ * complete. Scrolls sideways on narrow screens.
  */
-function BracketDiagram({
+export function PlayoffBracket({
   rounds,
   series,
-  teams,
+  teams: teamList,
 }: {
+  leagueId?: string;
   rounds: readonly Round[];
   series: readonly PlayoffSeries[];
-  teams: ReadonlyMap<string, Team>;
+  teams: readonly Team[];
 }) {
+  const teams = new Map(teamList.map((t) => [t.id, t]));
   const total = rounds.length;
   const find = (round: number, slot: number) =>
     series.find((s) => s.round === round && s.slot === slot);
@@ -277,7 +104,7 @@ function BracketDiagram({
     const offset = side === "left" ? 0 : perSide;
     const slots = Array.from({ length: perSide }, (_, i) => offset + i);
     const outward = side === "left" ? "right" : "left";
-    const line = "border-border";
+    const line = "border-text-muted";
     // Cards that meet in the next round share a bracket line.
     const groups: number[][] = [];
     if (perSide === 1) groups.push(slots);
@@ -323,9 +150,9 @@ function BracketDiagram({
   return (
     <div
       role="region"
-      aria-label="Playoff bracket diagram"
+      aria-label="Playoff bracket"
       tabIndex={0}
-      className="hidden overflow-x-auto desktop:block"
+      className="overflow-x-auto pb-2"
     >
       <div className="mx-auto flex min-w-max justify-center gap-6">
         {early.map((r) => (
@@ -341,29 +168,6 @@ function BracketDiagram({
           <Column key={`r${r}`} round={r} side="right" />
         ))}
       </div>
-    </div>
-  );
-}
-
-/**
- * The playoffs: the bracket diagram on wide screens, and below it (or alone on
- * phones) each round with its series and games.
- */
-export function PlayoffBracket(props: {
-  leagueId: string;
-  rounds: readonly Round[];
-  series: readonly PlayoffSeries[];
-  teams: readonly Team[];
-}) {
-  const teamMap = new Map(props.teams.map((t) => [t.id, t]));
-  return (
-    <div className="flex flex-col gap-10">
-      <BracketDiagram
-        rounds={props.rounds}
-        series={props.series}
-        teams={teamMap}
-      />
-      <PlayoffRounds {...props} />
     </div>
   );
 }

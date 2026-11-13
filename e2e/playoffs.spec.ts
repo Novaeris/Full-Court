@@ -51,10 +51,9 @@ test.describe("playoffs", () => {
     });
 
     // The bracket: every round, the final last.
-    await expect(
-      page.getByRole("heading", { name: "First round" }),
-    ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Finals" })).toBeVisible();
+    const diagram = page.getByRole("region", { name: "Playoff bracket" });
+    await expect(diagram.getByText("First round").first()).toBeVisible();
+    await expect(diagram.getByText("Finals")).toBeVisible();
 
     // The same facts through the API.
     const bracket = await api.leagues.playoffs(league.id);
