@@ -12,6 +12,9 @@ values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'authenticated', 'authenticated', 'owner-b@example.test');
 
 set local role service_role;
+-- Other work in this database (the e2e suite leaves queued jobs and leagues) must
+-- not interfere: a worker claims the oldest queued job of any league.
+delete from public.sim_jobs;
 select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Playoff');
 select admin_create_season(pg_temp.league_id('Playoff'), 2026, 'standard',
   '{"division": 4, "conference": 3, "interconference": 2}',

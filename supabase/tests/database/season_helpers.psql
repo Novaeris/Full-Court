@@ -30,7 +30,8 @@ create function pg_temp.double_booked(league uuid) returns jsonb language sql as
 $$;
 
 create function pg_temp.league_id(league_name text) returns uuid language sql security definer as $$
-  select id from public.leagues where name = league_name;
+  select id from public.leagues where name = league_name
+    and owner_id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 $$;
 create function pg_temp.season_id(league_name text) returns uuid language sql security definer as $$
   select id from public.seasons where league_id = pg_temp.league_id(league_name);

@@ -14,6 +14,9 @@ values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'authenticated', 'authenticated', 'owner-b@example.test');
 
 set local role service_role;
+-- Other work in this database (the e2e suite leaves queued jobs and leagues) must
+-- not interfere: a worker claims the oldest queued job of any league.
+delete from public.sim_jobs;
 select pg_temp.make_league('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Season');
 select pg_temp.make_league('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Other');
 
@@ -51,7 +54,7 @@ select throws_ok(
   'a team cannot play twice on one day'
 );
 select is(
-  (select count(*)::int from public.seasons where year = 2027),
+  (select count(*)::int from public.seasons where year = 2027 and league_id = pg_temp.league_id('Season')),
   0,
   'a refused schedule leaves no season behind'
 );
@@ -268,8 +271,8 @@ select is(
 );
 select is(
   (select (select count(*) from games where season_id = pg_temp.season_id('Season') and status = 'final')
-        || ':' || (select count(*) from game_replays)
-        || ':' || (select count(*) from box_score_lines)),
+        || ':' || (select count(*) from game_replays where game_id in (select id from games where season_id = pg_temp.season_id('Season')))
+        || ':' || (select count(*) from box_score_lines where game_id in (select id from games where season_id = pg_temp.season_id('Season')))),
   '2:2:4',
   'the day''s games, replays and box score lines are stored'
 );
@@ -452,7 +455,7 @@ where game_id = (select id from games where season_id = pg_temp.season_id('Seaso
   and team_id = (select home_team_id from games where season_id = pg_temp.season_id('Season') and day = 1 limit 1);
 select is(
   (select (select count(*) from games where season_id = pg_temp.season_id('Season'))
-       || ':' || (select count(*) from team_season_stats)
+       || ':' || (select count(*) from team_season_stats where season_id = pg_temp.season_id('Season'))
        || ':' || (archived_at is null)
    from seasons where id = pg_temp.season_id('Season')),
   '6:0:true',
