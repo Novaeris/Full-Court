@@ -177,7 +177,12 @@ export async function holdLottery(
 /** Makes the next picks in order; the draft ends after the last. */
 export async function makePicks(
   seasonId: string,
-  picks: readonly { pick: number; player_id: string }[],
+  picks: readonly {
+    pick: number;
+    player_id: string;
+    salary: number;
+    years: number;
+  }[],
 ): Promise<SeasonRow> {
   const { data, error } = await createAdminClient().rpc("admin_make_picks", {
     target_season: seasonId,
@@ -192,11 +197,15 @@ export async function signPlayer(input: {
   seasonId: string;
   teamId: string;
   playerId: string;
+  salary: number;
+  years: number;
 }): Promise<void> {
   const { error } = await createAdminClient().rpc("admin_sign_player", {
     target_season: input.seasonId,
     sign_team: input.teamId,
     player: input.playerId,
+    sign_salary: input.salary,
+    sign_years: input.years,
   });
   if (error) throw error;
 }
@@ -225,4 +234,65 @@ export async function setAiAssist(
     flags,
   });
   if (error) throw error;
+}
+
+/** Gives a league's players their first contracts. */
+export async function ensureContractsFor(
+  leagueId: string,
+  contracts: readonly { id: string; salary: number; expires: number }[],
+): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_ensure_contracts", {
+    target_league: leagueId,
+    contracts: contracts as never,
+  });
+  if (error) throw error;
+}
+
+/** Makes or changes an offer from a team to a free agent. */
+export async function makeOffer(input: {
+  seasonId: string;
+  teamId: string;
+  playerId: string;
+  salary: number;
+  years: number;
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_make_offer", {
+    target_season: input.seasonId,
+    offer_team: input.teamId,
+    player: input.playerId,
+    offer_salary: input.salary,
+    offer_years: input.years,
+  });
+  if (error) throw error;
+}
+
+/** Withdraws a pending offer. */
+export async function withdrawOffer(
+  seasonId: string,
+  offerId: string,
+): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_withdraw_offer", {
+    target_season: seasonId,
+    offer: offerId,
+  });
+  if (error) throw error;
+}
+
+/** Applies one day of free agency. */
+export async function applyFaDay(input: {
+  seasonId: string;
+  newOffers: readonly Record<string, unknown>[];
+  raised: readonly Record<string, unknown>[];
+  signings: readonly Record<string, unknown>[];
+  lapsed: readonly Record<string, unknown>[];
+}): Promise<SeasonRow> {
+  const { data, error } = await createAdminClient().rpc("admin_apply_fa_day", {
+    target_season: input.seasonId,
+    new_offers: input.newOffers as never,
+    raised: input.raised as never,
+    signings: input.signings as never,
+    lapsed: input.lapsed as never,
+  });
+  if (error) throw error;
+  return data;
 }

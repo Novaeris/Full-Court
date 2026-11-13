@@ -77,6 +77,11 @@ create table public.seasons (
   created_at timestamptz not null default now(),
   -- Set when the season's detail was summarised into history and deleted.
   archived_at timestamptz,
+  -- The salary cap for this season, in thousands of dollars (docs/DESIGN.md,
+  -- "Contracts and the cap"). The hard ceiling is 120% of it.
+  salary_cap integer not null default 125000 check (salary_cap > 0),
+  -- Days of free agency simulated so far, 0 to 21.
+  fa_day smallint not null default 0 check (fa_day between 0 and 21),
   -- The league's playoff rules (PlayoffConfig), saved when the bracket is built.
   playoff_config jsonb check (jsonb_typeof(playoff_config) = 'object'),
   unique (league_id, year),
@@ -611,7 +616,8 @@ create function public.admin_create_season(
   tiers jsonb,
   schedule jsonb,
   -- True when the season starts with its offseason (draft first).
-  in_offseason boolean default false
+  in_offseason boolean default false,
+  season_cap integer default 125000
 )
 returns public.seasons
 language plpgsql
@@ -650,11 +656,11 @@ begin
   select max(g.day) into last_game_day
   from jsonb_to_recordset(schedule) as g(day integer);
 
-  insert into public.seasons (league_id, year, phase, stage, day, last_day, schedule_preset, schedule_tiers)
+  insert into public.seasons (league_id, year, phase, stage, day, last_day, schedule_preset, schedule_tiers, salary_cap)
   values (target_league, season_year,
           case when in_offseason then 'offseason' else 'regular-season' end,
           case when in_offseason then 'draft' end,
-          1, last_game_day, preset, tiers)
+          1, last_game_day, preset, tiers, season_cap)
   returning * into created;
 
   insert into public.games (league_id, season_id, day, home_team_id, away_team_id)
@@ -688,9 +694,9 @@ $$;
 comment on function public.admin_create_season is
   'Creates a season with its full schedule in one transaction. Service role only.';
 
-revoke execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb, boolean)
+revoke execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb, boolean, integer)
   from public, anon, authenticated;
-grant execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb, boolean)
+grant execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb, boolean, integer)
   to service_role;
 
 -- The simulation worker (server only) ----------------------------------------------------------------------

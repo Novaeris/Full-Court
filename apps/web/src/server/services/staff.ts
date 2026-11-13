@@ -1,5 +1,5 @@
 import "server-only";
-import { STAFF_BUDGET, STAFF_ROLE_INFO } from "@fullcourt/game-rules";
+import { STAFF_ROLE_INFO, hardCeiling } from "@fullcourt/game-rules";
 import type {
   HireStaffRequest,
   ReleaseStaffRequest,
@@ -10,6 +10,7 @@ import { hireStaffMember, releaseStaffMember } from "@/server/admin/offseason";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { getLeague, parseLeagueId } from "./leagues";
+import { loadPayrollPlayers, payrolls } from "./finance";
 import { loadStaff, ownedTeamIds } from "./offseason-data";
 import { latestSeason } from "./season-shared";
 
@@ -52,18 +53,23 @@ export async function getStaff(
   teamParam?: string,
 ): Promise<StaffResponse> {
   const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
-  const [teamId, season, staff] = await Promise.all([
+  const [teamId, season, staff, players] = await Promise.all([
     resolveOwnedTeam(ctx, league.id, teamParam),
     latestSeason(ctx, league.id),
     loadStaff(ctx, league.id),
+    loadPayrollPlayers(ctx, league.id),
   ]);
+  // Staff share the team's payroll with its players: what they may cost is what
+  // is left under the hard ceiling after the players' salaries.
+  const playerPayroll = payrolls(players, new Map()).get(teamId ?? "") ?? 0;
+  const ceiling = hardCeiling(season?.salary_cap ?? 125000);
   const active = staff.filter((s) => !s.retired);
   const team = active.filter((s) => teamId !== null && s.teamId === teamId);
   const order = (s: StaffMember) =>
     Object.keys(STAFF_ROLE_INFO).indexOf(s.role);
   return {
     teamId,
-    budget: STAFF_BUDGET,
+    budget: Math.max(0, ceiling - playerPayroll),
     payroll: team.reduce((sum, s) => sum + s.salary, 0),
     team: team.map(view).sort((a, b) => order(a) - order(b)),
     market: active
@@ -78,7 +84,10 @@ function refusal(error: unknown): never {
   const message = (error as { message?: string }).message;
   const known: Record<string, [number, string]> = {
     wrong_stage: [409, "Staff can only be hired during the offseason."],
-    staff_over_budget: [409, "That would take the team over its staff budget."],
+    over_ceiling: [
+      409,
+      "That would take the team's payroll over the hard ceiling.",
+    ],
     staff_not_available: [409, "That person has already been hired."],
     staff_not_found: [404, "That staff member isn't in this league."],
   };

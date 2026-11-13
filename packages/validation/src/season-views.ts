@@ -424,18 +424,51 @@ export const DraftSimRequestSchema = z.object({
 });
 export type DraftSimRequest = z.infer<typeof DraftSimRequestSchema>;
 
+/** A player on a roster, with his contract. Salaries are in thousands of dollars a year. */
+export const RosterPlayerSchema = OffseasonPlayerSchema.extend({
+  salary: z.number().int().nullable(),
+  /** The last season his contract covers. */
+  expires: z.number().int().nullable(),
+});
+export type RosterPlayer = z.infer<typeof RosterPlayerSchema>;
+
+/** A free agent with what he asks for. */
+export const FreeAgentSchema = OffseasonPlayerSchema.extend({
+  askSalary: z.number().int(),
+  askYears: z.number().int(),
+  /** Your team may re-sign him over the cap. */
+  yours: z.boolean(),
+});
+export type FreeAgent = z.infer<typeof FreeAgentSchema>;
+
+/** The cap figures for a team: payroll, room and the hard ceiling. */
+export const CapFiguresSchema = z.object({
+  cap: z.number().int(),
+  ceiling: z.number().int(),
+  payroll: z.number().int(),
+  /** The cap less payroll; negative when over the cap. */
+  room: z.number().int(),
+  minSalary: z.number().int(),
+  maxSalary: z.number().int(),
+  midLevel: z.number().int(),
+  midLevelAvailable: z.boolean(),
+});
+export type CapFigures = z.infer<typeof CapFiguresSchema>;
+
 /**
- * GET /api/v1/leagues/:leagueId/roster?team=: one of your rosters and the best
- * free agents. `open` is true from free agency to the end of the preseason,
- * when players can be signed and released.
+ * GET /api/v1/leagues/:leagueId/roster?team=: one of your rosters with
+ * contracts, the cap figures and the best free agents. `open` is true from
+ * free agency to the end of the preseason, when players can be released and
+ * signed (after free agency's days, at 75% of the asking price).
  */
 export const RosterResponseSchema = z.object({
   teamId: z.uuid().nullable(),
   open: z.boolean(),
   min: z.number().int(),
   max: z.number().int(),
-  players: z.array(OffseasonPlayerSchema),
-  freeAgents: z.array(OffseasonPlayerSchema),
+  figures: CapFiguresSchema.nullable(),
+  players: z.array(RosterPlayerSchema),
+  freeAgents: z.array(FreeAgentSchema),
   freeAgentTotal: z.number().int(),
 });
 export type RosterResponse = z.infer<typeof RosterResponseSchema>;
@@ -473,3 +506,81 @@ export const AiAssistResponseSchema = z.object({
   }),
 });
 export type AiAssistResponse = z.infer<typeof AiAssistResponseSchema>;
+
+/** An offer from your team to a free agent. */
+export const FaOfferSchema = z.object({
+  id: z.uuid(),
+  player: OffseasonPlayerSchema,
+  salary: z.number().int(),
+  years: z.number().int(),
+  madeDay: z.number().int(),
+  status: z.enum(["pending", "accepted", "outbid", "void", "withdrawn"]),
+});
+export type FaOffer = z.infer<typeof FaOfferSchema>;
+
+/** One thing that happened in free agency. */
+export const FaEventSchema = z.object({
+  day: z.number().int(),
+  kind: z.enum([
+    "signed",
+    "re-signed",
+    "released",
+    "contract-ended",
+    "drafted",
+  ]),
+  player: OffseasonPlayerSchema,
+  teamId: z.uuid().nullable(),
+  salary: z.number().int().nullable(),
+  years: z.number().int().nullable(),
+});
+export type FaEvent = z.infer<typeof FaEventSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/free-agency?team=: free agency's 21 days. `day`
+ * is how many have been simulated. `freeAgents` is the best of the market with
+ * what each asks, whether your team may re-sign him and your offer, if any.
+ */
+export const FreeAgencyResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  /** True while offers can be made: the free-agency stage, before the last day. */
+  open: z.boolean(),
+  day: z.number().int(),
+  days: z.number().int(),
+  /** The league calendar date of the next day to simulate, `YYYY-MM-DD`. */
+  date: z.string().nullable(),
+  figures: CapFiguresSchema.nullable(),
+  freeAgents: z.array(
+    FreeAgentSchema.extend({
+      offer: FaOfferSchema.nullable(),
+      /** Offers waiting from other teams are not shown, only how many there are. */
+      otherOffers: z.number().int(),
+    }),
+  ),
+  freeAgentTotal: z.number().int(),
+  myOffers: z.array(FaOfferSchema),
+  /** What happened, newest first. */
+  log: z.array(FaEventSchema),
+});
+export type FreeAgencyResponse = z.infer<typeof FreeAgencyResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/free-agency/offers: make or change an offer. */
+export const MakeOfferRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerId: z.uuid(),
+  salary: z.number().int().min(1),
+  years: z.number().int().min(1).max(5),
+});
+export type MakeOfferRequest = z.infer<typeof MakeOfferRequestSchema>;
+
+/** DELETE /api/v1/leagues/:leagueId/free-agency/offers: withdraw an offer. */
+export const WithdrawOfferRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  offerId: z.uuid(),
+});
+export type WithdrawOfferRequest = z.infer<typeof WithdrawOfferRequestSchema>;
+
+/** POST /api/v1/leagues/:leagueId/free-agency/sim: simulate a day, a week, or to the end. */
+export const SimFreeAgencyRequestSchema = z.object({
+  days: z.union([z.literal(1), z.literal(7), z.literal("end")]).default(1),
+});
+export type SimFreeAgencyRequest = z.infer<typeof SimFreeAgencyRequestSchema>;

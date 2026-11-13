@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { AiAssistPanel } from "@/components/season/ai-assist-panel";
 import { CampPanel } from "@/components/season/camp-panel";
 import { DraftPanel } from "@/components/season/draft-panel";
+import { FreeAgencyPanel } from "@/components/season/free-agency-panel";
 import { OffseasonControls } from "@/components/season/offseason-controls";
 import { OffseasonReport } from "@/components/season/offseason-report";
 import { RosterPanel } from "@/components/season/roster-panel";
@@ -11,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { loadLeague } from "@/server/leagues/load";
 import { getCamp } from "@/server/services/camp";
 import { getDraft } from "@/server/services/draft";
+import { getFreeAgency } from "@/server/services/freeagency";
 import { STAGE_ACTIONS, getOffseason } from "@/server/services/offseason";
 import { getRoster } from "@/server/services/roster";
 import { latestSeason } from "@/server/services/season-shared";
@@ -60,7 +62,7 @@ async function Offseason({
   const stage = report.stage;
   const inOffseason = stage !== null && season !== null;
   const mine = teams.find((t) => t.localPlayerSlot !== null);
-  const [staff, camp, draft, roster] = inOffseason
+  const [staff, camp, draft, roster, freeAgency] = inOffseason
     ? await Promise.all([
         getStaff(ctx, league.id),
         getCamp(ctx, league.id),
@@ -70,8 +72,11 @@ async function Offseason({
         stage === "preseason"
           ? getRoster(ctx, league.id)
           : Promise.resolve(null),
+        stage === "free-agency"
+          ? getFreeAgency(ctx, league.id)
+          : Promise.resolve(null),
       ])
-    : [null, null, null, null];
+    : [null, null, null, null, null];
 
   // The draft button depends on how far the draft has got.
   const status = report.draftStatus;
@@ -117,8 +122,17 @@ async function Offseason({
           scoutingAssist={mine?.aiAssist.scouting ?? false}
         />
       ) : null}
+      {freeAgency && freeAgency.teamId ? (
+        <FreeAgencyPanel leagueId={league.id} data={freeAgency} teams={teams} />
+      ) : null}
       {roster && roster.teamId ? (
-        <RosterPanel leagueId={league.id} roster={roster} />
+        <RosterPanel
+          leagueId={league.id}
+          roster={roster}
+          freeAgencyDays={
+            stage === "free-agency" && (freeAgency?.open ?? false)
+          }
+        />
       ) : null}
       {staff && staff.teamId ? (
         <StaffPanel leagueId={league.id} staff={staff} />

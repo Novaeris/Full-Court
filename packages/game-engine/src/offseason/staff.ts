@@ -160,6 +160,11 @@ export function hireStaff(
     /** The teams that hire, worst record first. */
     teams: readonly string[];
     staff: readonly StaffMember[];
+    /**
+     * The most a team may spend on staff in all, where that is less than the
+     * usual budget: a team with its players near the hard ceiling can hire less.
+     */
+    limit?: ReadonlyMap<string, number>;
   },
 ): { id: string; teamId: string; contractYears: number }[] {
   const hires: { id: string; teamId: string; contractYears: number }[] = [];
@@ -179,7 +184,8 @@ export function hireStaff(
           (m) =>
             m.role === role &&
             !taken.has(m.id) &&
-            spent + m.salary <= STAFF_BUDGET,
+            spent + m.salary <=
+              Math.min(STAFF_BUDGET, input.limit?.get(team) ?? STAFF_BUDGET),
         )
         .sort((a, b) => b.rating - a.rating || a.id.localeCompare(b.id))[0];
       if (!best) continue;

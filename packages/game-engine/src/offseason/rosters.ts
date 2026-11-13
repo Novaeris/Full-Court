@@ -1,5 +1,11 @@
 import { POSITIONS, type Position } from "@fullcourt/game-types";
-import { ROSTER_LIMITS, playerValue } from "@fullcourt/game-rules";
+import {
+  ROSTER_LIMITS,
+  askingSalary,
+  hardCeiling,
+  minSalary,
+  playerValue,
+} from "@fullcourt/game-rules";
 import { shuffle } from "../rng/helpers";
 import type { Rng } from "../rng/rng";
 import type { OffseasonPlayer } from "./offseason";
@@ -21,6 +27,9 @@ export type RosterMove = {
   /** null for a free agent. */
   teamId: string | null;
   jersey: number;
+  /** For a player signed to fill a roster (a minimum contract): his salary and length. */
+  salary?: number;
+  years?: number;
 };
 
 function freeJersey(rng: Rng, used: ReadonlySet<number>): number {
@@ -46,6 +55,17 @@ export function fillRosters(
      * their own moves) are left as they are. Everyone when not given.
      */
     acting?: ReadonlySet<string>;
+    /**
+     * The salary cap. When given, the players teams sign to fill a roster get
+     * minimum contracts and are drawn from those who would take one, unless
+     * the team is short of the minimum roster size.
+     */
+    cap?: number;
+    /**
+     * Each team's payroll, with the cap: a team never signs a minimum contract
+     * that would take it past the hard ceiling.
+     */
+    payroll?: ReadonlyMap<string, number>;
   },
 ): RosterMove[] {
   const teams = [...input.teams];
@@ -62,6 +82,7 @@ export function fillRosters(
   for (const p of input.players) {
     if (p.teamId) rosters.get(p.teamId)?.push(p.id);
   }
+  const signedHere = new Set<string>();
   const pool: string[] = input.players
     .filter((p) => p.teamId === null)
     .map((p) => p.id);
@@ -88,16 +109,34 @@ export function fillRosters(
       team.set(weakest, null);
       pool.push(weakest);
     }
+    let spent = input.payroll?.get(teamId) ?? 0;
     while (roster.length < target && pool.length > 0) {
+      if (
+        input.cap !== undefined &&
+        input.payroll !== undefined &&
+        spent + minSalary(input.cap) > hardCeiling(input.cap)
+      ) {
+        break;
+      }
       const counts = new Map<Position, number>();
       for (const id of roster) {
         const position = (byId.get(id) as OffseasonPlayer).position;
         counts.set(position, (counts.get(position) ?? 0) + 1);
       }
       // Prefer a position the team is short of; otherwise the best player.
+      // With a cap, only players who would take a minimum contract are
+      // considered, unless the team can't reach the minimum roster size.
+      const wouldTakeMinimum = (id: string) =>
+        input.cap === undefined ||
+        askingSalary(byId.get(id) as OffseasonPlayer, input.cap) <=
+          minSalary(input.cap) * 1.6;
+      const cheap = pool.filter(wouldTakeMinimum);
+      const candidates =
+        cheap.length > 0 && roster.length >= ROSTER_LIMITS.min ? cheap : pool;
       let best = 0;
       let bestScore = -Infinity;
       pool.forEach((id, i) => {
+        if (!candidates.includes(id)) return;
         const position = (byId.get(id) as OffseasonPlayer).position;
         const score = value(id) - (counts.get(position) ?? 0) * 4;
         if (score > bestScore) {
@@ -107,6 +146,8 @@ export function fillRosters(
       });
       const [signed] = pool.splice(best, 1) as [string];
       team.set(signed, teamId);
+      signedHere.add(signed);
+      if (input.cap !== undefined) spent += minSalary(input.cap);
       roster.push(signed);
     }
   }
@@ -135,9 +176,13 @@ export function fillRosters(
   return input.players.flatMap((p) => {
     const teamId = team.get(p.id) ?? null;
     const number = jersey.get(p.id) as number;
-    return teamId !== p.teamId || number !== p.jersey
-      ? [{ id: p.id, teamId, jersey: number }]
-      : [];
+    if (teamId === p.teamId && number === p.jersey) return [];
+    const move: RosterMove = { id: p.id, teamId, jersey: number };
+    if (input.cap !== undefined && signedHere.has(p.id)) {
+      move.salary = minSalary(input.cap);
+      move.years = 1;
+    }
+    return [move];
   });
 }
 

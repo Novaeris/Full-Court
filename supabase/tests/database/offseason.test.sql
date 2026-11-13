@@ -4,7 +4,7 @@ begin;
 \ir helpers.psql
 \ir season_helpers.psql
 
-select plan(62);
+select plan(80);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -51,8 +51,6 @@ grant execute on function pg_temp.member(text, text, integer, integer, text), pg
 
 -- Pinned to @fullcourt/game-rules -------------------------------------------------------------------------------
 
-select is(app_private.staff_budget(), 10000, 'the staff budget is $10 million (game-rules STAFF_BUDGET)');
-
 select is(
   (select admin_create_staff(pg_temp.league_id('Offseason'), pg_temp.staff())),
   7, 'a league''s staff is created in one go'
@@ -65,6 +63,22 @@ select is(
   app_private.camp_places(pg_temp.team('T01')) || ':' || app_private.camp_places(pg_temp.team('T02')),
   '5:3',
   'camp places: 3, plus 2 for a head coach rated 80 (game-rules campPlaces)'
+);
+
+-- Contracts: everyone has one; three of T03's players are on their last year.
+select is(
+  (select admin_ensure_contracts(pg_temp.league_id('Offseason'),
+     (select jsonb_agg(jsonb_build_object(
+        'id', p.id, 'salary', 3000,
+        'expires', case when p.team_id = pg_temp.team('T03') and p.jersey <= 3 then 2026 else 2030 end))
+      from players p where p.league_id = pg_temp.league_id('Offseason')))),
+  180, 'a league without contracts is given them'
+);
+select is(
+  (select admin_ensure_contracts(pg_temp.league_id('Offseason'),
+     (select jsonb_agg(jsonb_build_object('id', p.id, 'salary', 9999, 'expires', 2040))
+      from players p where p.league_id = pg_temp.league_id('Offseason')))),
+  0, 'players who already have a contract are not touched'
 );
 
 -- A finished, archived 2026 season ------------------------------------------------------------------------------
@@ -136,6 +150,19 @@ select throws_ok(
   $$select admin_apply_progression(pg_temp.old_season(), '[]', '[]')$$,
   'P0001', 'offseason_already_done', 'ageing happens once'
 );
+select is(
+  (select count(*)::int from players
+   where league_id = pg_temp.league_id('Offseason') and status = 'active'
+     and team_id is null and rights_team_id = pg_temp.team('T03') and salary is null)
+  || ':' || (select count(*)::int from player_transactions
+             where league_id = pg_temp.league_id('Offseason') and kind = 'contract-ended'),
+  '3:3', 'contracts that ended make free agents, whose old team keeps their rights'
+);
+select is(
+  (select count(*)::int from players
+   where league_id = pg_temp.league_id('Offseason') and status = 'retired' and salary is not null),
+  0, 'a retired player has no contract'
+);
 select throws_ok(
   $$update players set team_id = pg_temp.team('T01')
     where league_id = pg_temp.league_id('Offseason') and status = 'retired'$$,
@@ -151,6 +178,8 @@ select is(
   (select phase || ':' || stage from seasons where id = pg_temp.new_season()),
   'offseason:draft', 'the next season starts in its draft stage'
 );
+select is(app_private.salary_ceiling(pg_temp.league_id('Offseason')), 150000,
+  'the hard ceiling is 120% of a $125 million cap (game-rules hardCeiling)');
 select throws_ok(
   $$insert into seasons (league_id, year, phase, stage, day, last_day, schedule_tiers)
     values (pg_temp.league_id('Offseason'), 2030, 'regular-season', 'draft', 1, 3,
@@ -196,13 +225,14 @@ create function pg_temp.prospect(n integer) returns uuid language sql as $$
   where league_id = pg_temp.league_id('Offseason') and last_name = 'Number ' || n;
 $$;
 create function pg_temp.pick(pick_no integer, n integer) returns jsonb language sql as $$
-  select jsonb_build_array(jsonb_build_object('pick', pick_no, 'player_id', pg_temp.prospect(n)));
+  select jsonb_build_array(jsonb_build_object('pick', pick_no, 'player_id', pg_temp.prospect(n),
+    'salary', 5000, 'years', 3));
 $$;
 grant execute on function pg_temp.prospects(), pg_temp.slots(), pg_temp.prospect(integer),
   pg_temp.pick(integer, integer) to service_role;
 
 select throws_ok(
-  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T01'), gen_random_uuid())$$,
+  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T01'), gen_random_uuid(), 1000, 1::smallint)$$,
   'P0001', 'wrong_stage', 'players can not be signed during the draft'
 );
 select is(
@@ -237,7 +267,8 @@ select throws_ok(
 select throws_ok(
   $$select admin_make_picks(pg_temp.new_season(),
       jsonb_build_array(jsonb_build_object('pick', 1,
-        'player_id', (select id from players where team_id = pg_temp.team('T03') limit 1))))$$,
+        'player_id', (select id from players where team_id = pg_temp.team('T03') limit 1),
+        'salary', 1000, 'years', 1)))$$,
   'P0001', 'prospect_not_available', 'only a prospect can be picked'
 );
 select is(
@@ -250,15 +281,15 @@ select is(
   'draft', 'the first pick is made and the draft goes on'
 );
 select is(
-  (select p.status || ':' || p.draft_pick || ':' || (p.team_id = pg_temp.team('T01'))
+  (select p.status || ':' || p.draft_pick || ':' || (p.team_id = pg_temp.team('T01')) || ':' || p.salary || ':' || p.contract_expires
    from players p where p.id = pg_temp.prospect(1)),
-  'active:1:true', 'a picked prospect joins the picking team as a player who knows his pick'
+  'active:1:true:5000:2029', 'a picked prospect joins the picking team with his pick and his rookie contract'
 );
 select is(
   (select (admin_make_picks(pg_temp.new_season(),
       jsonb_build_array(
-        jsonb_build_object('pick', 2, 'player_id', pg_temp.prospect(2)),
-        jsonb_build_object('pick', 3, 'player_id', pg_temp.prospect(3)))
+        jsonb_build_object('pick', 2, 'player_id', pg_temp.prospect(2), 'salary', 4000, 'years', 3),
+        jsonb_build_object('pick', 3, 'player_id', pg_temp.prospect(3), 'salary', 1000, 'years', 2))
     )).stage),
   'free-agency', 'after the last pick the offseason moves on to free agency'
 );
@@ -305,11 +336,13 @@ select is(
   'free-agency:13', 'a refused free agency changes nothing'
 );
 
--- Owner staff actions.
+-- Owner staff actions. T01's players earn enough that the payroll is near the ceiling.
+update players set salary = 10800, contract_expires = 2030
+  where team_id = pg_temp.team('T01') and status = 'active';
 select throws_ok(
   $$select admin_hire_staff(pg_temp.new_season(),
       (select id from staff_members where last_name = 'MarketDev'), pg_temp.team('T01'), 2::smallint)$$,
-  '22023', 'staff_over_budget', 'a hire over the budget is refused'
+  '22023', 'over_ceiling', 'a hire that takes the payroll over the hard ceiling is refused'
 );
 select is(
   (select team_id is null from staff_members where last_name = 'MarketDev')
@@ -334,7 +367,7 @@ select is(
 
 -- Roster moves by the owner.
 select throws_ok(
-  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T02'), pg_temp.prospect(4))$$,
+  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T02'), pg_temp.prospect(4), 1000, 1::smallint)$$,
   'P0001', 'roster_full', 'a team with 15 players cannot sign another'
 );
 select is(
@@ -349,7 +382,7 @@ select throws_ok(
 );
 select throws_ok(
   $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T01'),
-      (select id from players where team_id = pg_temp.team('T05') limit 1))$$,
+      (select id from players where team_id = pg_temp.team('T05') limit 1), 1000, 1::smallint)$$,
   'P0001', 'player_not_available', 'only a free agent can be signed'
 );
 
@@ -370,17 +403,112 @@ select is(
   'true:false', 'the ones asked for are on and the ones not mentioned stay as they were'
 );
 
+-- Free agency day by day: offers, the ceiling, signings.
+update players set team_id = null, salary = null, contract_expires = null
+  where id = (select id from players where team_id = pg_temp.team('T04') and status = 'active' order by id limit 1);
+update players set salary = 3000, contract_expires = 2030
+  where team_id = pg_temp.team('T04') and status = 'active';
+update players set team_id = null, salary = null, contract_expires = null
+  where id = (select id from players where team_id = pg_temp.team('T05') and status = 'active' order by id limit 1);
+update players set salary = 10700, contract_expires = 2030
+  where team_id = pg_temp.team('T05') and status = 'active';
+create function pg_temp.agent() returns uuid language sql as $$
+  select id from public.players
+  where rights_team_id = pg_temp.team('T03') and team_id is null order by jersey limit 1;
+$$;
+grant execute on function pg_temp.agent() to service_role;
+
+select is(
+  (select (admin_make_offer(pg_temp.new_season(), pg_temp.team('T04'), pg_temp.agent(), 8000, 3::smallint)).status),
+  'pending', 'an offer is made to a free agent'
+);
+select is(
+  (select (admin_make_offer(pg_temp.new_season(), pg_temp.team('T04'), pg_temp.agent(), 9000, 4::smallint)).salary)
+  || ':' || (select count(*)::int from fa_offers where season_id = pg_temp.new_season() and status = 'pending'),
+  '9000:1', 'a second offer from the same team replaces the first'
+);
+select throws_ok(
+  $$select admin_make_offer(pg_temp.new_season(), pg_temp.team('T05'), pg_temp.agent(), 2000, 1::smallint)$$,
+  '22023', 'over_ceiling', 'an offer that would pass the hard ceiling is refused'
+);
+select throws_ok(
+  $$select admin_make_offer(pg_temp.new_season(), pg_temp.team('T04'),
+      (select id from players where team_id = pg_temp.team('T06') limit 1), 2000, 1::smallint)$$,
+  'P0001', 'player_not_available', 'only a free agent can be offered a contract'
+);
+select is(
+  (select admin_withdraw_offer(pg_temp.new_season(),
+     (select id from fa_offers where season_id = pg_temp.new_season() and status = 'pending'))),
+  1, 'an offer can be withdrawn'
+);
+select throws_ok(
+  $$select admin_withdraw_offer(pg_temp.new_season(), gen_random_uuid())$$,
+  'P0002', 'offer_not_found', 'a missing offer cannot be withdrawn'
+);
+
+create function pg_temp.new_offer(team_abbr text, salary integer) returns uuid language sql as $$
+  select (admin_make_offer(pg_temp.new_season(), pg_temp.team(team_abbr), pg_temp.agent(), salary, 3::smallint)).id;
+$$;
+grant execute on function pg_temp.new_offer(text, integer) to service_role;
+create function pg_temp.day(signings jsonb) returns integer language sql as $$
+  select (admin_apply_fa_day(pg_temp.new_season(), '[]', '[]', signings, '[]')).fa_day::integer;
+$$;
+grant execute on function pg_temp.day(jsonb) to service_role;
+
+select throws_ok(
+  $$select pg_temp.day(jsonb_build_array(jsonb_build_object(
+      'offer_id', pg_temp.new_offer('T05', 1000), 'player_id', pg_temp.agent(),
+      'team_id', pg_temp.team('T05'), 'salary', 2000, 'years', 3)))$$,
+  '22023', 'over_ceiling', 'a signing that would pass the ceiling is refused, and the day does not move'
+);
+select throws_ok(
+  $$select pg_temp.day(jsonb_build_array(jsonb_build_object(
+      'offer_id', gen_random_uuid(), 'player_id', pg_temp.agent(),
+      'team_id', pg_temp.team('T02'), 'salary', 2000, 'years', 3)))$$,
+  'P0001', 'roster_full', 'a team with 15 players cannot sign another'
+);
+select is(
+  (select fa_day::int from seasons where id = pg_temp.new_season()),
+  0, 'a refused day changes nothing'
+);
+select is(
+  pg_temp.day(jsonb_build_array(jsonb_build_object(
+      'offer_id', pg_temp.new_offer('T04', 8000), 'player_id', pg_temp.agent(),
+      'team_id', pg_temp.team('T04'), 'salary', 8000, 'years', 3))),
+  1, 'a day passes and the player signs'
+);
+select is(
+  (select (team_id = pg_temp.team('T04'))::text || ':' || salary || ':' || contract_expires || ':' || coalesce(rights_team_id::text, 'none')
+   from players where id = (select player_id from player_transactions
+     where league_id = pg_temp.league_id('Offseason') and kind = 'signed' order by id limit 1)),
+  'true:8000:2029:none', 'the signing gives him the contract, and his old team loses its rights'
+);
+select is(
+  (select status from fa_offers where season_id = pg_temp.new_season() and salary = 8000),
+  'accepted', 'the offer that was accepted says so'
+);
+
 -- Moves: T01 signs the undrafted rookie to reach 14.
 select lives_ok(
   $$select admin_apply_rosters(pg_temp.new_season(),
       jsonb_build_array(jsonb_build_object(
         'id', (select id from players where last_name = 'Number 4'),
-        'team_id', pg_temp.team('T01'), 'jersey', 77)), '[]')$$,
+        'team_id', pg_temp.team('T01'), 'jersey', 77, 'salary', 1000, 'years', 1)), '[]')$$,
   'free agency is applied'
 );
 select is(
   (select stage from seasons where id = pg_temp.new_season()),
   'training-camp', 'the offseason moves on to training camp'
+);
+select is(
+  (select salary || ':' || contract_expires from players where last_name = 'Number 4')
+  || ':' || (select count(*)::int from players where league_id = pg_temp.league_id('Offseason') and rights_team_id is not null)
+  || ':' || (select fa_day::int from seasons where id = pg_temp.new_season()),
+  '1000:2027:0:21', 'a minimum-contract signing has its contract, rights end and free agency is over'
+);
+select throws_ok(
+  $$select admin_make_offer(pg_temp.new_season(), pg_temp.team('T04'), pg_temp.agent(), 2000, 1::smallint)$$,
+  'P0001', 'wrong_stage', 'offers close when free agency ends'
 );
 
 -- Training camp --------------------------------------------------------------------------------------------------------------

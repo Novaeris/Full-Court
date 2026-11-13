@@ -93,7 +93,7 @@ type DraftApi = {
     }>;
     roster: (id: string) => Promise<{
       players: { id: string; overall: number }[];
-      freeAgents: { id: string; overall: number }[];
+      freeAgents: { id: string; overall: number; askSalary: number }[];
       min: number;
       max: number;
     }>;
@@ -102,6 +102,10 @@ type DraftApi = {
       input: { playerId: string },
     ) => Promise<unknown>;
     signPlayer: (id: string, input: { playerId: string }) => Promise<unknown>;
+    simFreeAgency: (
+      id: string,
+      input: { days: 1 | 7 | "end" },
+    ) => Promise<unknown>;
   };
 };
 
@@ -122,7 +126,11 @@ export async function playDraft(api: DraftApi, leagueId: string) {
   }
 }
 
-/** Releases the weakest or signs the best free agents until the roster is legal. */
+/**
+ * Makes the owner's roster 12 to 15 players: releases the weakest, or signs
+ * free agents (after free agency's days, at the late price, cheapest first)
+ * until it is. Contracts that ended can leave a roster well short.
+ */
 export async function makeRosterLegal(api: DraftApi, leagueId: string) {
   let roster = await api.leagues.roster(leagueId);
   while (roster.players.length > roster.max) {
@@ -132,9 +140,26 @@ export async function makeRosterLegal(api: DraftApi, leagueId: string) {
     await api.leagues.releasePlayer(leagueId, { playerId: weakest.id });
     roster = await api.leagues.roster(leagueId);
   }
+  if (roster.players.length < roster.min) {
+    // The days of free agency have to be over before anyone can be signed outright.
+    await api.leagues.simFreeAgency(leagueId, { days: "end" }).catch(() => {});
+    roster = await api.leagues.roster(leagueId);
+  }
   while (roster.players.length < roster.min) {
-    const best = roster.freeAgents[0]!;
-    await api.leagues.signPlayer(leagueId, { playerId: best.id });
+    const candidates = [...roster.freeAgents].sort(
+      (a, b) => a.askSalary - b.askSalary,
+    );
+    let signed = false;
+    for (const candidate of candidates) {
+      try {
+        await api.leagues.signPlayer(leagueId, { playerId: candidate.id });
+        signed = true;
+        break;
+      } catch {
+        // Not affordable, or not signable yet: try the next.
+      }
+    }
+    if (!signed) throw new Error("Could not make the roster legal.");
     roster = await api.leagues.roster(leagueId);
   }
 }

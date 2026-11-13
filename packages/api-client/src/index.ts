@@ -10,6 +10,7 @@ import {
   AiAssistResponseSchema,
   CampResponseSchema,
   DraftResponseSchema,
+  FreeAgencyResponseSchema,
   RosterResponseSchema,
   OffseasonResponseSchema,
   StaffResponseSchema,
@@ -29,6 +30,10 @@ import {
   type DraftPickRequest,
   type DraftResponse,
   type DraftSimRequest,
+  type FreeAgencyResponse,
+  type MakeOfferRequest,
+  type SimFreeAgencyRequest,
+  type WithdrawOfferRequest,
   type RosterMoveRequest,
   type RosterResponse,
   type UpdateAiAssistRequest,
@@ -283,6 +288,46 @@ export function createApiClient(options: ApiClientOptions) {
           "DELETE",
           `/leagues/${encodeURIComponent(id)}/staff`,
           (b) => StaffResponseSchema.parse(b),
+          input,
+        ),
+      /** Free agency's 21 days: the market, your offers, the cap and what has happened. */
+      freeAgency: (id: string, teamId?: string): Promise<FreeAgencyResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/free-agency${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
+          (b) => FreeAgencyResponseSchema.parse(b),
+        ),
+      /** Makes or changes your offer to a free agent. */
+      makeOffer: (
+        id: string,
+        input: MakeOfferRequest,
+      ): Promise<FreeAgencyResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/free-agency/offers`,
+          (b) => FreeAgencyResponseSchema.parse(b),
+          input,
+        ),
+      /** Withdraws your offer. */
+      withdrawOffer: (
+        id: string,
+        input: WithdrawOfferRequest,
+      ): Promise<FreeAgencyResponse> =>
+        request(
+          "DELETE",
+          `/leagues/${encodeURIComponent(id)}/free-agency/offers`,
+          (b) => FreeAgencyResponseSchema.parse(b),
+          input,
+        ),
+      /** Simulates a day, a week, or the rest of free agency. */
+      simFreeAgency: (
+        id: string,
+        input: SimFreeAgencyRequest = { days: 1 },
+      ): Promise<FreeAgencyResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/free-agency/sim`,
+          (b) => FreeAgencyResponseSchema.parse(b),
           input,
         ),
       /** The draft as one of your teams sees it: the board, the order and who is on the clock. */

@@ -15,6 +15,7 @@ import {
   type Position,
   type StaffRole,
 } from "@fullcourt/game-types";
+import { rookieContract } from "@fullcourt/game-rules";
 import type {
   DraftPickRequest,
   DraftResponse,
@@ -231,7 +232,12 @@ export async function simulatePicks(
     }
   }
   const available = new Map(prospects.map((p) => [p.id, toView(p)]));
-  const batch: { pick: number; player_id: string }[] = [];
+  const batch: {
+    pick: number;
+    player_id: string;
+    salary: number;
+    years: number;
+  }[] = [];
   for (const slot of slots.filter((s) => s.player_id === null)) {
     const team = mine.get(slot.team_id);
     if (
@@ -254,7 +260,13 @@ export async function simulatePicks(
       ...(positions.get(slot.team_id) ?? []),
       taken.position,
     ]);
-    batch.push({ pick: slot.pick, player_id: id });
+    const deal = rookieContract(slot.pick, slot.round, season.salary_cap);
+    batch.push({
+      pick: slot.pick,
+      player_id: id,
+      salary: deal.salary,
+      years: deal.years,
+    });
   }
   if (batch.length > 0) await makePicks(season.id, batch);
   return batch.length;
@@ -446,8 +458,14 @@ export async function pickProspect(
     throw new ApiError(409, "not_your_pick", "That team isn't on the clock.");
   }
   try {
+    const deal = rookieContract(next.pick, next.round, season.salary_cap);
     await makePicks(season.id, [
-      { pick: next.pick, player_id: input.prospectId },
+      {
+        pick: next.pick,
+        player_id: input.prospectId,
+        salary: deal.salary,
+        years: deal.years,
+      },
     ]);
   } catch (error) {
     refusal(error);

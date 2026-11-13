@@ -267,6 +267,71 @@ export type Database = {
           },
         ]
       }
+      fa_offers: {
+        Row: {
+          id: string
+          league_id: string
+          made_day: number
+          player_id: string
+          salary: number
+          season_id: string
+          status: string
+          team_id: string
+          years: number
+        }
+        Insert: {
+          id?: string
+          league_id: string
+          made_day?: number
+          player_id: string
+          salary: number
+          season_id: string
+          status?: string
+          team_id: string
+          years: number
+        }
+        Update: {
+          id?: string
+          league_id?: string
+          made_day?: number
+          player_id?: string
+          salary?: number
+          season_id?: string
+          status?: string
+          team_id?: string
+          years?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fa_offers_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fa_offers_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "fa_offers_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "fa_offers_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       game_replays: {
         Row: {
           engine_version: number
@@ -746,10 +811,72 @@ export type Database = {
           },
         ]
       }
+      player_transactions: {
+        Row: {
+          day: number
+          id: string
+          kind: string
+          league_id: string
+          player_id: string
+          route: string | null
+          salary: number | null
+          season_year: number
+          team_id: string | null
+          years: number | null
+        }
+        Insert: {
+          day?: number
+          id?: string
+          kind: string
+          league_id: string
+          player_id: string
+          route?: string | null
+          salary?: number | null
+          season_year: number
+          team_id?: string | null
+          years?: number | null
+        }
+        Update: {
+          day?: number
+          id?: string
+          kind?: string
+          league_id?: string
+          player_id?: string
+          route?: string | null
+          salary?: number | null
+          season_year?: number
+          team_id?: string | null
+          years?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_transactions_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_transactions_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_transactions_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       players: {
         Row: {
           age: number
           ball_handling: number
+          contract_expires: number | null
           def_rebound: number
           draft_pick: number | null
           draft_round: number | null
@@ -771,6 +898,8 @@ export type Database = {
           position: string
           potential: number
           retired_year: number | null
+          rights_team_id: string | null
+          salary: number | null
           speed: number
           stamina: number
           status: string
@@ -782,6 +911,7 @@ export type Database = {
         Insert: {
           age: number
           ball_handling: number
+          contract_expires?: number | null
           def_rebound: number
           draft_pick?: number | null
           draft_round?: number | null
@@ -803,6 +933,8 @@ export type Database = {
           position: string
           potential: number
           retired_year?: number | null
+          rights_team_id?: string | null
+          salary?: number | null
           speed: number
           stamina: number
           status?: string
@@ -814,6 +946,7 @@ export type Database = {
         Update: {
           age?: number
           ball_handling?: number
+          contract_expires?: number | null
           def_rebound?: number
           draft_pick?: number | null
           draft_round?: number | null
@@ -835,6 +968,8 @@ export type Database = {
           position?: string
           potential?: number
           retired_year?: number | null
+          rights_team_id?: string | null
+          salary?: number | null
           speed?: number
           stamina?: number
           status?: string
@@ -850,6 +985,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "leagues"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "players_league_id_rights_team_id_fkey"
+            columns: ["league_id", "rights_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
           },
           {
             foreignKeyName: "players_league_id_team_id_fkey"
@@ -1040,12 +1182,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1055,12 +1199,14 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: number
+          fa_day?: number
           id?: string
           last_day: number
           league_id: string
           offseason_done_at?: string | null
           phase?: string
           playoff_config?: Json | null
+          salary_cap?: number
           schedule_preset?: string
           schedule_tiers: Json
           stage?: string | null
@@ -1070,12 +1216,14 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: number
+          fa_day?: number
           id?: string
           last_day?: number
           league_id?: string
           offseason_done_at?: string | null
           phase?: string
           playoff_config?: Json | null
+          salary_cap?: number
           schedule_preset?: string
           schedule_tiers?: Json
           stage?: string | null
@@ -1465,12 +1613,46 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
+          schedule_preset: string
+          schedule_tiers: Json
+          stage: string | null
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_apply_fa_day: {
+        Args: {
+          lapsed: Json
+          new_offers: Json
+          raised: Json
+          signings: Json
+          target_season: string
+        }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          fa_day: number
+          id: string
+          last_day: number
+          league_id: string
+          offseason_done_at: string | null
+          phase: string
+          playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1489,12 +1671,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1513,12 +1697,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1537,12 +1723,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1682,12 +1870,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1709,6 +1899,7 @@ export type Database = {
           in_offseason?: boolean
           preset: string
           schedule: Json
+          season_cap?: number
           season_year: number
           target_league: string
           tiers: Json
@@ -1717,12 +1908,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1737,6 +1930,10 @@ export type Database = {
       }
       admin_create_staff: {
         Args: { members: Json; target_league: string }
+        Returns: number
+      }
+      admin_ensure_contracts: {
+        Args: { contracts: Json; target_league: string }
         Returns: number
       }
       admin_fail_sim_job: {
@@ -1794,18 +1991,46 @@ export type Database = {
         Args: { slots: Json; target_season: string }
         Returns: number
       }
+      admin_make_offer: {
+        Args: {
+          offer_salary: number
+          offer_team: string
+          offer_years: number
+          player: string
+          target_season: string
+        }
+        Returns: {
+          id: string
+          league_id: string
+          made_day: number
+          player_id: string
+          salary: number
+          season_id: string
+          status: string
+          team_id: string
+          years: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "fa_offers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_make_picks: {
         Args: { picks: Json; target_season: string }
         Returns: {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1885,7 +2110,13 @@ export type Database = {
         Returns: number
       }
       admin_sign_player: {
-        Args: { player: string; sign_team: string; target_season: string }
+        Args: {
+          player: string
+          sign_salary: number
+          sign_team: string
+          sign_years: number
+          target_season: string
+        }
         Returns: number
       }
       admin_start_season: {
@@ -1894,12 +2125,14 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          fa_day: number
           id: string
           last_day: number
           league_id: string
           offseason_done_at: string | null
           phase: string
           playoff_config: Json | null
+          salary_cap: number
           schedule_preset: string
           schedule_tiers: Json
           stage: string | null
@@ -1923,6 +2156,10 @@ export type Database = {
           sender_user: string
         }
         Returns: string
+      }
+      admin_withdraw_offer: {
+        Args: { offer: string; target_season: string }
+        Returns: number
       }
       cancel_sim_job: {
         Args: { target_job: string }

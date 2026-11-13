@@ -196,16 +196,73 @@ test.describe("playoffs", () => {
     expect(odds.length).toBeGreaterThan(0);
     expect(odds.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
 
-    // Roster moves: the owner's roster has the rookies, and has to be legal
-    // before free agency can end.
+    // Free agency: 21 days of offers. Contracts that ended made free agents,
+    // and the owner can offer, simulate a day and watch what happens.
     await page.reload();
-    const roster = await api.leagues.roster(league.id);
-    expect(roster.open).toBe(true);
-    if (roster.players.length > roster.max) {
-      await expect(
-        api.leagues.advanceOffseason(league.id),
-      ).rejects.toMatchObject({ status: 409, code: "roster_not_legal" });
+    await expect(
+      page.getByRole("heading", { name: "Free agency", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sim a day" })).toBeVisible();
+    const market = await api.leagues.freeAgency(league.id);
+    expect(market.open).toBe(true);
+    expect(market).toMatchObject({ day: 0, days: 21 });
+    expect(market.figures!.payroll).toBeLessThanOrEqual(
+      market.figures!.ceiling,
+    );
+    expect(market.figures!.ceiling).toBe(Math.round(market.figures!.cap * 1.2));
+    expect(market.freeAgents.length).toBeGreaterThan(5);
+    expect(market.log.some((e) => e.kind === "contract-ended")).toBe(true);
+    // Offer the best free agent we can afford 15% over his asking price.
+    const target = market.freeAgents.find(
+      (p) => p.askSalary * 1.15 <= market.figures!.room || p.yours,
+    );
+    if (target) {
+      const salary = Math.min(
+        market.figures!.maxSalary,
+        Math.round((target.askSalary * 1.15) / 10) * 10,
+      );
+      const made = await api.leagues.makeOffer(league.id, {
+        playerId: target.id,
+        salary,
+        years: target.askYears,
+      });
+      expect(made.myOffers.map((o) => o.player.id)).toContain(target.id);
     }
+    // An offer outside the rules is refused with the reason.
+    const star = market.freeAgents[0]!;
+    await expect(
+      api.leagues.makeOffer(league.id, {
+        playerId: star.id,
+        salary: market.figures!.maxSalary + 10,
+        years: 1,
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+    await page.getByRole("button", { name: "Sim a day" }).click();
+    await expect
+      .poll(async () => (await api.leagues.freeAgency(league.id)).day)
+      .toBe(1);
+    // Direct signing of a star is refused while free agency is on.
+    await expect(
+      api.leagues.signPlayer(league.id, { playerId: star.id }),
+    ).rejects.toMatchObject({ status: 409 });
+    const done = await api.leagues.simFreeAgency(league.id, { days: "end" });
+    expect(done.day).toBe(21);
+    expect(done.open).toBe(false);
+    // Nothing is left waiting: every offer was accepted, lapsed or voided.
+    expect(done.myOffers).toEqual([]);
+    expect(done.figures!.payroll).toBeLessThanOrEqual(done.figures!.ceiling);
+    // Contracts: everyone on the owner's roster has one.
+    const afterDays = await api.leagues.roster(league.id);
+    expect(afterDays.players.every((p) => p.salary !== null)).toBe(true);
+    await expect(
+      api.leagues.makeOffer(league.id, {
+        playerId: star.id,
+        salary: market.figures!.minSalary,
+        years: 1,
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "wrong_stage" });
+
+    // The roster has to be legal before free agency can end.
     await makeRosterLegal(api, league.id);
     await page.reload();
     await expect(

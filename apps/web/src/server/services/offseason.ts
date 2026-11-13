@@ -26,6 +26,8 @@ import {
 import {
   ROSTER_LIMITS,
   STAGE_LABELS,
+  hardCeiling,
+  minSalary,
   campPlaces,
   stageDates,
 } from "@fullcourt/game-rules";
@@ -61,6 +63,13 @@ import {
   type OwnedTeam,
 } from "./offseason-data";
 import { ensureProspects, holdLotteryStep, simulatePicks } from "./draft";
+import {
+  ensureContracts,
+  loadPayrollPlayers,
+  payrolls,
+  staffPayrolls,
+} from "./finance";
+import { playFaDays } from "./freeagency";
 import { latestSeason, seasonView, type SeasonRow } from "./season-shared";
 
 /**
@@ -110,6 +119,9 @@ export async function beginOffseason(
     );
     staff = await loadStaff(ctx, leagueId);
   }
+
+  // A league made before contracts existed gets them now, so they can end.
+  await ensureContracts(ctx, leagueId, finished);
 
   if (!finished.offseason_done_at) {
     const players = await loadActivePlayers(ctx, leagueId);
@@ -180,7 +192,7 @@ export const STAGE_ACTIONS: Record<
   "free-agency": {
     button: "End free agency",
     summary:
-      "Teams sign free agents and the computer teams hire staff. Hire your own staff before you end it.",
+      "Free agency runs 21 days. Make offers to free agents and simulate the days, or end it now to play out the rest. Then the computer teams fill their rosters and hire staff.",
   },
   "training-camp": {
     button: "Hold training camp",
@@ -257,7 +269,11 @@ export async function advanceOffseason(
         "The offseason has already moved on.",
       );
     }
-    if (message === "invalid_rosters" || message === "staff_over_budget") {
+    if (
+      message === "invalid_rosters" ||
+      message === "staff_over_budget" ||
+      message === "over_ceiling"
+    ) {
       throw new ApiError(
         409,
         message,
@@ -290,6 +306,37 @@ function freeNumber(players: readonly EnginePlayer[], teamId: string): number {
   );
   for (let n = 0; n < 100; n++) if (!used.has(n)) return n;
   return 0;
+}
+
+/**
+ * A team whose payroll leaves no room to fill its roster to the minimum with
+ * minimum contracts lets its best-paid players go until it can: the hard
+ * ceiling is never passed, and a roster is never left short.
+ */
+function shedPayroll(
+  players: readonly EnginePlayer[],
+  salaries: ReadonlyMap<string, number>,
+  payroll: ReadonlyMap<string, number>,
+  teams: ReadonlySet<string>,
+  cap: number,
+): EnginePlayer[] {
+  const ceiling = hardCeiling(cap);
+  const min = minSalary(cap);
+  let next = [...players];
+  for (const teamId of teams) {
+    let pay = payroll.get(teamId) ?? 0;
+    let roster = next.filter((p) => p.teamId === teamId);
+    const need = () => Math.max(0, ROSTER_LIMITS.min - roster.length) * min;
+    while (roster.length > 0 && pay + need() > ceiling) {
+      const drop = roster.reduce((a, b) =>
+        (salaries.get(b.id) ?? 0) > (salaries.get(a.id) ?? 0) ? b : a,
+      );
+      pay -= salaries.get(drop.id) ?? 0;
+      roster = roster.filter((p) => p.id !== drop.id);
+      next = next.map((p) => (p.id === drop.id ? { ...p, teamId: null } : p));
+    }
+  }
+  return next;
 }
 
 /** Applies coverRoster's releases and signings for one team to a working copy. */
@@ -336,15 +383,21 @@ function checkOwnedRosters(
 async function runFreeAgency(
   ctx: UserContext,
   leagueId: string,
-  season: SeasonRow,
+  startSeason_: SeasonRow,
   rng: Rng,
 ): Promise<void> {
-  const [finish, players, staff, owned] = await Promise.all([
-    previousFinish(ctx, leagueId, season),
-    loadActivePlayers(ctx, leagueId),
-    loadStaff(ctx, leagueId),
-    ownedTeams(ctx, leagueId),
-  ]);
+  // Any of the 21 days not yet simulated are played first.
+  await playFaDays(ctx, leagueId, 21);
+  const season = (await latestSeason(ctx, leagueId)) ?? startSeason_;
+  const [finish, players, staff, owned, payrollPlayers, staffPay] =
+    await Promise.all([
+      previousFinish(ctx, leagueId, season),
+      loadActivePlayers(ctx, leagueId),
+      loadStaff(ctx, leagueId),
+      ownedTeams(ctx, leagueId),
+      loadPayrollPlayers(ctx, leagueId),
+      staffPayrolls(ctx, leagueId),
+    ]);
   const ownedIds = new Set(owned.map((t) => t.id));
   // The computer teams act, and so do the owner's teams whose roster
   // management is on AI Assist. Teams on roster coverage only are made legal
@@ -356,7 +409,17 @@ async function runFreeAgency(
         owned.find((o) => o.id === t)?.assist.rosterManagement,
     ),
   );
-  let working = [...players];
+  const salaries = new Map(
+    payrollPlayers.map((p) => [p.id, p.salary ?? 0] as const),
+  );
+  const payroll = payrolls(payrollPlayers, staffPay);
+  let working = shedPayroll(
+    players,
+    salaries,
+    payroll,
+    acting,
+    season.salary_cap,
+  );
   for (const team of owned) {
     if (team.assist.rosterCoverage && !team.assist.rosterManagement) {
       working = withCoverage(working, team.id);
@@ -366,7 +429,10 @@ async function runFreeAgency(
     teams: finish.standingsOrder,
     players: working,
     acting,
+    cap: season.salary_cap,
+    payroll,
   });
+  const signed = new Map(moves.map((m) => [m.id, m]));
   const final = applyChanges(working, moves);
   checkOwnedRosters(final, owned);
 
@@ -380,14 +446,37 @@ async function runFreeAgency(
   const hirers = [...finish.standingsOrder]
     .reverse()
     .filter((t) => !ownedIds.has(t));
-  const hires = hireStaff(rng, { teams: hirers, staff });
+  // A team near the hard ceiling can only hire what still fits under it, with
+  // room kept to fill its roster.
+  const room = new Map(
+    finish.standingsOrder.map((t) => [
+      t,
+      (staffPay.get(t) ?? 0) +
+        Math.max(
+          0,
+          hardCeiling(season.salary_cap) -
+            (payroll.get(t) ?? 0) -
+            6 * minSalary(season.salary_cap),
+        ),
+    ]),
+  );
+  const hires = hireStaff(rng, { teams: hirers, staff, limit: room });
   await applyRosters({
     seasonId: season.id,
-    moves: changed.map((p) => ({
-      id: p.id,
-      team_id: p.teamId,
-      jersey: p.jersey,
-    })),
+    moves: changed.map((p) => {
+      const was = before.get(p.id) as EnginePlayer;
+      const engine = signed.get(p.id);
+      // A player who joins a team signs a minimum contract (unless the engine
+      // already set his terms).
+      const joins = was.teamId === null && p.teamId !== null;
+      return {
+        id: p.id,
+        team_id: p.teamId,
+        jersey: p.jersey,
+        salary: joins ? (engine?.salary ?? minSalary(season.salary_cap)) : null,
+        years: joins ? (engine?.years ?? 1) : null,
+      };
+    }),
     staffMoves: hires.map((h) => ({
       id: h.id,
       team_id: h.teamId,
@@ -435,6 +524,8 @@ async function openSeason(
         seasonId: season.id,
         teamId: p.teamId,
         playerId: p.id,
+        salary: minSalary(season.salary_cap),
+        years: 1,
       });
     }
   }

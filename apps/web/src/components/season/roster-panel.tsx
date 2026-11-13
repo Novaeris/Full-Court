@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { OffseasonPlayer, RosterResponse } from "@fullcourt/validation";
+import { money } from "./free-agency-panel";
 import { Button } from "@/components/ui/button";
 
 type ErrorBody = { error?: { message?: string } };
@@ -28,9 +29,12 @@ function line(p: OffseasonPlayer) {
 export function RosterPanel({
   leagueId,
   roster,
+  freeAgencyDays,
 }: {
   leagueId: string;
   roster: RosterResponse;
+  /** Free agency's days are on: free agents are signed by offers, not here. */
+  freeAgencyDays: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -91,6 +95,12 @@ export function RosterPanel({
             className="flex flex-wrap items-center justify-between gap-3 border-t border-border py-2 first:border-t-0"
           >
             {line(p)}
+            {"salary" in p && p.salary ? (
+              <span className="text-sm text-text-muted">
+                {money(p.salary)}
+                {"expires" in p && p.expires ? ` to ${p.expires}` : ""}
+              </span>
+            ) : null}
             {roster.open ? (
               <Button
                 variant="ghost"
@@ -106,9 +116,19 @@ export function RosterPanel({
       </ul>
 
       <h3 className="mt-5 font-bold">Free agents</h3>
-      <p className="text-sm text-text-muted">
-        The best {roster.freeAgents.length} of {roster.freeAgentTotal}.
-      </p>
+      {freeAgencyDays ? (
+        <p className="text-sm text-text-muted">
+          During free agency&apos;s 21 days a free agent is signed by making an
+          offer, in the Free agency section above. Only a player who would take
+          a minimum contract can be signed here.
+        </p>
+      ) : (
+        <p className="text-sm text-text-muted">
+          The best {roster.freeAgents.length} of {roster.freeAgentTotal}. Now
+          that free agency&apos;s days are over, a player can be signed for 75%
+          of his asking price, for one year, if the cap rules allow it.
+        </p>
+      )}
       <ul>
         {roster.freeAgents.map((p) => (
           <li
@@ -116,6 +136,9 @@ export function RosterPanel({
             className="flex flex-wrap items-center justify-between gap-3 border-t border-border py-2 first:border-t-0"
           >
             {line(p)}
+            <span className="text-sm text-text-muted">
+              asks {money(p.askSalary)}
+            </span>
             {roster.open ? (
               <Button
                 variant="secondary"

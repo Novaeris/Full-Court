@@ -5,6 +5,7 @@ import { DEFAULT_SCHEDULE_TIERS } from "@fullcourt/game-types";
 import { insertSeason } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
+import { capForYear } from "./finance";
 import { latestSeason } from "./season-shared";
 import { getStructure } from "./world";
 
@@ -58,6 +59,7 @@ export async function createSeason(
       tiers,
       games,
       inOffseason: options.inOffseason ?? false,
+      salaryCap: await capForYear(ctx, league.id, year),
     });
   } catch (e) {
     // Two requests can race to create the same season: the loser is fine.

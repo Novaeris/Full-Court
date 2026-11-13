@@ -32,11 +32,23 @@ alter table public.players
   add column draft_round smallint,
   add column draft_pick smallint,
   add check ((status = 'retired') = (retired_year is not null)),
-  add check (status = 'active' or team_id is null);
+  add check (status = 'active' or team_id is null),
+  -- The contract: salary in thousands of dollars a year, and the last season it
+  -- covers. A player with no team has neither. `rights_team_id` is the team that
+  -- may re-sign him over the cap until free agency ends.
+  add column salary integer check (salary is null or salary between 0 and 100000),
+  add column contract_expires smallint,
+  add column rights_team_id uuid,
+  add check ((salary is null) = (contract_expires is null)),
+  add foreign key (league_id, rights_team_id)
+    references public.teams (league_id, id) on delete set null (rights_team_id);
 
 -- Rosters, the free-agent pool and team strength only look at active players.
 create index players_active_idx on public.players (league_id, team_id)
   where status = 'active';
+
+create index players_rights_idx on public.players (league_id, rights_team_id)
+  where rights_team_id is not null;
 
 alter table public.seasons
   add column offseason_done_at timestamptz;
@@ -195,11 +207,319 @@ create policy "camp_results: league owner can read"
   on public.camp_results for select to authenticated
   using (app_private.owns_league(league_id));
 
--- Rules the database holds as well, pinned to @fullcourt/game-rules by tests ----------------------------
 
--- What a team may spend on staff in a year, in thousands of dollars.
-create function app_private.staff_budget() returns integer
-language sql immutable set search_path = '' as $$ select 10000 $$;
+-- Contracts, the cap and free agency in days (server only) -------------------------------------------------------
+
+-- What a team's payroll is (player salaries and staff salaries), and the hard
+-- ceiling: 120% of the season's salary cap, which the season stores. The cap
+-- rules (cap room, exceptions) are in @fullcourt/game-rules; the database holds
+-- the ceiling and the roster size, which nothing can pass.
+create function app_private.team_payroll(for_team uuid) returns integer
+language sql stable security invoker set search_path = '' as $$
+  select (
+    coalesce((select sum(p.salary) from public.players p
+              where p.team_id = for_team and p.status = 'active'), 0)
+    + coalesce((select sum(s.salary) from public.staff_members s
+                where s.team_id = for_team and s.status = 'active'), 0)
+  )::integer
+$$;
+
+create function app_private.salary_ceiling(for_league uuid) returns integer
+language sql stable security invoker set search_path = '' as $$
+  select (s.salary_cap * 12 / 10)::integer
+  from public.seasons s where s.league_id = for_league order by s.year desc limit 1
+$$;
+
+grant execute on function app_private.team_payroll(uuid), app_private.salary_ceiling(uuid)
+  to service_role;
+
+-- Offers to free agents. At most one pending offer from a team to a player.
+create table public.fa_offers (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_id uuid not null,
+  player_id uuid not null,
+  team_id uuid not null,
+  salary integer not null check (salary > 0),
+  years smallint not null check (years between 1 and 5),
+  status text not null default 'pending'
+    check (status in ('pending', 'accepted', 'outbid', 'void', 'withdrawn')),
+  made_day smallint not null default 0,
+  foreign key (league_id, season_id)
+    references public.seasons (league_id, id) on delete cascade,
+  foreign key (league_id, player_id)
+    references public.players (league_id, id) on delete cascade,
+  foreign key (league_id, team_id)
+    references public.teams (league_id, id) on delete cascade
+);
+
+create unique index fa_offers_one_pending
+  on public.fa_offers (season_id, player_id, team_id) where status = 'pending';
+create index fa_offers_player_idx on public.fa_offers (league_id, player_id);
+create index fa_offers_team_idx on public.fa_offers (league_id, team_id);
+create index fa_offers_season_idx on public.fa_offers (season_id);
+
+-- Every signing, draft pick, release and contract that ends, for the league's history.
+create table public.player_transactions (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_year smallint not null,
+  -- The free-agency day, or 0.
+  day smallint not null default 0,
+  kind text not null
+    check (kind in ('drafted', 'signed', 're-signed', 'released', 'contract-ended')),
+  player_id uuid not null,
+  team_id uuid,
+  salary integer,
+  years smallint,
+  -- How a signing fitted under the cap: minimum, room, rights or mle.
+  route text check (route is null or route in ('minimum', 'room', 'rights', 'mle')),
+  foreign key (league_id, player_id)
+    references public.players (league_id, id) on delete cascade,
+  foreign key (league_id, team_id)
+    references public.teams (league_id, id) on delete cascade
+);
+
+create index player_transactions_league_idx
+  on public.player_transactions (league_id, season_year);
+create index player_transactions_player_idx
+  on public.player_transactions (league_id, player_id);
+create index player_transactions_team_idx
+  on public.player_transactions (league_id, team_id);
+
+alter table public.fa_offers enable row level security;
+alter table public.player_transactions enable row level security;
+grant select on public.fa_offers, public.player_transactions to authenticated;
+create policy "fa_offers: league owner can read"
+  on public.fa_offers for select to authenticated
+  using (app_private.owns_league(league_id));
+create policy "player_transactions: league owner can read"
+  on public.player_transactions for select to authenticated
+  using (app_private.owns_league(league_id));
+
+-- Gives players contracts, for a league that has none: `contracts` is a list of
+-- {id, salary, expires}. Only players on a team with no contract yet are touched.
+create function public.admin_ensure_contracts(target_league uuid, contracts jsonb)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  updated integer;
+begin
+  if jsonb_typeof(contracts) is distinct from 'array' then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+  update public.players p
+  set salary = c.salary, contract_expires = c.expires
+  from jsonb_to_recordset(contracts) as c(id uuid, salary integer, expires smallint)
+  where p.id = c.id and p.league_id = target_league and p.status = 'active'
+    and p.team_id is not null and p.salary is null;
+  get diagnostics updated = row_count;
+  return updated;
+end;
+$$;
+
+revoke execute on function public.admin_ensure_contracts(uuid, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.admin_ensure_contracts(uuid, jsonb) to service_role;
+
+-- Makes or changes an offer from a team to a free agent (the owner's, through
+-- the server). The cap rules were checked by the server; here the hard ceiling,
+-- the stage and who is a free agent.
+create function public.admin_make_offer(
+  target_season uuid,
+  offer_team uuid,
+  player uuid,
+  offer_salary integer,
+  offer_years smallint
+)
+returns public.fa_offers
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  made public.fa_offers;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if current_season.phase <> 'offseason' or current_season.stage <> 'free-agency'
+     or current_season.fa_day >= 21 then
+    raise exception 'wrong_stage' using errcode = 'P0001';
+  end if;
+  if not exists (
+    select 1 from public.teams where id = offer_team and league_id = current_season.league_id
+  ) then
+    raise exception 'team_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.players
+    where id = player and league_id = current_season.league_id
+      and status = 'active' and team_id is null
+  ) then
+    raise exception 'player_not_available' using errcode = 'P0001';
+  end if;
+  if app_private.team_payroll(offer_team) + offer_salary
+     > app_private.salary_ceiling(current_season.league_id) then
+    raise exception 'over_ceiling' using errcode = '22023';
+  end if;
+
+  insert into public.fa_offers (league_id, season_id, player_id, team_id, salary, years, made_day)
+  values (current_season.league_id, target_season, player, offer_team,
+          offer_salary, offer_years, current_season.fa_day)
+  on conflict (season_id, player_id, team_id) where status = 'pending'
+  do update set salary = excluded.salary, years = excluded.years
+  returning * into made;
+  return made;
+end;
+$$;
+
+revoke execute on function public.admin_make_offer(uuid, uuid, uuid, integer, smallint)
+  from public, anon, authenticated;
+grant execute on function public.admin_make_offer(uuid, uuid, uuid, integer, smallint)
+  to service_role;
+
+-- Withdraws a pending offer.
+create function public.admin_withdraw_offer(target_season uuid, offer uuid)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  changed integer;
+begin
+  update public.fa_offers set status = 'withdrawn'
+  where id = offer and season_id = target_season and status = 'pending';
+  get diagnostics changed = row_count;
+  if changed = 0 then
+    raise exception 'offer_not_found' using errcode = 'P0002';
+  end if;
+  return changed;
+end;
+$$;
+
+revoke execute on function public.admin_withdraw_offer(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.admin_withdraw_offer(uuid, uuid) to service_role;
+
+-- One day of free agency, as the server worked it out: `new_offers` (the
+-- computer teams': id, player_id, team_id, salary, years), `raised` (id,
+-- salary), `signings` (offer_id, player_id, team_id, salary, years) and
+-- `lapsed` (id, status: 'outbid' or 'void'). Every signing is checked: the
+-- player is a free agent, the team has room on its roster, and its payroll
+-- stays under the hard ceiling. Then the day counter moves on.
+create function public.admin_apply_fa_day(
+  target_season uuid,
+  new_offers jsonb,
+  raised jsonb,
+  signings jsonb,
+  lapsed jsonb
+)
+returns public.seasons
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  s record;
+  was_rights boolean;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if current_season.phase <> 'offseason' or current_season.stage <> 'free-agency'
+     or current_season.fa_day >= 21 then
+    raise exception 'wrong_stage' using errcode = 'P0001';
+  end if;
+  if jsonb_typeof(new_offers) is distinct from 'array' or jsonb_typeof(raised) is distinct from 'array'
+     or jsonb_typeof(signings) is distinct from 'array' or jsonb_typeof(lapsed) is distinct from 'array' then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+
+  insert into public.fa_offers (id, league_id, season_id, player_id, team_id, salary, years, made_day)
+  select o.id, current_season.league_id, target_season, o.player_id, o.team_id,
+         o.salary, o.years, current_season.fa_day + 1
+  from jsonb_to_recordset(new_offers) as o(
+    id uuid, player_id uuid, team_id uuid, salary integer, years smallint
+  );
+
+  update public.fa_offers f set salary = r.salary
+  from jsonb_to_recordset(raised) as r(id uuid, salary integer)
+  where f.id = r.id and f.season_id = target_season and f.status = 'pending';
+
+  for s in
+    select * from jsonb_to_recordset(signings) as x(
+      offer_id uuid, player_id uuid, team_id uuid, salary integer, years smallint, route text
+    )
+  loop
+    if not exists (
+      select 1 from public.players
+      where id = s.player_id and league_id = current_season.league_id
+        and status = 'active' and team_id is null
+    ) then
+      raise exception 'player_not_available' using errcode = 'P0001';
+    end if;
+    if (select count(*) from public.players
+        where team_id = s.team_id and status = 'active') >= 15 then
+      raise exception 'roster_full' using errcode = 'P0001';
+    end if;
+    if app_private.team_payroll(s.team_id) + s.salary
+       > app_private.salary_ceiling(current_season.league_id) then
+      raise exception 'over_ceiling' using errcode = '22023';
+    end if;
+    select rights_team_id = s.team_id into was_rights
+    from public.players where id = s.player_id;
+
+    update public.players
+    set team_id = s.team_id, salary = s.salary,
+        contract_expires = current_season.year + s.years - 1,
+        rights_team_id = null, jersey = app_private.free_jersey(s.team_id)
+    where id = s.player_id;
+    update public.player_ratings_history set team_id = s.team_id
+    where league_id = current_season.league_id
+      and season_year = current_season.year and player_id = s.player_id;
+    update public.fa_offers set status = 'accepted' where id = s.offer_id;
+    insert into public.player_transactions (
+      league_id, season_year, day, kind, player_id, team_id, salary, years, route
+    ) values (
+      current_season.league_id, current_season.year, current_season.fa_day + 1,
+      case when coalesce(was_rights, false) then 're-signed' else 'signed' end,
+      s.player_id, s.team_id, s.salary, s.years, s.route
+    );
+  end loop;
+
+  update public.fa_offers f set status = l.status
+  from jsonb_to_recordset(lapsed) as l(id uuid, status text)
+  where f.id = l.id and f.season_id = target_season and f.status = 'pending'
+    and l.status in ('outbid', 'void');
+  -- Any other offer to a player who has signed lapses.
+  update public.fa_offers f set status = 'outbid'
+  where f.season_id = target_season and f.status = 'pending'
+    and exists (select 1 from public.players p
+                where p.id = f.player_id and p.team_id is not null);
+
+  update public.seasons set fa_day = fa_day + 1
+  where id = target_season returning * into current_season;
+  return current_season;
+end;
+$$;
+
+comment on function public.admin_apply_fa_day is
+  'Applies one day of free agency: offers, signings and lapsed offers. Service role only.';
+revoke execute on function public.admin_apply_fa_day(uuid, jsonb, jsonb, jsonb, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.admin_apply_fa_day(uuid, jsonb, jsonb, jsonb, jsonb)
+  to service_role;
+
+-- Rules the database holds as well, pinned to @fullcourt/game-rules by tests ----------------------------
 
 -- Places in camp: 3, plus 1 for a head coach rated 60 or more, 2 for 80 or more.
 create function app_private.camp_places(for_team uuid) returns integer
@@ -211,17 +531,20 @@ language sql stable security invoker set search_path = '' as $$
   ), 0)
 $$;
 
--- Every team is within its staff budget.
+-- Every team's payroll (players and staff) is within the hard ceiling.
 create function app_private.check_league_staff(target_league uuid) returns void
 language plpgsql security invoker set search_path = '' as $$
+declare
+  over record;
 begin
-  if exists (
-    select 1 from public.staff_members s
-    where s.league_id = target_league and s.team_id is not null and s.status = 'active'
-    group by s.team_id
-    having sum(s.salary) > app_private.staff_budget()
-  ) then
-    raise exception 'staff_over_budget' using errcode = '22023';
+  select t.abbreviation, app_private.team_payroll(t.id) as payroll into over
+  from public.teams t
+  where t.league_id = target_league
+    and app_private.team_payroll(t.id) > app_private.salary_ceiling(target_league)
+  limit 1;
+  if found then
+    raise exception 'over_ceiling' using errcode = '22023',
+      detail = over.abbreviation || ' has a payroll of ' || over.payroll;
   end if;
 end;
 $$;
@@ -245,7 +568,7 @@ end;
 $$;
 
 grant execute on function
-  app_private.staff_budget(), app_private.camp_places(uuid),
+  app_private.camp_places(uuid),
   app_private.check_league_staff(uuid), app_private.check_league(uuid)
 to service_role;
 
@@ -410,7 +733,10 @@ begin
       stamina = c.stamina,
       team_id = case when c.retired then null else c.team_id end,
       status = case when c.retired then 'retired' else 'active' end,
-      retired_year = case when c.retired then new_year else null end
+      retired_year = case when c.retired then new_year else null end,
+      salary = case when c.retired then null else p.salary end,
+      contract_expires = case when c.retired then null else p.contract_expires end,
+      rights_team_id = null
   from progression_changes c
   where p.id = c.id and p.league_id = finished.league_id and p.status = 'active';
   get diagnostics updated_total = row_count;
@@ -438,6 +764,25 @@ begin
     raise exception 'invalid_changes'
       using errcode = '22023', detail = 'A staff member is missing.';
   end if;
+
+  -- Contracts that ended with the season: the player is a free agent and his
+  -- old team keeps his rights until free agency ends.
+  insert into public.player_transactions (
+    league_id, season_year, day, kind, player_id, team_id, salary, years
+  )
+  select finished.league_id, new_year, 0, 'contract-ended', p.id, p.team_id, p.salary, null
+  from public.players p
+  where p.league_id = finished.league_id and p.status = 'active'
+    and p.team_id is not null and p.contract_expires < new_year;
+  update public.player_ratings_history h set team_id = null
+  from public.players p
+  where h.league_id = finished.league_id and h.season_year = new_year
+    and h.player_id = p.id and p.status = 'active' and p.team_id is not null
+    and p.contract_expires < new_year;
+  update public.players
+  set rights_team_id = team_id, team_id = null, salary = null, contract_expires = null
+  where league_id = finished.league_id and status = 'active'
+    and team_id is not null and contract_expires < new_year;
 
   update public.seasons set offseason_done_at = now()
   where id = target_season returning * into finished;
@@ -588,7 +933,8 @@ revoke execute on function public.admin_hold_lottery(uuid, jsonb)
   from public, anon, authenticated;
 grant execute on function public.admin_hold_lottery(uuid, jsonb) to service_role;
 
--- Makes picks: `picks` is a list of {pick, player_id}, and must be the next
+-- Makes picks: `picks` is a list of {pick, player_id, salary, years} (the rookie
+-- contract), and must be the next
 -- open picks in order, no gaps. Each prospect joins the picking team's roster.
 -- When the last pick is made the undrafted prospects join the free-agent pool
 -- and the offseason moves on to free agency.
@@ -622,8 +968,10 @@ begin
   end if;
 
   for chosen in
-    select p.pick, p.player_id
-    from jsonb_to_recordset(picks) as p(pick smallint, player_id uuid)
+    select p.pick, p.player_id, p.salary, p.years
+    from jsonb_to_recordset(picks) as p(
+      pick smallint, player_id uuid, salary integer, years smallint
+    )
     order by p.pick
   loop
     select min(d.pick) into next_open from public.draft_picks d
@@ -638,7 +986,9 @@ begin
 
     update public.players
     set team_id = slot.team_id, status = 'active', draft_round = slot.round,
-        draft_pick = slot.pick, jersey = app_private.free_jersey(slot.team_id)
+        draft_pick = slot.pick, jersey = app_private.free_jersey(slot.team_id),
+        salary = chosen.salary,
+        contract_expires = current_season.year + chosen.years - 1
     where id = chosen.player_id and league_id = current_season.league_id
       and status = 'prospect' and draft_year = current_season.year;
     if not found then
@@ -647,6 +997,12 @@ begin
     update public.draft_picks set player_id = chosen.player_id
     where league_id = current_season.league_id
       and season_year = current_season.year and pick = chosen.pick;
+    insert into public.player_transactions (
+      league_id, season_year, day, kind, player_id, team_id, salary, years
+    ) values (
+      current_season.league_id, current_season.year, 0, 'drafted',
+      chosen.player_id, slot.team_id, chosen.salary, chosen.years
+    );
     insert into public.player_ratings_history (
       league_id, player_id, season_year, team_id, age, overall, potential, previous_overall
     )
@@ -715,9 +1071,32 @@ begin
     raise exception 'invalid_changes' using errcode = '22023';
   end if;
 
+  -- What happened to each player who changes team, for the history.
+  insert into public.player_transactions (
+    league_id, season_year, day, kind, player_id, team_id, salary, years
+  )
+  select current_season.league_id, current_season.year, 21,
+         case when m.team_id is null then 'released' else 'signed' end,
+         m.id, coalesce(m.team_id, p.team_id),
+         case when m.team_id is null then p.salary else m.salary end,
+         m.years
+  from jsonb_to_recordset(moves) as m(
+    id uuid, team_id uuid, jersey smallint, salary integer, years smallint
+  )
+  join public.players p on p.id = m.id
+  where (m.team_id is null and p.team_id is not null)
+     or (m.team_id is not null and p.team_id is null);
+
   update public.players p
-  set team_id = m.team_id, jersey = m.jersey
-  from jsonb_to_recordset(moves) as m(id uuid, team_id uuid, jersey smallint)
+  set team_id = m.team_id, jersey = m.jersey,
+      salary = case when m.team_id is null then null
+                    when m.salary is not null then m.salary else p.salary end,
+      contract_expires = case when m.team_id is null then null
+                    when m.salary is not null then current_season.year + m.years - 1
+                    else p.contract_expires end
+  from jsonb_to_recordset(moves) as m(
+    id uuid, team_id uuid, jersey smallint, salary integer, years smallint
+  )
   where p.id = m.id and p.league_id = current_season.league_id and p.status = 'active';
   get diagnostics affected = row_count;
   if affected <> jsonb_array_length(moves) then
@@ -745,9 +1124,15 @@ begin
       using errcode = '22023', detail = 'A staff member is missing or already hired.';
   end if;
 
+  -- Free agency is over: re-signing rights end and any offer still waiting lapses.
+  update public.players set rights_team_id = null
+  where league_id = current_season.league_id and rights_team_id is not null;
+  update public.fa_offers set status = 'void'
+  where season_id = target_season and status = 'pending';
+
   perform app_private.check_league(current_season.league_id);
 
-  update public.seasons set stage = 'training-camp'
+  update public.seasons set stage = 'training-camp', fa_day = 21
   where id = target_season returning * into current_season;
   return current_season;
 end;
@@ -1022,7 +1407,9 @@ grant execute on function public.admin_set_camp(uuid, uuid, jsonb) to service_ro
 create function public.admin_sign_player(
   target_season uuid,
   sign_team uuid,
-  player uuid
+  player uuid,
+  sign_salary integer,
+  sign_years smallint
 )
 returns integer
 language plpgsql
@@ -1052,13 +1439,25 @@ begin
     raise exception 'roster_full' using errcode = 'P0001';
   end if;
 
+  if app_private.team_payroll(sign_team) + sign_salary
+     > app_private.salary_ceiling(current_season.league_id) then
+    raise exception 'over_ceiling' using errcode = '22023';
+  end if;
   update public.players
-  set team_id = sign_team, jersey = app_private.free_jersey(sign_team)
+  set team_id = sign_team, jersey = app_private.free_jersey(sign_team),
+      salary = sign_salary, contract_expires = current_season.year + sign_years - 1,
+      rights_team_id = null
   where id = player and league_id = current_season.league_id
     and status = 'active' and team_id is null;
   if not found then
     raise exception 'player_not_available' using errcode = 'P0001';
   end if;
+  insert into public.player_transactions (
+    league_id, season_year, day, kind, player_id, team_id, salary, years
+  ) values (
+    current_season.league_id, current_season.year, current_season.fa_day,
+    'signed', player, sign_team, sign_salary, sign_years
+  );
   update public.player_ratings_history set team_id = sign_team
   where league_id = current_season.league_id
     and season_year = current_season.year and player_id = player;
@@ -1066,9 +1465,9 @@ begin
 end;
 $$;
 
-revoke execute on function public.admin_sign_player(uuid, uuid, uuid)
+revoke execute on function public.admin_sign_player(uuid, uuid, uuid, integer, smallint)
   from public, anon, authenticated;
-grant execute on function public.admin_sign_player(uuid, uuid, uuid) to service_role;
+grant execute on function public.admin_sign_player(uuid, uuid, uuid, integer, smallint) to service_role;
 
 -- Releases a player from a team into free agency, and out of its camp roster.
 create function public.admin_release_player(
@@ -1093,7 +1492,15 @@ begin
      or current_season.stage not in ('free-agency', 'training-camp', 'preseason') then
     raise exception 'wrong_stage' using errcode = 'P0001';
   end if;
-  update public.players set team_id = null
+  insert into public.player_transactions (
+    league_id, season_year, day, kind, player_id, team_id, salary, years
+  )
+  select current_season.league_id, current_season.year, current_season.fa_day,
+         'released', p.id, release_team, p.salary, null
+  from public.players p
+  where p.id = player and p.league_id = current_season.league_id
+    and p.status = 'active' and p.team_id = release_team;
+  update public.players set team_id = null, salary = null, contract_expires = null
   where id = player and league_id = current_season.league_id
     and status = 'active' and team_id = release_team;
   if not found then

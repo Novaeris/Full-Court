@@ -127,6 +127,9 @@ function toPlayer(
     | "draft_year"
     | "draft_round"
     | "draft_pick"
+    | "salary"
+    | "contract_expires"
+    | "rights_team_id"
   >,
 ): Player {
   return {

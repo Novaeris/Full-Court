@@ -25,6 +25,8 @@ export async function insertSeason(input: {
   games: readonly Game[];
   /** True when the season starts with its offseason (draft first). */
   inOffseason?: boolean;
+  /** The season's salary cap, in thousands of dollars. */
+  salaryCap?: number;
 }): Promise<SeasonRow> {
   const { data, error } = await createAdminClient().rpc("admin_create_season", {
     target_league: input.leagueId,
@@ -37,6 +39,7 @@ export async function insertSeason(input: {
       away_team_id: g.awayTeamId,
     })),
     in_offseason: input.inOffseason ?? false,
+    season_cap: input.salaryCap ?? 125000,
   });
   if (error) throw error;
   return data;

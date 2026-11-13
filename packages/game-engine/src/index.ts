@@ -118,3 +118,12 @@ export {
   type NewStaff,
   type StaffMember,
 } from "./offseason/staff";
+export {
+  generateContracts,
+  simulateFreeAgencyDay,
+  type FaDayResult,
+  type FaOffer,
+  type FaPlayer,
+  type FaSigning,
+  type FaTeam,
+} from "./offseason/freeagency";
