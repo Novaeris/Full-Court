@@ -7,6 +7,7 @@ import type {
   Team,
   TradeEvaluation,
   TradePartnerResponse,
+  TradePick,
   TradePlayer,
   TradesResponse,
 } from "@fullcourt/validation";
@@ -53,6 +54,61 @@ function Line({
   );
 }
 
+/** What one side of a trade gave, in words: players, then picks. */
+function gaveText(
+  names: readonly string[],
+  picks: readonly {
+    seasonYear: number;
+    round: number;
+    originalTeamId: string;
+  }[],
+  teams: readonly Team[],
+): string {
+  const items = [
+    ...names,
+    ...picks.map(
+      (p) =>
+        `a ${p.seasonYear} round ${p.round} pick (${teamLabel(teams, p.originalTeamId)})`,
+    ),
+  ];
+  return items.length > 0 ? items.join(", ") : "nobody";
+}
+
+function PickLine({
+  p,
+  teams,
+  checked,
+  onToggle,
+  label,
+}: {
+  p: TradePick;
+  teams: readonly Team[];
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  const id = `${label}-${p.id}`;
+  return (
+    <li className="flex items-start gap-3 border-t border-border py-2 first:border-t-0">
+      <input
+        id={id}
+        type="checkbox"
+        className="mt-1 size-6 shrink-0 accent-accent"
+        checked={checked}
+        onChange={onToggle}
+      />
+      <label htmlFor={id} className="min-w-0 flex-1">
+        <span className="font-semibold">
+          {p.seasonYear} round {p.round} pick
+        </span>
+        <span className="block text-sm text-text-muted">
+          {teamLabel(teams, p.originalTeamId)}&apos;s pick
+        </span>
+      </label>
+    </li>
+  );
+}
+
 /**
  * Trades: pick a computer team, pick the players on each side, check what it
  * would say, and propose. Or shop your players and see what the computer teams
@@ -72,6 +128,8 @@ export function TradePanel({
   const [theirs, setTheirs] = useState<TradePartnerResponse | null>(null);
   const [give, setGive] = useState<string[]>([]);
   const [get, setGet] = useState<string[]>([]);
+  const [givePicks, setGivePicks] = useState<string[]>([]);
+  const [getPicks, setGetPicks] = useState<string[]>([]);
   const [evaluation, setEvaluation] = useState<TradeEvaluation | null>(null);
   const [made, setMade] = useState(false);
   const [shop, setShop] = useState<ShopResponse | null>(null);
@@ -114,6 +172,7 @@ export function TradePanel({
   async function choosePartner(id: string) {
     setPartner(id);
     setGet([]);
+    setGetPicks([]);
     setEvaluation(null);
     setMade(false);
     setTheirs(null);
@@ -125,7 +184,15 @@ export function TradePanel({
     if (roster) setTheirs(roster);
   }
 
-  const body = () => ({ teamId: data.teamId, partnerId: partner, give, get });
+  const body = () => ({
+    teamId: data.teamId,
+    partnerId: partner,
+    give,
+    get,
+    givePicks,
+    getPicks,
+  });
+  const nothing = give.length + get.length === 0;
   const toggle = (list: string[], set: (v: string[]) => void, id: string) => {
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
     setEvaluation(null);
@@ -149,6 +216,8 @@ export function TradePanel({
       setMade(true);
       setGive([]);
       setGet([]);
+      setGivePicks([]);
+      setGetPicks([]);
       router.refresh();
     }
   }
@@ -203,9 +272,9 @@ export function TradePanel({
         {data.deadlineDay !== null
           ? `Trades are open until game day ${data.deadlineDay} (it is day ${data.day}). `
           : "Trades are open. "}
-        Pick a team and the players on each side. A team over the cap after a
-        trade can take back at most 125% of the salary it sends out, and nobody
-        can pass the hard ceiling.
+        Pick a team and the players and draft picks on each side. A team over
+        the cap after a trade can take back at most 125% of the salary it sends
+        out, and nobody can pass the hard ceiling.
       </p>
       <p className="mt-1 text-sm text-text-muted">
         Your payroll {money(data.payroll)} of a {money(data.cap)} cap.
@@ -243,6 +312,23 @@ export function TradePanel({
               />
             ))}
           </ul>
+          {data.picks.length > 0 ? (
+            <>
+              <h4 className="mt-3 font-semibold">Your draft picks</h4>
+              <ul>
+                {data.picks.map((p) => (
+                  <PickLine
+                    key={p.id}
+                    p={p}
+                    teams={teams}
+                    label="give-pick"
+                    checked={givePicks.includes(p.id)}
+                    onToggle={() => toggle(givePicks, setGivePicks, p.id)}
+                  />
+                ))}
+              </ul>
+            </>
+          ) : null}
         </div>
         <div className="min-w-0">
           <h3 className="font-bold">
@@ -263,20 +349,37 @@ export function TradePanel({
           ) : (
             <p className="text-text-muted">Choose a team to see its roster.</p>
           )}
+          {theirs && theirs.picks.length > 0 ? (
+            <>
+              <h4 className="mt-3 font-semibold">Their draft picks</h4>
+              <ul>
+                {theirs.picks.map((p) => (
+                  <PickLine
+                    key={p.id}
+                    p={p}
+                    teams={teams}
+                    label="get-pick"
+                    checked={getPicks.includes(p.id)}
+                    onToggle={() => toggle(getPicks, setGetPicks, p.id)}
+                  />
+                ))}
+              </ul>
+            </>
+          ) : null}
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Button
           variant="secondary"
-          disabled={busy || !partner || give.length + get.length === 0}
+          disabled={busy || !partner || nothing}
           onClick={check}
         >
           Check the trade
         </Button>
         <Button
           variant="primary"
-          disabled={busy || !partner || give.length + get.length === 0}
+          disabled={busy || !partner || nothing}
           onClick={propose}
         >
           Propose the trade
@@ -416,9 +519,17 @@ export function TradePanel({
                 {t.day > 0 ? `Day ${t.day}: ` : `${t.seasonYear} offseason: `}
               </span>
               {teamLabel(teams, t.teamA)} traded{" "}
-              {t.gaveA.map((p) => p.name).join(", ") || "nobody"} to{" "}
-              {teamLabel(teams, t.teamB)} for{" "}
-              {t.gaveB.map((p) => p.name).join(", ") || "nobody"}
+              {gaveText(
+                t.gaveA.map((p) => p.name),
+                t.picksA,
+                teams,
+              )}{" "}
+              to {teamLabel(teams, t.teamB)} for{" "}
+              {gaveText(
+                t.gaveB.map((p) => p.name),
+                t.picksB,
+                teams,
+              )}
             </li>
           ))}
         </ul>

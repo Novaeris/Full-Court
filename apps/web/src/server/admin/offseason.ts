@@ -304,6 +304,8 @@ export async function applyTrade(input: {
   teamB: string;
   fromA: readonly string[];
   fromB: readonly string[];
+  picksA?: readonly string[];
+  picksB?: readonly string[];
 }): Promise<void> {
   const { error } = await createAdminClient().rpc("admin_apply_trade", {
     target_season: input.seasonId,
@@ -311,6 +313,16 @@ export async function applyTrade(input: {
     trade_team_b: input.teamB,
     from_a: [...input.fromA],
     from_b: [...input.fromB],
+    picks_a: [...(input.picksA ?? [])],
+    picks_b: [...(input.picksB ?? [])],
+  });
+  if (error) throw error;
+}
+
+/** Gives every team its picks for the next two drafts, if it doesn't have them. */
+export async function ensurePickRights(seasonId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_ensure_pick_rights", {
+    target_season: seasonId,
   });
   if (error) throw error;
 }

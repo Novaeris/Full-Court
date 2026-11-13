@@ -611,6 +611,19 @@ export const TradePlayerSchema = OffseasonPlayerSchema.extend({
 });
 export type TradePlayer = z.infer<typeof TradePlayerSchema>;
 
+/** A draft pick a team holds, tradeable until its lottery. */
+export const TradePickSchema = z.object({
+  id: z.uuid(),
+  /** The year of the draft, as in the draft board. */
+  seasonYear: z.number().int(),
+  round: z.number().int(),
+  /** Whose finish decides where it falls. */
+  originalTeamId: z.uuid(),
+  /** Its trade value, rounded. */
+  value: z.number().int(),
+});
+export type TradePick = z.infer<typeof TradePickSchema>;
+
 /** A trade that was made. */
 export const TradeRecordSchema = z.object({
   id: z.uuid(),
@@ -621,6 +634,20 @@ export const TradeRecordSchema = z.object({
   teamB: z.uuid(),
   gaveA: z.array(OffseasonPlayerSchema),
   gaveB: z.array(OffseasonPlayerSchema),
+  picksA: z.array(
+    z.object({
+      seasonYear: z.number().int(),
+      round: z.number().int(),
+      originalTeamId: z.uuid(),
+    }),
+  ),
+  picksB: z.array(
+    z.object({
+      seasonYear: z.number().int(),
+      round: z.number().int(),
+      originalTeamId: z.uuid(),
+    }),
+  ),
 });
 export type TradeRecord = z.infer<typeof TradeRecordSchema>;
 
@@ -668,6 +695,8 @@ export const TradesResponseSchema = z.object({
     }),
   ),
   history: z.array(TradeRecordSchema),
+  /** The picks your team holds. */
+  picks: z.array(TradePickSchema),
   /** Open offers from computer teams to this team. */
   offers: z.array(TradeOfferSchema),
 });
@@ -678,6 +707,7 @@ export const TradePartnerResponseSchema = z.object({
   teamId: z.uuid(),
   payroll: z.number().int(),
   roster: z.array(TradePlayerSchema),
+  picks: z.array(TradePickSchema),
 });
 export type TradePartnerResponse = z.infer<typeof TradePartnerResponseSchema>;
 
@@ -687,8 +717,13 @@ export const TradeProposalSchema = z.object({
   partnerId: z.uuid(),
   give: z.array(z.uuid()).max(5),
   get: z.array(z.uuid()).max(5),
+  /** Draft picks (rights) each side gives. */
+  givePicks: z.array(z.uuid()).max(4).default([]),
+  getPicks: z.array(z.uuid()).max(4).default([]),
 });
 export type TradeProposal = z.infer<typeof TradeProposalSchema>;
+/** What a client sends: the pick lists may be left out. */
+export type TradeProposalInput = z.input<typeof TradeProposalSchema>;
 
 export const TradeEvaluationSchema = z.object({
   /** The trade is legal: rosters, the hard ceiling and salary matching. */

@@ -189,12 +189,23 @@ export async function holdLotteryStep(
   const finish = await previousFinish(ctx, leagueId, season);
   const rng = createRng(seedState(`${leagueId}:lottery:${season.year}`));
   const slots = drawLottery(rng, finish.standingsOrder, finish.playoffDepth);
+  // A pick goes to the team that holds the right to it, which may have changed.
+  const rights = await ctx.supabase
+    .from("pick_rights")
+    .select("round, original_team_id, team_id")
+    .eq("league_id", leagueId)
+    .eq("season_year", season.year);
+  if (rights.error) throw rights.error;
+  const holder = new Map(
+    rights.data.map((r) => [`${r.round}:${r.original_team_id}`, r.team_id]),
+  );
   await holdLottery(
     season.id,
     slots.map((s) => ({
       pick: s.pick,
       round: s.round,
-      team_id: s.teamId,
+      team_id: holder.get(`${s.round}:${s.teamId}`) ?? s.teamId,
+      original_team_id: s.teamId,
       finish_rank: s.finishRank,
       expected_pick: s.expectedPick,
       odds: s.odds,

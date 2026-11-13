@@ -40,7 +40,7 @@ import {
   type OfferAnswer,
   type TradeEvaluation,
   type TradePartnerResponse,
-  type TradeProposal,
+  type TradeProposalInput,
   type TradeResult,
   type TradesResponse,
   type FreeAgencyResponse,
@@ -323,7 +323,7 @@ export function createApiClient(options: ApiClientOptions) {
       /** Whether a trade is legal and what the computer team would say, without making it. */
       evaluateTrade: (
         id: string,
-        input: TradeProposal,
+        input: TradeProposalInput,
       ): Promise<TradeEvaluation> =>
         request(
           "POST",
@@ -332,7 +332,10 @@ export function createApiClient(options: ApiClientOptions) {
           input,
         ),
       /** Proposes a trade: made if it is legal and the computer team accepts. */
-      proposeTrade: (id: string, input: TradeProposal): Promise<TradeResult> =>
+      proposeTrade: (
+        id: string,
+        input: TradeProposalInput,
+      ): Promise<TradeResult> =>
         request(
           "POST",
           `/leagues/${encodeURIComponent(id)}/trades`,

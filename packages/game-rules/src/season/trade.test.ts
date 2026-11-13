@@ -6,6 +6,7 @@ import {
   answerTrade,
   dealWords,
   minSalary,
+  pickValue,
   salaryMatches,
   tradeDeadlineDay,
   tradeProblems,
@@ -244,5 +245,47 @@ describe("whether a trade is legal", () => {
         side(100_000, 14, [10_000], [1_000]),
       ).join(),
     ).toContain("hard ceiling");
+  });
+});
+
+describe("what a draft pick is worth", () => {
+  const first = (worstness: number, yearsAway = 1) =>
+    pickValue({ round: 1, yearsAway, worstness });
+
+  it("is worth more from a weaker team, and more in the first round", () => {
+    expect(first(1)).toBeGreaterThan(first(0.5));
+    expect(first(0.5)).toBeGreaterThan(first(0));
+    expect(first(0)).toBeGreaterThan(
+      pickValue({ round: 2, yearsAway: 1, worstness: 1 }),
+    );
+  });
+
+  it("is worth less the further away the draft is", () => {
+    expect(first(0.5, 2)).toBeLessThan(first(0.5, 1));
+  });
+
+  it("a top pick is worth about a good starter, a late pick about a role player", () => {
+    const starter = tradeValue(player("s", 70), CAP);
+    const role = tradeValue(player("r", 58), CAP);
+    expect(first(1)).toBeGreaterThan(role);
+    expect(first(1)).toBeLessThan(starter);
+    expect(first(0)).toBeLessThan(role * 2);
+  });
+
+  it("counts in how a computer team answers", () => {
+    const team = [player("a", 70), player("b", 66), player("c", 60)];
+    const ask = (picksReceived: number) =>
+      answerTrade({
+        team,
+        gives: [player("c", 60)],
+        receives: [],
+        cap: CAP,
+        inSeason: false,
+        picksReceived,
+      });
+    expect(ask(0).accepts).toBe(false);
+    expect(
+      ask(pickValue({ round: 1, yearsAway: 1, worstness: 1 })).accepts,
+    ).toBe(true);
   });
 });

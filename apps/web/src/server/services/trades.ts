@@ -10,6 +10,7 @@ import {
   answerTrade,
   dealWords,
   hardCeiling,
+  pickValue,
   tradeDeadlineDay,
   tradeProblems,
   tradeValue,
@@ -24,6 +25,7 @@ import type {
   TradeEvaluation,
   TradePartnerResponse,
   TradeOffer,
+  TradePick,
   TradePlayer,
   TradeProposal,
   TradeRecord,
@@ -34,6 +36,7 @@ import {
   acceptTradeOffer,
   applyTrade,
   declineTradeOffer,
+  ensurePickRights,
   replaceTradeOffers,
 } from "@/server/admin/offseason";
 import { ApiError } from "@/server/api/handler";
@@ -116,6 +119,85 @@ function tradePlayer(r: Row, season: SeasonRow): TradePlayer {
     salary: a.salary,
     yearsLeft: a.yearsLeft,
     value: Math.round(tradeValue(a, season.salary_cap)),
+  };
+}
+
+type PickRow = {
+  id: string;
+  season_year: number;
+  round: number;
+  original_team_id: string;
+  team_id: string;
+};
+
+/** Every pick still to be drafted, made if it didn't exist yet. */
+async function pickRows(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+): Promise<PickRow[]> {
+  await ensurePickRights(season.id);
+  const { data, error } = await ctx.supabase
+    .from("pick_rights")
+    .select("id, season_year, round, original_team_id, team_id")
+    .eq("league_id", leagueId)
+    .gt("season_year", season.year)
+    .order("season_year")
+    .order("round");
+  if (error) throw error;
+  return data;
+}
+
+/** How weak each team is: 0 for the strongest, 1 for the weakest (its best eight players). */
+function worstnessOf(rows: readonly Row[]): Map<string, number> {
+  const overalls = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!r.team_id) continue;
+    overalls.set(r.team_id, [...(overalls.get(r.team_id) ?? []), r.overall]);
+  }
+  const scored = [...overalls.entries()]
+    .map(
+      ([id, list]) =>
+        [
+          id,
+          [...list]
+            .sort((a, b) => b - a)
+            .slice(0, 8)
+            .reduce((s, x) => s + x, 0),
+        ] as const,
+    )
+    .sort((a, b) => b[1] - a[1]);
+  return new Map(
+    scored.map(([id], i) => [
+      id,
+      scored.length > 1 ? i / (scored.length - 1) : 0.5,
+    ]),
+  );
+}
+
+function pickWorth(
+  p: PickRow,
+  season: SeasonRow,
+  worst: ReadonlyMap<string, number>,
+): number {
+  return pickValue({
+    round: p.round,
+    yearsAway: p.season_year - season.year,
+    worstness: worst.get(p.original_team_id) ?? 0.5,
+  });
+}
+
+function pickView(
+  p: PickRow,
+  season: SeasonRow,
+  worst: ReadonlyMap<string, number>,
+): TradePick {
+  return {
+    id: p.id,
+    seasonYear: p.season_year,
+    round: p.round,
+    originalTeamId: p.original_team_id,
+    value: Math.round(pickWorth(p, season, worst)),
   };
 }
 
@@ -205,7 +287,9 @@ export async function getTrades(
 
   const trades = await ctx.supabase
     .from("trades")
-    .select("id, season_year, day, team_a, team_b, gave_a, gave_b")
+    .select(
+      "id, season_year, day, team_a, team_b, gave_a, gave_b, gave_picks_a, gave_picks_b",
+    )
     .eq("league_id", league.id)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -227,6 +311,33 @@ export async function getTrades(
       const p = byId.get(id);
       return p ? [p] : [];
     });
+  const pickIds = [
+    ...new Set(
+      trades.data.flatMap((t) => [...t.gave_picks_a, ...t.gave_picks_b]),
+    ),
+  ];
+  const tradedPicks = pickIds.length
+    ? await ctx.supabase
+        .from("pick_rights")
+        .select("id, season_year, round, original_team_id")
+        .eq("league_id", league.id)
+        .in("id", pickIds)
+    : { data: [], error: null };
+  if (tradedPicks.error) throw tradedPicks.error;
+  const pickById = new Map(tradedPicks.data.map((p) => [p.id, p]));
+  const namedPicks = (list: string[]) =>
+    list.flatMap((id) => {
+      const p = pickById.get(id);
+      return p
+        ? [
+            {
+              seasonYear: p.season_year,
+              round: p.round,
+              originalTeamId: p.original_team_id,
+            },
+          ]
+        : [];
+    });
   const history: TradeRecord[] = trades.data.map((t) => ({
     id: t.id,
     seasonYear: t.season_year,
@@ -235,9 +346,18 @@ export async function getTrades(
     teamB: t.team_b,
     gaveA: named(t.gave_a),
     gaveB: named(t.gave_b),
+    picksA: namedPicks(t.gave_picks_a),
+    picksB: namedPicks(t.gave_picks_b),
   }));
 
   const offers = await openOffers(ctx, league.id, season, teamId, rows, w);
+  const worst = worstnessOf(rows);
+  const myPicks =
+    season && teamId
+      ? (await pickRows(ctx, league.id, season))
+          .filter((p) => p.team_id === teamId)
+          .map((p) => pickView(p, season, worst))
+      : [];
 
   return {
     teamId,
@@ -262,6 +382,7 @@ export async function getTrades(
         size: rows.filter((r) => r.team_id === t.id).length,
       })),
     history,
+    picks: myPicks,
     offers,
   };
 }
@@ -292,12 +413,16 @@ export async function getTradePartner(
       "That isn't a team you can trade with.",
     );
   }
+  const worst = worstnessOf(await rosterRows(ctx, league.id));
   return {
     teamId: partnerId,
     payroll: payrollOf(rows, partnerId),
     roster: rows
       .map((r) => tradePlayer(r, season))
       .sort((a, b) => b.value - a.value),
+    picks: (await pickRows(ctx, league.id, season))
+      .filter((p) => p.team_id === partnerId)
+      .map((p) => pickView(p, season, worst)),
   };
 }
 
@@ -317,7 +442,7 @@ async function judge(
   if (!w.open)
     throw new ApiError(409, "trades_closed", w.reason ?? "Trades are closed.");
 
-  const rows = await rosterRows(ctx, leagueId, [mine, input.partnerId]);
+  const rows = await rosterRows(ctx, leagueId);
   const mineRows = rows.filter((r) => r.team_id === mine);
   const theirRows = rows.filter((r) => r.team_id === input.partnerId);
   if (theirRows.length === 0) {
@@ -340,6 +465,27 @@ async function judge(
   const sum = (list: readonly Row[]) =>
     list.reduce((s, r) => s + (r.salary ?? 0), 0);
   const assets = (list: readonly Row[]) => list.map((r) => assetOf(r, season));
+
+  const picks = await pickRows(ctx, leagueId, season);
+  const givePicks = picks.filter(
+    (p) => p.team_id === mine && input.givePicks.includes(p.id),
+  );
+  const getPicks = picks.filter(
+    (p) => p.team_id === input.partnerId && input.getPicks.includes(p.id),
+  );
+  if (
+    givePicks.length !== input.givePicks.length ||
+    getPicks.length !== input.getPicks.length
+  ) {
+    throw new ApiError(
+      422,
+      "pick_not_on_team",
+      "Every pick has to belong to the team that gives it.",
+    );
+  }
+  const worst = worstnessOf(rows);
+  const pickTotal = (list: readonly PickRow[]) =>
+    list.reduce((s, p) => s + pickWorth(p, season, worst), 0);
 
   const problems = tradeProblems({
     a: {
@@ -364,6 +510,8 @@ async function judge(
     receives: assets(give),
     cap,
     inSeason: w.inSeason,
+    picksGiven: pickTotal(getPicks),
+    picksReceived: pickTotal(givePicks),
   });
   return {
     mine,
@@ -415,6 +563,8 @@ export async function proposeTrade(
       teamB: input.partnerId,
       fromA: input.give,
       fromB: input.get,
+      picksA: input.givePicks,
+      picksB: input.getPicks,
     });
   } catch (error) {
     const message = (error as { message?: string }).message;
@@ -422,7 +572,8 @@ export async function proposeTrade(
       message === "trades_closed" ||
       message === "invalid_rosters" ||
       message === "over_ceiling" ||
-      message === "player_not_on_team"
+      message === "player_not_on_team" ||
+      message === "pick_not_on_team"
     ) {
       throw new ApiError(
         409,

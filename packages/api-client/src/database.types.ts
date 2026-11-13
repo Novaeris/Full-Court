@@ -215,6 +215,7 @@ export type Database = {
           finish_rank: number
           league_id: string
           lottery_odds: number | null
+          original_team_id: string | null
           pick: number
           player_id: string | null
           round: number
@@ -226,6 +227,7 @@ export type Database = {
           finish_rank: number
           league_id: string
           lottery_odds?: number | null
+          original_team_id?: string | null
           pick: number
           player_id?: string | null
           round: number
@@ -237,6 +239,7 @@ export type Database = {
           finish_rank?: number
           league_id?: string
           lottery_odds?: number | null
+          original_team_id?: string | null
           pick?: number
           player_id?: string | null
           round?: number
@@ -589,6 +592,55 @@ export type Database = {
           {
             foreignKeyName: "leagues_id_user_team_id_fkey"
             columns: ["id", "user_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
+      pick_rights: {
+        Row: {
+          id: string
+          league_id: string
+          original_team_id: string
+          round: number
+          season_year: number
+          team_id: string
+        }
+        Insert: {
+          id?: string
+          league_id: string
+          original_team_id: string
+          round: number
+          season_year: number
+          team_id: string
+        }
+        Update: {
+          id?: string
+          league_id?: string
+          original_team_id?: string
+          round?: number
+          season_year?: number
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pick_rights_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pick_rights_league_id_original_team_id_fkey"
+            columns: ["league_id", "original_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "pick_rights_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["league_id", "id"]
@@ -1670,6 +1722,8 @@ export type Database = {
           day: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a: string[]
+          gave_picks_b: string[]
           id: string
           league_id: string
           season_year: number
@@ -1681,6 +1735,8 @@ export type Database = {
           day?: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a?: string[]
+          gave_picks_b?: string[]
           id?: string
           league_id: string
           season_year: number
@@ -1692,6 +1748,8 @@ export type Database = {
           day?: number
           gave_a?: string[]
           gave_b?: string[]
+          gave_picks_a?: string[]
+          gave_picks_b?: string[]
           id?: string
           league_id?: string
           season_year?: number
@@ -1739,6 +1797,8 @@ export type Database = {
           day: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a: string[]
+          gave_picks_b: string[]
           id: string
           league_id: string
           season_year: number
@@ -1870,6 +1930,8 @@ export type Database = {
         Args: {
           from_a: string[]
           from_b: string[]
+          picks_a?: string[]
+          picks_b?: string[]
           target_season: string
           trade_team_a: string
           trade_team_b: string
@@ -1879,6 +1941,8 @@ export type Database = {
           day: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a: string[]
+          gave_picks_b: string[]
           id: string
           league_id: string
           season_year: number
@@ -2113,6 +2177,10 @@ export type Database = {
       }
       admin_ensure_contracts: {
         Args: { contracts: Json; target_league: string }
+        Returns: number
+      }
+      admin_ensure_pick_rights: {
+        Args: { target_season: string }
         Returns: number
       }
       admin_fail_sim_job: {
