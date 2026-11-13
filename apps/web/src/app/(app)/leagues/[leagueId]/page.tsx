@@ -4,9 +4,11 @@ import { Suspense } from "react";
 import type { Team } from "@fullcourt/validation";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { TeamGroups } from "@/components/leagues/team-groups";
+import { SimPanel } from "@/components/season/sim-panel";
 import { buttonClasses, ButtonLink } from "@/components/ui/button";
 import { chooseTeamAction } from "@/server/leagues/actions";
 import { loadLeague } from "@/server/leagues/load";
+import { getSimulation } from "@/server/services/simulation";
 import { listTeams } from "@/server/services/world";
 
 export const metadata: Metadata = { title: "League" };
@@ -35,9 +37,12 @@ async function Overview({
 }) {
   const { leagueId } = await params;
   const { ctx, league } = await loadLeague(leagueId);
-  const [teams, query] = await Promise.all([
+  const [teams, query, sim] = await Promise.all([
     listTeams(ctx, league.id),
     searchParams,
+    league.status === "active"
+      ? getSimulation(ctx, league.id)
+      : Promise.resolve(null),
   ]);
 
   if (league.status === "setup" || !league.userTeamId) {
@@ -88,6 +93,7 @@ async function Overview({
           luck!
         </p>
       ) : null}
+      {sim ? <SimPanel leagueId={league.id} initial={sim} /> : null}
       {myTeams.length === 1 && first ? (
         <section
           aria-label="Your team"

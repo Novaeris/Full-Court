@@ -207,7 +207,7 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
   - A possession starts from an `Origin` (steal, defensive rebound or other). `transitionChance` turns that, the teams' speed ratings and pace into the chance of a fast break; breaks use a shorter clock, a rim-heavy shot mix and a make-chance bonus. Substitutions only happen on dead balls.
   - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, threes, free throws, fouls, steals, blocks, assists, turnovers, rebounds, fast-break share, starter minutes, home edge) inside NBA 2010 to 2020 bounds, so a change that wrecks the balance fails a test.
 - Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
-- Still to come: the season pages.
+- Still to come: playoffs and the offseason.
 
 ### Season tables, replays and history (Phase 12 and 13)
 
@@ -303,6 +303,35 @@ Functions:
 Long simulations never run inside an HTTP request or on a client device.
 
 `pnpm --filter @fullcourt/worker smoke` checks the whole chain against a local Supabase (a league, a season, a week, the rest of the season, a stored recipe replayed as a viewer would, standings and scoring, then archiving the season into history, checking the history adds up to every point scored, and starting the next season). `SMOKE_KEEP=before-archive` stops before archiving so table sizes can be measured. It found that a player could commit a seventh foul, and that deleting a league with a season of one-row-per-play data took 28 seconds, past the API's 8 second limit.
+
+### Season pages and the game viewer (Phase 14)
+
+API (all under `/api/v1/leagues/:leagueId`, through `apiRoute()` with zod schemas in `@fullcourt/validation/season-views.ts` and typed methods on `@fullcourt/api-client`):
+
+| Route                      | Returns                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /schedule`            | `?team=<id>` one team's whole season, `?day=<n>` one day, or (neither) the season's current day. Never the whole league at once                                          |
+| `GET /standings`           | Every team's record, best first, by the standings rules (`buildStandings` in `game-rules`): home and away, streak, last ten. For an archived season it reads the history |
+| `GET /games/:gameId`       | The game, its box score with player names, and the replay recipe when `replayStatus` is `available` (`engine-updated` and `missing` are the other two)                   |
+| `GET /games/:gameId/plays` | The game replayed by the server, with the starters. Refused (`409 replay_unavailable`) if the replay doesn't end on the stored score                                     |
+
+The services are in `apps/web/src/server/services/season.ts`. A season has more games than PostgREST returns in one request (1,000), so standings read the games in pages and the schedule is always filtered.
+
+Pages (`apps/web/src/app/(app)/leagues/[leagueId]/`): **Schedule** (your team's season, or any day, with the simulation panel), **Standings** (a table per conference; phones show the record, tablets add form, desktops add home, away, division, conference and scoring), **a game** (`games/[gameId]`, with Watch and Box score tabs, and a team toggle for the box score on phones that needs no JavaScript) and the **overview**, which also has the simulation panel.
+
+**The simulation panel** (`components/season/sim-panel.tsx`) queues a day, a week or the rest of the regular season, follows the job by asking `GET /sim` every 1.2 seconds while it is queued or running, then refreshes the page's data. It says plainly when a job is still waiting for a worker. Polling is used because the web app has no browser Supabase client yet; Realtime can replace it without changing the API.
+
+**The game viewer** (`components/season/game-viewer.tsx`) replays the game on the device from the recipe, with `replayGame`, and checks that the replay ends on the stored final score. If it doesn't, or can't be run, it asks `/plays` for the server's replay. It builds a movement timeline, then plays it back on a full-court SVG with a scoreboard, play controls (play and pause, previous and next play, skip to the end, 1×, 2×, 4× and 8×, a scrubber) and a feed. It starts paused. A full play-by-play is available in a collapsed section, and the box score is the accessible alternative to the court.
+
+**Movement** (`packages/game-engine/src/view/`). `buildTimeline(plays, rosters, starters)` turns the plays into frames of ten players and the ball; `sampleTimeline(timeline, t)` interpolates between them. It is pure and deterministic, so mobile and desktop will reuse it.
+
+- A team that has just won the ball brings it up: a half-court set (point guard on top, wings, bigs on the blocks, defenders goal-side), or, after a steal or a defensive rebound that started a fast break (`PlayEvent.transition`), a lead ball handler running the floor with wings in the lanes and the defence trailing. The stealer or rebounder leads.
+- Passes (an assist is a pass to the shooter just before the shot), shots and the ball in the net, rebounds (a ring of players crashing the boards), fouls, free throws (the lane), turnovers and substitutions (the new player jogs on from the bench) each have their own movement.
+- **Speed limit.** No player moves faster than a sprint (about 25 feet per game second). A segment that would need more is stretched in time, which delays everything after it. Playback runs at twice real time at normal speed, so a game takes about 25 minutes to watch at 1× and 3 at 8×.
+- Players are kept apart so no circle hides another.
+- Tests check, over whole simulated games, that every play is revealed in order, players stay on the court, shooters stand where the engine says the shot was taken, the ball stays with its holder, nobody exceeds the speed limit or moves abruptly, defenders don't stack on attackers, and a steal leads to its stealer running the break.
+
+`describePlay` (`view/describe.ts`) words a play for the feed ("C. Vance makes a driving layup (assist: A. Holloway)"). The pure game packages are marked `"sideEffects": false` so the browser bundle includes only the engine code the viewer uses.
 
 ### Open alpha: policies, support and analytics
 

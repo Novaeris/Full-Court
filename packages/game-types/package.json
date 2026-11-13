@@ -4,6 +4,7 @@
   "private": true,
   "description": "Game domain types and constants. Types only, no logic.",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
   },

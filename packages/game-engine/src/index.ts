@@ -57,3 +57,21 @@ export {
   type ReplaySnapshot,
   type ReplayTeam,
 } from "./season/replay";
+export {
+  buildTimeline,
+  sampleTimeline,
+  type GameTimeline,
+  type TimelineFrame,
+  type TimelineSample,
+  type ViewLineups,
+  type ViewPlayer,
+  type ViewRosters,
+  type ViewTeam,
+} from "./view/choreography";
+export {
+  describePlay,
+  formatClock,
+  isKeyPlay,
+  periodLabel,
+  type NameOf,
+} from "./view/describe";

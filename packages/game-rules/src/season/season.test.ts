@@ -10,7 +10,11 @@ import {
   seasonLength,
   validateScheduleTiers,
 } from "./schedule";
-import { rankStandings, type FinalGameResult } from "./standings";
+import {
+  buildStandings,
+  rankStandings,
+  type FinalGameResult,
+} from "./standings";
 
 const standard = equalStructure(2, 3, 5);
 
@@ -189,5 +193,80 @@ describe("attacksRight", () => {
     for (const period of [1, 2, 3, 4, 5]) {
       expect(attacksRight(period, true)).not.toBe(attacksRight(period, false));
     }
+  });
+});
+
+describe("buildStandings", () => {
+  const teams = [
+    { teamId: "a", conferenceId: "c1", divisionId: "d1" },
+    { teamId: "b", conferenceId: "c1", divisionId: "d1" },
+    { teamId: "c", conferenceId: "c1", divisionId: "d2" },
+  ];
+  // a beats b (home), a beats c (away), b beats c (home), b beats a (away), a loses to c at home.
+  const games = [
+    { day: 1, homeTeamId: "a", awayTeamId: "b", homeScore: 100, awayScore: 90 },
+    { day: 2, homeTeamId: "c", awayTeamId: "a", homeScore: 80, awayScore: 85 },
+    { day: 3, homeTeamId: "b", awayTeamId: "c", homeScore: 99, awayScore: 70 },
+    {
+      day: 4,
+      homeTeamId: "b",
+      awayTeamId: "a",
+      homeScore: 101,
+      awayScore: 100,
+    },
+    { day: 5, homeTeamId: "a", awayTeamId: "c", homeScore: 90, awayScore: 95 },
+  ];
+  const rows = buildStandings(teams, games);
+  const row = (id: string) => rows.find((r) => r.teamId === id);
+
+  it("ranks teams and adds home and away records", () => {
+    expect(rows.map((r) => [r.teamId, r.rank])).toEqual([
+      ["b", 1],
+      ["a", 2],
+      ["c", 3],
+    ]);
+    // a: 2-2 (wins at home on day 1 and away on day 2; loses on the road on day 4 and at home on day 5)
+    expect(row("a")).toMatchObject({
+      wins: 2,
+      losses: 2,
+      homeWins: 1,
+      homeLosses: 1,
+      awayWins: 1,
+      awayLosses: 1,
+    });
+    expect(row("c")).toMatchObject({
+      wins: 1,
+      losses: 2,
+      homeWins: 0,
+      homeLosses: 1,
+    });
+  });
+
+  it("works out streaks and the last ten games", () => {
+    expect(row("a")?.streak).toBe("L2");
+    expect(row("c")?.streak).toBe("W1");
+    expect(row("b")?.streak).toBe("W2");
+    expect(row("a")?.lastTen).toBe("2-2");
+  });
+
+  it("copes with a team that hasn't played", () => {
+    const fresh = buildStandings(teams, []);
+    expect(fresh).toHaveLength(3);
+    expect(fresh.every((r) => r.streak === "" && r.lastTen === "0-0")).toBe(
+      true,
+    );
+  });
+
+  it("limits the last ten to ten games", () => {
+    const many = Array.from({ length: 14 }, (_, i) => ({
+      day: i + 1,
+      homeTeamId: "a",
+      awayTeamId: "b",
+      homeScore: i < 4 ? 80 : 100,
+      awayScore: 90,
+    }));
+    const result = buildStandings(teams, many);
+    expect(result.find((r) => r.teamId === "a")?.lastTen).toBe("10-0");
+    expect(result.find((r) => r.teamId === "a")?.streak).toBe("W10");
   });
 });

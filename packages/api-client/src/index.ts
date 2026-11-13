@@ -5,12 +5,20 @@ import {
   LeagueSchema,
   LeagueSettingsSchema,
   LeagueStructureSchema,
+  GameDetailSchema,
+  GamePlaysSchema,
+  ScheduleResponseSchema,
   SimJobSchema,
+  StandingsResponseSchema,
   SimulationStatusSchema,
   TeamDetailSchema,
   TeamListSchema,
   type ChooseTeamRequest,
+  type GameDetail,
+  type GamePlays,
+  type ScheduleResponse,
   type SimJob,
+  type StandingsResponse,
   type SimulationStatus,
   type StartSimulationRequest,
   type TeamDetail,
@@ -171,6 +179,40 @@ export function createApiClient(options: ApiClientOptions) {
       delete: (id: string): Promise<{ deleted: true }> =>
         request("DELETE", `/leagues/${encodeURIComponent(id)}`, (b) =>
           DeleteLeagueResponseSchema.parse(b),
+        ),
+      /** A team's whole season (`team`), one day (`day`), or the current day. */
+      schedule: (
+        id: string,
+        filter: { team?: string; day?: number } = {},
+      ): Promise<ScheduleResponse> => {
+        const query = new URLSearchParams();
+        if (filter.team) query.set("team", filter.team);
+        if (filter.day !== undefined) query.set("day", String(filter.day));
+        const suffix = query.size > 0 ? `?${query}` : "";
+        return request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/schedule${suffix}`,
+          (b) => ScheduleResponseSchema.parse(b),
+        );
+      },
+      /** Every team's record this season, best first. */
+      standings: (id: string): Promise<StandingsResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/standings`, (b) =>
+          StandingsResponseSchema.parse(b),
+        ),
+      /** A game, its box score and what is needed to replay it. */
+      game: (id: string, gameId: string): Promise<GameDetail> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/games/${encodeURIComponent(gameId)}`,
+          (b) => GameDetailSchema.parse(b),
+        ),
+      /** The game's plays, replayed by the server. */
+      gamePlays: (id: string, gameId: string): Promise<GamePlays> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/games/${encodeURIComponent(gameId)}/plays`,
+          (b) => GamePlaysSchema.parse(b),
         ),
       /** The league's season and its latest simulation job. */
       simulation: (id: string): Promise<SimulationStatus> =>

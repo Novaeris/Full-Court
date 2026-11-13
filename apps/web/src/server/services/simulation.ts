@@ -25,7 +25,7 @@ import { getStructure } from "./world";
 type SeasonRow = Database["public"]["Tables"]["seasons"]["Row"];
 type JobRow = Database["public"]["Tables"]["sim_jobs"]["Row"];
 
-function toSeason(row: SeasonRow): Season {
+export function toSeason(row: SeasonRow): Season {
   return {
     id: row.id,
     year: row.year,
@@ -50,7 +50,7 @@ function toJob(row: JobRow): SimJob {
   };
 }
 
-async function latestSeason(
+export async function latestSeason(
   ctx: UserContext,
   leagueId: string,
 ): Promise<SeasonRow | null> {

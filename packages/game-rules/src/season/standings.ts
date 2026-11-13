@@ -161,3 +161,65 @@ function breakTies(
     return a.teamId < b.teamId ? -1 : 1;
   });
 }
+
+/** A finished game with the day it was played, so form can be worked out. */
+export type DatedResult = FinalGameResult & { day: number };
+
+export type StandingsDetailRow = StandingsRow & {
+  /** 1 for the best team. */
+  rank: number;
+  homeWins: number;
+  homeLosses: number;
+  awayWins: number;
+  awayLosses: number;
+  /** "W3" for three straight wins, "L2" for two straight losses, "" before a game is played. */
+  streak: string;
+  /** Wins and losses in the last ten games, such as "7-3". */
+  lastTen: string;
+};
+
+/**
+ * The full standings: `rankStandings` order plus home and away records,
+ * the current streak and the last ten games.
+ */
+export function buildStandings(
+  teams: readonly TeamPlacement[],
+  games: readonly DatedResult[],
+): StandingsDetailRow[] {
+  const ranked = rankStandings(teams, games);
+  const results = new Map<
+    string,
+    { won: boolean; home: boolean; day: number }[]
+  >();
+  for (const team of teams) results.set(team.teamId, []);
+  for (const g of games) {
+    const homeWon = g.homeScore > g.awayScore;
+    results.get(g.homeTeamId)?.push({ won: homeWon, home: true, day: g.day });
+    results.get(g.awayTeamId)?.push({ won: !homeWon, home: false, day: g.day });
+  }
+  return ranked.map((row, index) => {
+    const played = [...(results.get(row.teamId) ?? [])].sort(
+      (a, b) => a.day - b.day,
+    );
+    const count = (home: boolean, won: boolean) =>
+      played.filter((r) => r.home === home && r.won === won).length;
+    const latest = played[played.length - 1];
+    let run = 0;
+    for (let i = played.length - 1; i >= 0; i--) {
+      if (played[i]?.won !== latest?.won) break;
+      run++;
+    }
+    const lastTen = played.slice(-10);
+    const tenWins = lastTen.filter((r) => r.won).length;
+    return {
+      ...row,
+      rank: index + 1,
+      homeWins: count(true, true),
+      homeLosses: count(true, false),
+      awayWins: count(false, true),
+      awayLosses: count(false, false),
+      streak: latest ? `${latest.won ? "W" : "L"}${run}` : "",
+      lastTen: `${tenWins}-${lastTen.length - tenWins}`,
+    };
+  });
+}

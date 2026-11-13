@@ -4,6 +4,7 @@
   "private": true,
   "description": "Tiny platform-free utilities shared by every package and app.",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
   },

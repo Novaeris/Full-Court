@@ -4,6 +4,7 @@
   "private": true,
   "description": "League rules and legality checks as pure functions.",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
   },
