@@ -109,7 +109,7 @@ function MiniSeries({
       <div
         id={id}
         popover="auto"
-        className="m-auto w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 text-text shadow-lg backdrop:bg-black/40"
+        className="fixed inset-0 m-auto h-fit w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 text-text shadow-lg backdrop:bg-black/40"
       >
         <h3 className="text-lg font-bold">
           {a?.abbreviation} vs {b?.abbreviation}
