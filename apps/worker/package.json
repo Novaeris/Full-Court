@@ -1,0 +1,27 @@
+{
+  "name": "@fullcourt/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Render background worker: claims simulation jobs and plays the days.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "once": "tsx src/main.ts --once",
+    "smoke": "tsx scripts/smoke.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fullcourt/api-client": "workspace:*",
+    "@fullcourt/game-engine": "workspace:*",
+    "@fullcourt/game-rules": "workspace:*",
+    "@fullcourt/game-types": "workspace:*",
+    "@supabase/supabase-js": "2.119.0",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

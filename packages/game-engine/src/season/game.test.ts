@@ -530,3 +530,26 @@ describe("fast breaks and transition", () => {
     expect(share("fast")).toBeGreaterThan(share("slow") + 0.05);
   });
 });
+
+describe("fouling out", () => {
+  it("never gives a player more than six fouls", () => {
+    const rng = createRng(seedState("fouls"));
+    let sixes = 0;
+    for (let g = 0; g < 250; g++) {
+      const home = teams[g % 30] as Team;
+      const away = teams[(g + 4) % 30] as Team;
+      const r = simulateGame(
+        scheduledGame(`g-${g}`, home, away),
+        home,
+        away,
+        rng,
+      );
+      for (const line of r.boxScore.lines) {
+        expect(line.fouls).toBeLessThanOrEqual(6);
+        if (line.fouls === 6) sixes++;
+      }
+    }
+    // Fouling out does happen, which is what makes the cap worth testing.
+    expect(sixes).toBeGreaterThan(0);
+  });
+});

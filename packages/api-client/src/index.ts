@@ -5,9 +5,14 @@ import {
   LeagueSchema,
   LeagueSettingsSchema,
   LeagueStructureSchema,
+  SimJobSchema,
+  SimulationStatusSchema,
   TeamDetailSchema,
   TeamListSchema,
   type ChooseTeamRequest,
+  type SimJob,
+  type SimulationStatus,
+  type StartSimulationRequest,
   type TeamDetail,
   type Team,
   type CreateLeagueRequest,
@@ -166,6 +171,24 @@ export function createApiClient(options: ApiClientOptions) {
       delete: (id: string): Promise<{ deleted: true }> =>
         request("DELETE", `/leagues/${encodeURIComponent(id)}`, (b) =>
           DeleteLeagueResponseSchema.parse(b),
+        ),
+      /** The league's season and its latest simulation job. */
+      simulation: (id: string): Promise<SimulationStatus> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/sim`, (b) =>
+          SimulationStatusSchema.parse(b),
+        ),
+      /** Queues a day, a week or the rest of the regular season. */
+      simulate: (id: string, input: StartSimulationRequest): Promise<SimJob> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/sim`,
+          (b) => SimJobSchema.parse(b),
+          input,
+        ),
+      /** Cancels the running or queued simulation. Days already played stay. */
+      cancelSimulation: (id: string): Promise<SimJob> =>
+        request("DELETE", `/leagues/${encodeURIComponent(id)}/sim`, (b) =>
+          SimJobSchema.parse(b),
         ),
     },
 

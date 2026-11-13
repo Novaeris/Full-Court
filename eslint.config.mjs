@@ -148,7 +148,12 @@ export default defineConfig([
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
   },
   {
-    files: ["scripts/**/*.{js,mjs}", "*.{js,mjs,ts}", "e2e/**/*.ts"],
+    files: [
+      "scripts/**/*.{js,mjs}",
+      "*.{js,mjs,ts}",
+      "e2e/**/*.ts",
+      "apps/worker/**/*.ts",
+    ],
     languageOptions: {
       globals: {
         process: "readonly",

@@ -335,7 +335,7 @@ export function simulateGame(
     if (rng.next() < (fb ? 0.06 : 0.115)) {
       spend(Math.min(seconds, 6));
       const spot = { x: (rng.next() - 0.5) * 40, y: 14 + rng.next() * 26 };
-      foul(defense, pick(rng, defense.onCourt), spot, offense, false);
+      foul(defense, pickFouler(rng, defense), spot, offense, false);
       if (defense.periodFouls >= BONUS_FOULS) {
         const shooter = weighted(
           rng,
@@ -442,7 +442,7 @@ export function simulateGame(
         at,
       });
       if (rng.next() < AND_ONE[zone] * (fb ? 1.5 : 1)) {
-        foul(defense, pick(rng, defense.onCourt), spot, offense, fb);
+        foul(defense, pickFouler(rng, defense), spot, offense, fb);
         freeThrows(offense, shooter, 1, fb);
       }
       return flip(true);
@@ -452,7 +452,7 @@ export function simulateGame(
       rng.next() <
       FOUL_ON_MISS[zone] * (fb && zone === "inside" ? 1.25 : 1)
     ) {
-      foul(defense, pick(rng, defense.onCourt), spot, offense, fb);
+      foul(defense, pickFouler(rng, defense), spot, offense, fb);
       const result = freeThrows(offense, shooter, zone === "three" ? 3 : 2, fb);
       if (result === "made") return flip(true);
       const board = rebound(offense, defense, 0.13, spot);
@@ -743,4 +743,15 @@ function transitionChance(
     offense.team.strategy.pace
   ];
   return clamp(base + speed + pace, 0.02, 0.85);
+}
+
+/**
+ * Who commits a foul. A player with six fouls has fouled out and can't commit
+ * another while waiting to be replaced at the next dead ball.
+ */
+function pickFouler(rng: Rng, side: Side): SimPlayer {
+  const eligible = side.onCourt.filter(
+    (p) => (side.fouls.get(p.id) ?? 0) < FOUL_OUT,
+  );
+  return pick(rng, eligible.length > 0 ? eligible : side.onCourt);
 }

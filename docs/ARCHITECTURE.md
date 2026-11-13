@@ -22,7 +22,7 @@ Full Court ships first as a **website**. It will later ship as an **iOS/Android 
 ```text
 apps/
   web/            Next.js: website + application API (/api/v1)
-  worker/         (Phase 6) Render background worker that runs simulation jobs
+  worker/         Render background worker that runs simulation jobs
   mobile/         (future) Expo / React Native app
   desktop/        (future) desktop / Steam app
 packages/
@@ -206,7 +206,7 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
   - A possession starts from an `Origin` (steal, defensive rebound or other). `transitionChance` turns that, the teams' speed ratings and pace into the chance of a fast break; breaks use a shorter clock, a rim-heavy shot mix and a make-chance bonus. Substitutions only happen on dead balls.
   - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, threes, free throws, fouls, steals, blocks, assists, turnovers, rebounds, fast-break share, starter minutes, home edge) inside NBA 2010 to 2020 bounds, so a change that wrecks the balance fails a test.
 - Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
-- Still to come: `apps/worker` and the season pages.
+- Still to come: the season pages.
 
 ### Season tables and the simulation queue (Phase 12)
 
@@ -242,18 +242,27 @@ Functions:
 
 ### Simulation (Phase 13)
 
-1. Clients call `POST /api/v1/leagues/:id/sim`, which calls `enqueue_sim_job`.
-2. `apps/worker` calls `admin_claim_sim_job`, then for each day: reads the day's games, teams and rosters, runs `simulateDay` from `@fullcourt/game-engine` with the league's saved RNG state, and calls `admin_commit_sim_day`. It maps engine rows to the snake_case columns the function expects, and checks for cancellation by the commit being refused.
-3. Clients follow progress through Supabase Realtime.
+1. **Queue.** `POST /api/v1/leagues/:id/sim` (`{ "kind": "day" | "week" | "season" }`) calls `startSimulation` in `apps/web/src/server/services/simulation.ts`. It requires an active league, creates the league's first season if there is none, then calls `enqueue_sim_job`. The first season uses the standard schedule preset, built by `generateSchedule` from the league's own structure and teams, with an RNG seeded from the league id and year so it never disturbs the league's simulation RNG. `GET` returns the season and the latest job; `DELETE` cancels the active job. Errors use the usual envelope (`league_not_active`, `season_not_running`, `job_already_running`, `job_not_found`, `schedule_not_supported`). A successful `POST` counts `simulation_started`.
+2. **Worker.** `apps/worker` (Node, run with tsx) loops: it puts jobs whose heartbeat is older than `STALE_AFTER_MS` back in the queue, claims a job with `admin_claim_sim_job`, plays it, and polls every `POLL_INTERVAL_MS` when the queue is empty. For each day it loads that day's games, the rosters of the teams playing and the league's RNG state, runs `simulateDay` from `@fullcourt/game-engine`, and commits with `admin_commit_sim_day`. Teams use the default coaching strategy until strategies are stored.
+   - `src/db.ts` is the `WorkerDb` interface, `src/supabase-db.ts` the real implementation, `src/map.ts` the row mapping, `src/run-job.ts` the job logic and `src/loop.ts` the loop. Tests run the job logic against an in-memory `WorkerDb`.
+   - **Cancelled or repeated work.** If the commit is refused because the job was cancelled, requeued or the day was already committed, the worker stops without failing anything. Days already committed stay.
+   - **Bad data.** If the engine can't simulate the day (a team with fewer than five players, an invalid RNG state), or the database rejects the data (a constraint, or the commit's own consistency checks), the job is marked failed with the reason: retrying the same data can't succeed.
+   - **Transient errors.** A network or database error leaves the job running; its heartbeat goes stale and it is requeued, resuming at the next uncommitted day.
+   - **Configuration.** `SUPABASE_URL` (or `NEXT_PUBLIC_SUPABASE_URL`) and `SUPABASE_SECRET_KEY`, plus optional `WORKER_ID`, `POLL_INTERVAL_MS` and `STALE_AFTER_MS`. `pnpm --filter @fullcourt/worker once` runs until the queue is empty.
+3. **Progress.** Clients follow `sim_jobs` and `seasons` through Supabase Realtime.
 
 Long simulations never run inside an HTTP request or on a client device.
+
+`pnpm --filter @fullcourt/worker smoke` checks the whole chain against a local Supabase (a league, a season, a week, the rest of the season, standings and scoring, then deleting the league). It found that a player could commit a seventh foul, and that deleting a league with a played season took 28 seconds, past the API's 8 second limit, until the cascading foreign keys were indexed.
+
+Measured on a local database for one 30-team season (1,140 games): about 30 seconds to simulate and store (roughly 0.4 seconds a day, 7 days in about 6), 470,000 play rows and 22,000 box score lines, and about 105 MB (67 MB of rows, 38 MB of indexes). Plays are by far the largest table, so how long to keep them is the next storage decision.
 
 ### Open alpha: policies, support and analytics
 
 - **Policy text and versions** live in `apps/web/src/content/` (`site.ts`, `policies.ts`, `changelog.ts`). Every page reads from there. Bump a version in `policies.ts` only for a material change: signed-in players are then asked again.
 - **Acknowledgments.** Sign-up requires a Terms checkbox (`SignUpRequestSchema.acceptTerms`) and sends `terms_version` as user metadata, which the profile trigger records. `AlphaGate` in `AppShell` shows a modal (`AlphaIntroDialog`) to players whose stored versions are older than the current ones; it records the alpha notice, and the Terms for accounts that predate them.
 - **Support form** (`/support`): zod schema in `@fullcourt/validation` (`support.ts`, also rejects messages that look like passwords or tokens), a honeypot field, an HMAC-signed form timestamp (2 s minimum), then `admin_submit_support_request` limits each sender to 3 per 10 minutes and 10 per day, and everyone to 200 per day. The sender is the account, or an HMAC of the IP address keyed by `RATE_LIMIT_SECRET` (`src/server/security/request-signing.ts`); raw IPs are never stored. After the response, `src/server/email/resend.ts` emails a plain-text copy to the support inbox when `RESEND_API_KEY` and `SUPPORT_EMAIL_FROM` are set.
-- **Analytics** are first-party daily totals, never per person. Browsers send `page_view` and `registration_started` to `POST /api/v1/events` with `credentials: "omit"`; the server reduces paths to route patterns (`src/server/analytics/routes.ts`, unknown paths become `/(other)`). The server records `registration_completed` (at `/auth/confirm`), `league_created` and `team_selected` with `trackEvent()`. `simulation_started` is reserved for Phase 6. Global Privacy Control and Do Not Track switch counting off, in the browser and on the server.
+- **Analytics** are first-party daily totals, never per person. Browsers send `page_view` and `registration_started` to `POST /api/v1/events` with `credentials: "omit"`; the server reduces paths to route patterns (`src/server/analytics/routes.ts`, unknown paths become `/(other)`). The server records `registration_completed` (at `/auth/confirm`), `league_created` and `team_selected` with `trackEvent()`. `simulation_started` (at `POST /api/v1/leagues/:id/sim`) is recorded the same way. Global Privacy Control and Do Not Track switch counting off, in the browser and on the server.
 - **Maintenance mode.** `MAINTENANCE_MODE=on` makes `src/proxy.ts` answer pages with a self-contained 503 page and `/api/*` with the JSON error envelope (`code: "maintenance"`). The health checks are outside the proxy matcher and keep answering.
 
 ## 4. Authentication across platforms
@@ -313,7 +322,7 @@ The website must work well on phones, tablets and desktops. Layouts change shape
   - Builds `@fullcourt/web` and the packages it depends on, using pnpm through corepack.
   - Health check: `/api/health`.
   - `buildFilter` redeploys only when the web app, packages or workspace config change.
-- **Render background worker** (Phase 6): same repository and blueprint, its own build filter, and the only holder of the service-role key outside the admin modules.
+- **Render background worker** (not created yet; `apps/worker` runs locally for now): same repository and blueprint, its own build filter, and the only holder of the service-role key outside the admin modules. Start command `pnpm --filter @fullcourt/worker start`.
 - **Environments:**
   - Local: `supabase start` in Docker.
   - Staging: a Supabase project paired with a Render service.

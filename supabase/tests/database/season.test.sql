@@ -3,7 +3,7 @@
 begin;
 \ir helpers.psql
 
-select plan(56);
+select plan(59);
 
 -- Fixtures ---------------------------------------------------------------------------------------
 
@@ -486,6 +486,12 @@ select throws_ok(
   '23505', null,
   'the database allows only one active job per league'
 );
+
+-- Deleting a league stays fast: the foreign keys that cascade are indexed ---------------------
+
+select has_index('public', 'play_events', 'play_events_team_idx', 'plays are indexed by team for cascading deletes');
+select has_index('public', 'play_events', 'play_events_player_idx', 'plays are indexed by player for cascading deletes');
+select has_index('public', 'box_score_lines', 'box_score_lines_team_idx', 'box score lines are indexed by team for cascading deletes');
 
 -- Deleting a league deletes its season ---------------------------------------------------------------------------------
 

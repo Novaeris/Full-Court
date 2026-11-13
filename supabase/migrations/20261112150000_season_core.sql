@@ -177,6 +177,13 @@ create table public.box_score_lines (
 
 create index box_score_lines_player_idx on public.box_score_lines (league_id, player_id);
 
+-- Foreign keys that cascade or restrict need an index on the referencing columns.
+-- Without them, deleting a league scans the plays once per team, player and game:
+-- 28 seconds for one simulated season, past the API's 8 second limit. With them: under one.
+create index play_events_team_idx on public.play_events (league_id, team_id);
+create index play_events_player_idx on public.play_events (league_id, player_id);
+create index box_score_lines_team_idx on public.box_score_lines (league_id, team_id);
+
 -- Simulation queue ----------------------------------------------------------------------------------
 
 -- The owner asks to simulate a day, a week or the rest of the regular season;
