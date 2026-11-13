@@ -4,7 +4,7 @@ begin;
 \ir helpers.psql
 \ir season_helpers.psql
 
-select plan(80);
+select plan(81);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -178,6 +178,8 @@ select is(
   (select phase || ':' || stage from seasons where id = pg_temp.new_season()),
   'offseason:draft', 'the next season starts in its draft stage'
 );
+select is(app_private.staff_budget(pg_temp.league_id('Offseason')), 10000,
+  'the staff budget is 8% of a $125 million cap (game-rules staffBudget)');
 select is(app_private.salary_ceiling(pg_temp.league_id('Offseason')), 150000,
   'the hard ceiling is 120% of a $125 million cap (game-rules hardCeiling)');
 select throws_ok(
@@ -336,13 +338,11 @@ select is(
   'free-agency:13', 'a refused free agency changes nothing'
 );
 
--- Owner staff actions. T01's players earn enough that the payroll is near the ceiling.
-update players set salary = 10800, contract_expires = 2030
-  where team_id = pg_temp.team('T01') and status = 'active';
+-- Owner staff actions.
 select throws_ok(
   $$select admin_hire_staff(pg_temp.new_season(),
       (select id from staff_members where last_name = 'MarketDev'), pg_temp.team('T01'), 2::smallint)$$,
-  '22023', 'over_ceiling', 'a hire that takes the payroll over the hard ceiling is refused'
+  '22023', 'staff_over_budget', 'a hire that takes the staff over its budget is refused'
 );
 select is(
   (select team_id is null from staff_members where last_name = 'MarketDev')

@@ -24,12 +24,7 @@ import {
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { capFigures } from "./freeagency";
-import {
-  loadPayrollPlayers,
-  mleUsers,
-  payrolls,
-  staffPayrolls,
-} from "./finance";
+import { loadPayrollPlayers, mleUsers, payrolls } from "./finance";
 import { getLeague, parseLeagueId } from "./leagues";
 import { ownedTeams } from "./offseason-data";
 import { latestSeason } from "./season-shared";
@@ -196,9 +191,8 @@ export async function signFreeAgent(
     throw new ApiError(404, "team_not_found", "You don't run a team here.");
   }
   const season = await seasonForMoves(ctx, league.id);
-  const [players, staff, used] = await Promise.all([
+  const [players, used] = await Promise.all([
     loadPayrollPlayers(ctx, league.id),
-    staffPayrolls(ctx, league.id),
     mleUsers(ctx, league.id, season.year),
   ]);
   const player = players.find((p) => p.id === input.playerId);
@@ -220,7 +214,7 @@ export async function signFreeAgent(
     );
   }
   const salary = duringDays ? minSalary(cap) : lateSigningPrice(price, cap);
-  const payroll = payrolls(players, staff).get(teamId) ?? 0;
+  const payroll = payrolls(players).get(teamId) ?? 0;
   const route = signingRoute({
     payroll,
     salary,

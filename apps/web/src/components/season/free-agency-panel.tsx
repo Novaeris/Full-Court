@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FreeAgencyResponse, Team } from "@fullcourt/validation";
+import { FACTOR_LABELS } from "@fullcourt/game-rules";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "./format-date";
 
@@ -11,6 +12,11 @@ type ErrorBody = { error?: { message?: string } };
 /** Thousands of dollars as "$2.17M". */
 export function money(thousands: number): string {
   return `$${(thousands / 1000).toFixed(2)}M`;
+}
+
+/** A 0 to 1 score in words. */
+function level(score: number): string {
+  return score >= 0.7 ? "strong" : score >= 0.4 ? "average" : "weak";
 }
 
 /** One line of the log. */
@@ -130,6 +136,14 @@ export function FreeAgencyPanel({
           </div>
         </dl>
       ) : null}
+      {data.appeal ? (
+        <p className="mt-2 text-sm text-text-muted">
+          How free agents see your team: winning {level(data.appeal.winning)},
+          the city {level(data.appeal.market)}, franchise history{" "}
+          {level(data.appeal.history)}. Each player cares about different
+          things, so an offer is worth more or less to him than its salary.
+        </p>
+      ) : null}
       {f ? (
         <p className="mt-2 text-sm text-text-muted">
           Over the cap you can still re-sign your own free agents, use the
@@ -182,6 +196,9 @@ export function FreeAgencyPanel({
                   <span className="text-text-muted">
                     {money(o.salary)} for {o.years}{" "}
                     {o.years === 1 ? "year" : "years"}
+                    {o.worth !== null
+                      ? ` · worth ${Math.round(o.worth * 100)}% of his ask to him`
+                      : ""}
                   </span>
                 </span>
                 {data.open ? (
@@ -227,6 +244,13 @@ export function FreeAgencyPanel({
                     Your rights
                   </span>
                 ) : null}
+                <span className="block text-sm text-text-muted">
+                  Cares about{" "}
+                  {p.priorities
+                    .map((k) => FACTOR_LABELS[k].toLowerCase())
+                    .join(" and ")}
+                  {" · "}would be a {p.role} for you
+                </span>
                 <span className="block text-sm text-text-muted">
                   {p.position} · age {p.age} · {p.overall} overall ·{" "}
                   {p.potential} potential · asks {money(p.askSalary)} for{" "}

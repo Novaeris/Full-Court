@@ -66,7 +66,7 @@ export function askingSalary(
   const ageFactor = player.age >= 34 ? 0.8 : player.age >= 32 ? 0.9 : 1;
   return Math.min(
     max,
-    Math.max(min, round10((min + (max - min) * t ** 3) * ageFactor)),
+    Math.max(min, round10((min + (max - min) * t ** 2.8) * ageFactor)),
   );
 }
 

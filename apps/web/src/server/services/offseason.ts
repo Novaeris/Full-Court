@@ -28,6 +28,7 @@ import {
   STAGE_LABELS,
   hardCeiling,
   minSalary,
+  staffBudget,
   campPlaces,
   stageDates,
 } from "@fullcourt/game-rules";
@@ -63,12 +64,7 @@ import {
   type OwnedTeam,
 } from "./offseason-data";
 import { ensureProspects, holdLotteryStep, simulatePicks } from "./draft";
-import {
-  ensureContracts,
-  loadPayrollPlayers,
-  payrolls,
-  staffPayrolls,
-} from "./finance";
+import { ensureContracts, loadPayrollPlayers, payrolls } from "./finance";
 import { playFaDays } from "./freeagency";
 import { latestSeason, seasonView, type SeasonRow } from "./season-shared";
 
@@ -389,15 +385,13 @@ async function runFreeAgency(
   // Any of the 21 days not yet simulated are played first.
   await playFaDays(ctx, leagueId, 21);
   const season = (await latestSeason(ctx, leagueId)) ?? startSeason_;
-  const [finish, players, staff, owned, payrollPlayers, staffPay] =
-    await Promise.all([
-      previousFinish(ctx, leagueId, season),
-      loadActivePlayers(ctx, leagueId),
-      loadStaff(ctx, leagueId),
-      ownedTeams(ctx, leagueId),
-      loadPayrollPlayers(ctx, leagueId),
-      staffPayrolls(ctx, leagueId),
-    ]);
+  const [finish, players, staff, owned, payrollPlayers] = await Promise.all([
+    previousFinish(ctx, leagueId, season),
+    loadActivePlayers(ctx, leagueId),
+    loadStaff(ctx, leagueId),
+    ownedTeams(ctx, leagueId),
+    loadPayrollPlayers(ctx, leagueId),
+  ]);
   const ownedIds = new Set(owned.map((t) => t.id));
   // The computer teams act, and so do the owner's teams whose roster
   // management is on AI Assist. Teams on roster coverage only are made legal
@@ -412,7 +406,7 @@ async function runFreeAgency(
   const salaries = new Map(
     payrollPlayers.map((p) => [p.id, p.salary ?? 0] as const),
   );
-  const payroll = payrolls(payrollPlayers, staffPay);
+  const payroll = payrolls(payrollPlayers);
   let working = shedPayroll(
     players,
     salaries,
@@ -446,21 +440,12 @@ async function runFreeAgency(
   const hirers = [...finish.standingsOrder]
     .reverse()
     .filter((t) => !ownedIds.has(t));
-  // A team near the hard ceiling can only hire what still fits under it, with
-  // room kept to fill its roster.
-  const room = new Map(
-    finish.standingsOrder.map((t) => [
-      t,
-      (staffPay.get(t) ?? 0) +
-        Math.max(
-          0,
-          hardCeiling(season.salary_cap) -
-            (payroll.get(t) ?? 0) -
-            6 * minSalary(season.salary_cap),
-        ),
-    ]),
-  );
-  const hires = hireStaff(rng, { teams: hirers, staff, limit: room });
+  // Staff are paid from their own budget, apart from the players' payroll.
+  const hires = hireStaff(rng, {
+    teams: hirers,
+    staff,
+    budget: staffBudget(season.salary_cap),
+  });
   await applyRosters({
     seasonId: season.id,
     moves: changed.map((p) => {

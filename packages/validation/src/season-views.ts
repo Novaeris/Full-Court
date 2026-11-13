@@ -515,6 +515,11 @@ export const FaOfferSchema = z.object({
   years: z.number().int(),
   madeDay: z.number().int(),
   status: z.enum(["pending", "accepted", "outbid", "void", "withdrawn"]),
+  /**
+   * What the offer is worth to him as a share of his asking price: the salary
+   * adjusted for how your team looks to him (winning, role, city, history).
+   */
+  worth: z.number().nullable(),
 });
 export type FaOffer = z.infer<typeof FaOfferSchema>;
 
@@ -549,8 +554,18 @@ export const FreeAgencyResponseSchema = z.object({
   /** The league calendar date of the next day to simulate, `YYYY-MM-DD`. */
   date: z.string().nullable(),
   figures: CapFiguresSchema.nullable(),
+  /** How your team looks to a free agent, each from 0 to 1 (0.5 is average). */
+  appeal: z
+    .object({ winning: z.number(), market: z.number(), history: z.number() })
+    .nullable(),
   freeAgents: z.array(
     FreeAgentSchema.extend({
+      /** What he cares about most. */
+      priorities: z.array(
+        z.enum(["money", "winning", "role", "market", "history"]),
+      ),
+      /** The role he would have on your team. */
+      role: z.enum(["starter", "rotation", "bench"]),
       offer: FaOfferSchema.nullable(),
       /** Offers waiting from other teams are not shown, only how many there are. */
       otherOffers: z.number().int(),

@@ -210,18 +210,22 @@ create policy "camp_results: league owner can read"
 
 -- Contracts, the cap and free agency in days (server only) -------------------------------------------------------
 
--- What a team's payroll is (player salaries and staff salaries), and the hard
+-- What a team's payroll is (player salaries; staff have their own budget), and the hard
 -- ceiling: 120% of the season's salary cap, which the season stores. The cap
 -- rules (cap room, exceptions) are in @fullcourt/game-rules; the database holds
 -- the ceiling and the roster size, which nothing can pass.
 create function app_private.team_payroll(for_team uuid) returns integer
 language sql stable security invoker set search_path = '' as $$
-  select (
-    coalesce((select sum(p.salary) from public.players p
-              where p.team_id = for_team and p.status = 'active'), 0)
-    + coalesce((select sum(s.salary) from public.staff_members s
-                where s.team_id = for_team and s.status = 'active'), 0)
-  )::integer
+  select coalesce((select sum(p.salary) from public.players p
+                   where p.team_id = for_team and p.status = 'active'), 0)::integer
+$$;
+
+-- What a team may spend on staff: 8% of the season's cap, apart from the
+-- player payroll (staff never count against the cap or the ceiling).
+create function app_private.staff_budget(for_league uuid) returns integer
+language sql stable security invoker set search_path = '' as $$
+  select (s.salary_cap * 8 / 100)::integer
+  from public.seasons s where s.league_id = for_league order by s.year desc limit 1
 $$;
 
 create function app_private.salary_ceiling(for_league uuid) returns integer
@@ -230,7 +234,8 @@ language sql stable security invoker set search_path = '' as $$
   from public.seasons s where s.league_id = for_league order by s.year desc limit 1
 $$;
 
-grant execute on function app_private.team_payroll(uuid), app_private.salary_ceiling(uuid)
+grant execute on function app_private.team_payroll(uuid), app_private.salary_ceiling(uuid),
+  app_private.staff_budget(uuid)
   to service_role;
 
 -- Offers to free agents. At most one pending offer from a team to a player.
@@ -531,7 +536,8 @@ language sql stable security invoker set search_path = '' as $$
   ), 0)
 $$;
 
--- Every team's payroll (players and staff) is within the hard ceiling.
+-- Every team's player payroll is within the hard ceiling and its staff within
+-- the staff budget.
 create function app_private.check_league_staff(target_league uuid) returns void
 language plpgsql security invoker set search_path = '' as $$
 declare
@@ -545,6 +551,17 @@ begin
   if found then
     raise exception 'over_ceiling' using errcode = '22023',
       detail = over.abbreviation || ' has a payroll of ' || over.payroll;
+  end if;
+  select t.abbreviation, sum(m.salary) as spent into over
+  from public.teams t
+  join public.staff_members m on m.team_id = t.id and m.status = 'active'
+  where t.league_id = target_league
+  group by t.abbreviation
+  having sum(m.salary) > app_private.staff_budget(target_league)
+  limit 1;
+  if found then
+    raise exception 'staff_over_budget' using errcode = '22023',
+      detail = over.abbreviation || ' spends ' || over.spent || ' on staff';
   end if;
 end;
 $$;

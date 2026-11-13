@@ -8,8 +8,10 @@ import {
   maxSalary,
   maxYearsFor,
   minSalary,
-  offerScore,
+  effectiveSalary,
+  playerPriorities,
   playerValue,
+  roleScore,
   signingRoute,
   type SigningRoute,
 } from "@fullcourt/game-rules";
@@ -36,13 +38,19 @@ export type FaPlayer = {
 
 export type FaTeam = {
   id: string;
-  /** Player salaries plus staff salaries. */
+  /** Player salaries. Staff are paid from their own budget and don't count. */
   payroll: number;
   /** The positions of the players under contract. */
   positions: readonly Position[];
   mleUsed: boolean;
   /** True when the AI makes this team's offers (a computer team, or an owner's on AI Assist). */
   acting: boolean;
+  /** How the team looks to a free agent: recent winning, the city and franchise history, each 0 to 1. */
+  winning: number;
+  market: number;
+  history: number;
+  /** The value of every player under contract, best first (for the role he would have). */
+  values: readonly number[];
 };
 
 export type FaOffer = {
@@ -107,6 +115,7 @@ export function simulateFreeAgencyDay(
       {
         ...t,
         positions: [...t.positions],
+        values: [...t.values],
         payroll: t.payroll,
         mleUsed: t.mleUsed,
       },
@@ -143,14 +152,40 @@ export function simulateFreeAgencyDay(
       mleAvailable: !team.mleUsed,
     });
   };
-  // A computer team never lets its payroll run far past the cap: it won't go
-  // above 112% of it for anyone it needs an exception to sign, which leaves it
-  // well under the hard ceiling to fill its roster with minimum contracts when
-  // free agency ends.
-  const aiLimit = Math.round(cap * 1.12);
-  const aiRoom = (teamId: string, salary: number) =>
-    (teams.get(teamId)?.payroll ?? 0) + salary <=
-    (salary <= min ? hardCeiling(cap) - 4 * min : aiLimit);
+  // A computer team uses its cap room up to the cap, like any team. Past the
+  // cap it can only use the exceptions, and it keeps well under the hard
+  // ceiling (110% of the cap for an exception, and room for the minimum
+  // contracts it will need to fill its roster when free agency ends).
+  const aiOk = (teamId: string, playerId: string, salary: number) => {
+    const taken = route(teamId, playerId, salary);
+    if (!taken) return false;
+    const payroll = teams.get(teamId)?.payroll ?? 0;
+    if (taken === "minimum")
+      return payroll + salary <= hardCeiling(cap) - 4 * min;
+    if (taken === "room") return true;
+    return payroll + salary <= Math.round(cap * 1.1);
+  };
+  const priorities = new Map(
+    input.players.map((p) => [p.id, playerPriorities(p.id)] as const),
+  );
+  /** What an offer is worth to the player: the salary, adjusted for how the team looks to him. */
+  const worth = (playerId: string, teamId: string, salary: number) => {
+    const team = teams.get(teamId);
+    const player = byPlayer.get(playerId);
+    if (!team || !player) return salary;
+    return effectiveSalary(salary, priorities.get(playerId)!, {
+      winning: team.winning,
+      role: roleScore(
+        playerValue(player.overall, player.potential, player.age),
+        team.values,
+      ),
+      market: team.market,
+      history: Math.min(
+        1,
+        team.history + (player.rightsTeamId === teamId ? 0.3 : 0),
+      ),
+    });
+  };
   const rosterSize = (teamId: string) =>
     teams.get(teamId)?.positions.length ?? 0;
   const valueOf = (p: FaPlayer) => playerValue(p.overall, p.potential, p.age);
@@ -159,11 +194,7 @@ export function simulateFreeAgencyDay(
   for (const offer of pending.filter((o) => o.fromAi)) {
     if (rng.next() >= RAISE_CHANCE) continue;
     const raised = Math.min(max, round10(offer.salary * RAISE_BY));
-    if (
-      raised > offer.salary &&
-      aiRoom(offer.teamId, raised) &&
-      route(offer.teamId, offer.playerId, raised)
-    ) {
+    if (raised > offer.salary && aiOk(offer.teamId, offer.playerId, raised)) {
       offer.salary = raised;
       result.raised.push({ offerId: offer.id, salary: raised });
     }
@@ -192,12 +223,18 @@ export function simulateFreeAgencyDay(
       )
       .map((p) => ({
         p,
-        // The best player for the money, and for a position of need.
+        // The best player the team can use: for a position of need, for a
+        // price it can pay, and one who will like the team (a player who
+        // would value its offer above his asking price is worth chasing).
         score:
           valueOf(p) -
           counts(p.position) * 3 -
-          (ask.get(p.id) as number) / 3000 +
-          (p.rightsTeamId === team.id ? 6 : 0),
+          (ask.get(p.id) as number) / 6000 +
+          (p.rightsTeamId === team.id ? 6 : 0) +
+          (worth(p.id, team.id, ask.get(p.id) as number) /
+            (ask.get(p.id) as number) -
+            1) *
+            25,
       }))
       .sort((a, b) => b.score - a.score || a.p.id.localeCompare(b.p.id));
 
@@ -210,14 +247,9 @@ export function simulateFreeAgencyDay(
           ? 1 + rng.next() * 0.06
           : 0.95 + rng.next() * 0.15;
       let salary = Math.min(max, Math.max(min, round10(base * factor)));
-      if (!aiRoom(team.id, salary) || !route(team.id, p.id, salary)) {
+      if (!aiOk(team.id, p.id, salary)) {
         // Can't afford his price: try a minimum deal for a player who would take one.
-        if (
-          base <= min * 1.3 &&
-          aiRoom(team.id, min) &&
-          route(team.id, p.id, min)
-        )
-          salary = min;
+        if (base <= min * 1.3 && aiOk(team.id, p.id, min)) salary = min;
         else continue;
       }
       const years = Math.min(
@@ -255,13 +287,13 @@ export function simulateFreeAgencyDay(
       .filter((o) => o.playerId === player.id)
       .sort(
         (a, b) =>
-          offerScore(b.salary, player.rightsTeamId === b.teamId) -
-            offerScore(a.salary, player.rightsTeamId === a.teamId) ||
-          a.ref.localeCompare(b.ref),
+          worth(player.id, b.teamId, b.salary) -
+            worth(player.id, a.teamId, a.salary) || a.ref.localeCompare(b.ref),
       );
     const price = ask.get(player.id) as number;
     for (const offer of offers) {
-      const ratio = offer.salary / price;
+      // What the offer is worth to him, not just what it pays.
+      const ratio = worth(player.id, offer.teamId, offer.salary) / price;
       if (rng.next() >= acceptChance(ratio, day)) break;
       const taken = route(offer.teamId, player.id, offer.salary);
       if (!taken || rosterSize(offer.teamId) >= ROSTER_LIMITS.max) {
@@ -272,6 +304,7 @@ export function simulateFreeAgencyDay(
       const team = teams.get(offer.teamId)!;
       team.payroll += offer.salary;
       team.positions.push(player.position);
+      team.values = [...team.values, valueOf(player)].sort((a, b) => b - a);
       if (taken === "mle") team.mleUsed = true;
       open.delete(player.id);
       result.signings.push({
@@ -308,7 +341,7 @@ export function simulateFreeAgencyDay(
 /**
  * Contracts for a league that has none: every player gets a salary near his
  * asking price and a length that suits his age, and each team's total is then
- * scaled to a payroll between 85% and 105% of the cap, less its staff, so teams
+ * scaled to a payroll between 85% and 105% of the cap, so teams
  * differ: some have room to spend, some are up against the cap.
  */
 export function generateContracts(
@@ -324,8 +357,6 @@ export function generateContracts(
       overall: number;
       potential: number;
     }[];
-    /** Each team's staff payroll. */
-    staffPayroll: ReadonlyMap<string, number>;
   },
 ): { id: string; salary: number; expires: number }[] {
   const { cap, year } = input;
@@ -336,7 +367,7 @@ export function generateContracts(
   for (const p of input.players) {
     teams.set(p.teamId, [...(teams.get(p.teamId) ?? []), p]);
   }
-  for (const [teamId, roster] of teams) {
+  for (const roster of teams.values()) {
     const raw = roster.map((p) => ({
       p,
       salary: askingSalary(p, cap) * (0.9 + rng.next() * 0.2),
@@ -344,7 +375,7 @@ export function generateContracts(
     const total = raw.reduce((s, r) => s + r.salary, 0);
     const target = Math.max(
       min * roster.length,
-      cap * (0.85 + rng.next() * 0.2) - (input.staffPayroll.get(teamId) ?? 0),
+      cap * (0.85 + rng.next() * 0.2),
     );
     const scale = target / total;
     for (const { p, salary } of raw) {

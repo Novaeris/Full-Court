@@ -10,11 +10,16 @@ import {
   FREE_AGENCY_DAYS,
   addDays,
   askingSalary,
+  effectiveSalary,
   maxSalary,
   maxYearsFor,
   minSalary,
+  playerPriorities,
   playerValue,
+  roleLabel,
+  roleScore,
   signingRoute,
+  topPriorities,
   stageDates,
 } from "@fullcourt/game-rules";
 import type { Position } from "@fullcourt/game-types";
@@ -36,7 +41,8 @@ import {
   loadPayrollPlayers,
   mleUsers,
   payrolls,
-  staffPayrolls,
+  rosterValues,
+  teamAppeals,
 } from "./finance";
 import { getLeague, parseLeagueId } from "./leagues";
 import { PAGE, ownedTeams } from "./offseason-data";
@@ -129,13 +135,12 @@ export async function capFigures(
   season: SeasonRow,
   teamId: string,
 ): Promise<CapFigures> {
-  const [players, staff, used] = await Promise.all([
+  const [players, used] = await Promise.all([
     loadPayrollPlayers(ctx, leagueId),
-    staffPayrolls(ctx, leagueId),
     mleUsers(ctx, leagueId, season.year),
   ]);
   const f = figures(season);
-  const payroll = payrolls(players, staff).get(teamId) ?? 0;
+  const payroll = payrolls(players).get(teamId) ?? 0;
   return {
     cap: f.cap,
     ceiling: f.ceiling,
@@ -167,6 +172,7 @@ export async function getFreeAgency(
     days: FREE_AGENCY_DAYS,
     date: null,
     figures: null,
+    appeal: null,
     freeAgents: [],
     freeAgentTotal: 0,
     myOffers: [],
@@ -174,10 +180,11 @@ export async function getFreeAgency(
   };
   if (!season || season.phase !== "offseason" || !teamId) return empty;
 
-  const [players, offers, figs, transactions] = await Promise.all([
+  const [players, offers, figs, appeals, transactions] = await Promise.all([
     loadPayrollPlayers(ctx, league.id),
     pendingOffers(ctx, season.id),
     capFigures(ctx, league.id, season, teamId),
+    teamAppeals(ctx, league.id, season),
     ctx.supabase
       .from("player_transactions")
       .select("player_id, team_id, kind, day, salary, years")
@@ -223,10 +230,34 @@ export async function getFreeAgency(
   const byId = new Map(rows.data.map((r) => [r.id, view(r)]));
 
   const mine = offers.filter((o) => o.team_id === teamId);
+  const myValues = rosterValues(players).get(teamId) ?? [];
+  const myAppeal = appeals.get(teamId) ?? {
+    winning: 0.5,
+    market: 0.5,
+    history: 0.5,
+  };
+  const roleFor = (p: { overall: number; potential: number; age: number }) =>
+    roleScore(playerValue(p.overall, p.potential, p.age), myValues);
+  const worthOf = (o: OfferRow): number | null => {
+    const p = players.find((x) => x.id === o.player_id);
+    if (!p) return null;
+    const price = askingSalary(p, season.salary_cap);
+    return (
+      effectiveSalary(o.salary, playerPriorities(p.id), {
+        ...myAppeal,
+        role: roleFor(p),
+        history: Math.min(
+          1,
+          myAppeal.history + (p.rightsTeamId === teamId ? 0.3 : 0),
+        ),
+      }) / price
+    );
+  };
   const offerView = (o: OfferRow): FaOffer | null => {
     const player = byId.get(o.player_id);
     return player
       ? {
+          worth: worthOf(o),
           id: o.id,
           player,
           salary: o.salary,
@@ -248,6 +279,7 @@ export async function getFreeAgency(
         ? addDays(start, Math.min(days, 20))
         : null,
     figures: figs,
+    appeal: myAppeal,
     freeAgents: shown.flatMap((p) => {
       const v = byId.get(p.id);
       if (!v) return [];
@@ -259,6 +291,8 @@ export async function getFreeAgency(
           askSalary: price,
           askYears: Math.min(maxYearsFor(p.age), 5),
           yours: p.rightsTeamId === teamId,
+          priorities: topPriorities(playerPriorities(p.id)),
+          role: roleLabel(roleFor(p)),
           offer: o ? offerView(o) : null,
           otherOffers: offers.filter(
             (x) => x.player_id === p.id && x.team_id !== teamId,
@@ -308,9 +342,8 @@ export async function makeFaOffer(
       "Offers can be made during the 21 days of free agency.",
     );
   }
-  const [players, staff, used] = await Promise.all([
+  const [players, used] = await Promise.all([
     loadPayrollPlayers(ctx, league.id),
-    staffPayrolls(ctx, league.id),
     mleUsers(ctx, league.id, season.year),
   ]);
   const player = players.find((p) => p.id === input.playerId);
@@ -332,7 +365,7 @@ export async function makeFaOffer(
       `He won't sign for more than ${maxYearsFor(player.age)} years.`,
     );
   }
-  const payroll = payrolls(players, staff).get(team.id) ?? 0;
+  const payroll = payrolls(players).get(team.id) ?? 0;
   const route = signingRoute({
     payroll,
     salary: input.salary,
@@ -404,17 +437,18 @@ export async function runFaDay(
   leagueId: string,
   season: SeasonRow,
 ): Promise<void> {
-  const [players, staff, owned, offers, used, teams] = await Promise.all([
+  const [players, owned, offers, used, teams, appeals] = await Promise.all([
     loadPayrollPlayers(ctx, leagueId),
-    staffPayrolls(ctx, leagueId),
     ownedTeams(ctx, leagueId),
     pendingOffers(ctx, season.id),
     mleUsers(ctx, leagueId, season.year),
     ctx.supabase.from("teams").select("id").eq("league_id", leagueId),
+    teamAppeals(ctx, leagueId, season),
   ]);
+  const values = rosterValues(players);
   if (teams.error) throw teams.error;
   const day = season.fa_day + 1;
-  const pay = payrolls(players, staff);
+  const pay = payrolls(players);
   const ownedOn = new Set(
     owned.filter((t) => t.assist.rosterManagement).map((t) => t.id),
   );
@@ -426,6 +460,10 @@ export async function runFaDay(
     positions: players.filter((p) => p.teamId === t.id).map((p) => p.position),
     mleUsed: used.has(t.id),
     acting: !ownedAll.has(t.id) || ownedOn.has(t.id),
+    winning: appeals.get(t.id)?.winning ?? 0.5,
+    market: appeals.get(t.id)?.market ?? 0.5,
+    history: appeals.get(t.id)?.history ?? 0.5,
+    values: values.get(t.id) ?? [],
   }));
   const faPlayers: FaPlayer[] = players
     .filter((p) => p.teamId === null)

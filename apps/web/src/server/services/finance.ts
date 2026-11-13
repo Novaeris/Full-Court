@@ -1,20 +1,26 @@
 import "server-only";
 import {
   hardCeiling,
+  historyScore,
+  marketScore,
   midLevelException,
   minSalary,
+  playerValue,
   salaryCap,
+  winningScore,
+  type Appeal,
 } from "@fullcourt/game-rules";
 import { askingSalary, askingYears, maxYearsFor } from "@fullcourt/game-rules";
 import {
   createRng,
+  findCity,
   generateContracts,
   seedState,
 } from "@fullcourt/game-engine";
 import type { Position } from "@fullcourt/game-types";
 import { ensureContractsFor } from "@/server/admin/offseason";
 import type { UserContext } from "@/server/auth/session";
-import { PAGE, allRows, loadStaff } from "./offseason-data";
+import { PAGE, allRows, loadStaff, previousFinish } from "./offseason-data";
 import type { SeasonRow } from "./season-shared";
 
 /**
@@ -102,12 +108,14 @@ export async function staffPayrolls(
   return out;
 }
 
-/** Each team's payroll: its players' salaries plus its staff's. */
+/**
+ * Each team's player payroll. Staff salaries are not part of it: staff are paid
+ * from their own budget, so they never count against the cap or the ceiling.
+ */
 export function payrolls(
   players: readonly PayrollPlayer[],
-  staff: ReadonlyMap<string, number>,
 ): Map<string, number> {
-  const out = new Map<string, number>(staff);
+  const out = new Map<string, number>();
   for (const p of players) {
     if (p.teamId && p.salary !== null) {
       out.set(p.teamId, (out.get(p.teamId) ?? 0) + p.salary);
@@ -155,10 +163,7 @@ export async function ensureContracts(
   leagueId: string,
   season: SeasonRow,
 ): Promise<void> {
-  const [players, staff] = await Promise.all([
-    loadPayrollPlayers(ctx, leagueId),
-    staffPayrolls(ctx, leagueId),
-  ]);
+  const players = await loadPayrollPlayers(ctx, leagueId);
   const missing = players.filter((p) => p.teamId && p.salary === null);
   if (missing.length === 0) return;
   const rng = createRng(seedState(`${leagueId}:contracts:${season.year}`));
@@ -172,7 +177,6 @@ export async function ensureContracts(
       overall: p.overall,
       potential: p.potential,
     })),
-    staffPayroll: staff,
   });
   await ensureContractsFor(leagueId, contracts);
 }
@@ -186,4 +190,92 @@ export function ask(
     salary: askingSalary(p, cap),
     years: Math.min(askingYears(p.age), maxYearsFor(p.age)),
   };
+}
+
+/** How each team looks to a free agent, apart from the money (docs/DESIGN.md). */
+export type TeamAppeal = Omit<Appeal, "role">;
+
+/**
+ * Each team's winning (from how it finished the season before this offseason
+ * and how far it got), its city (the team's place among the league's cities by
+ * size) and its franchise history (titles, finals and playoff seasons over
+ * the last eight seasons).
+ */
+export async function teamAppeals(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+): Promise<Map<string, TeamAppeal>> {
+  const [finish, teams, recent] = await Promise.all([
+    previousFinish(ctx, leagueId, season),
+    ctx.supabase.from("teams").select("id, city_id").eq("league_id", leagueId),
+    ctx.supabase
+      .from("seasons")
+      .select("id")
+      .eq("league_id", leagueId)
+      .not("archived_at", "is", null)
+      .gte("year", season.year - 8)
+      .lt("year", season.year),
+  ]);
+  if (teams.error) throw teams.error;
+  if (recent.error) throw recent.error;
+  const stats = recent.data.length
+    ? await ctx.supabase
+        .from("team_season_stats")
+        .select("team_id, playoff_round, playoff_result")
+        .in(
+          "season_id",
+          recent.data.map((r) => r.id),
+        )
+        .limit(PAGE)
+    : { data: [], error: null };
+  if (stats.error) throw stats.error;
+
+  const n = finish.standingsOrder.length;
+  const cityRank = new Map(
+    [...teams.data]
+      .map((t) => ({
+        id: t.id,
+        rank: t.city_id ? (findCity(t.city_id)?.rank ?? Infinity) : Infinity,
+      }))
+      .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
+      .map((t, index) => [t.id, t.rank === Infinity ? null : index] as const),
+  );
+  const out = new Map<string, TeamAppeal>();
+  for (const [index, teamId] of finish.standingsOrder.entries()) {
+    const mine = stats.data.filter((r) => r.team_id === teamId);
+    const rank = cityRank.get(teamId);
+    out.set(teamId, {
+      winning: winningScore(index + 1, n, finish.playoffDepth.get(teamId) ?? 0),
+      market: rank === null || rank === undefined ? 0.5 : marketScore(rank, n),
+      history: historyScore({
+        titles: mine.filter((r) => r.playoff_result === "champion").length,
+        finals: mine.filter((r) => r.playoff_result === "finalist").length,
+        playoffs: mine.filter((r) => r.playoff_round !== null).length,
+        missed: mine.filter((r) => r.playoff_round === null).length,
+      }),
+    });
+  }
+  return out;
+}
+
+/** The value of each team's players under contract, best first. */
+export function rosterValues(
+  players: readonly PayrollPlayer[],
+): Map<string, number[]> {
+  const out = new Map<string, number[]>();
+  for (const p of players) {
+    if (p.teamId) {
+      out.set(p.teamId, [
+        ...(out.get(p.teamId) ?? []),
+        playerValue(p.overall, p.potential, p.age),
+      ]);
+    }
+  }
+  for (const [team, values] of out)
+    out.set(
+      team,
+      values.sort((a, b) => b - a),
+    );
+  return out;
 }

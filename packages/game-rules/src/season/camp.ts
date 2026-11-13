@@ -88,8 +88,17 @@ export const STAFF_ROLE_INFO: Record<
 export const STAFF_RATING_MIN = 30;
 export const STAFF_RATING_MAX = 95;
 
-/** What a team may spend on staff in a year, in thousands of dollars. */
+/** What a team may spend on staff in a year in a league's first season, in thousands of dollars. */
 export const STAFF_BUDGET = 10_000;
+
+/**
+ * What a team may spend on staff in a year when the salary cap is `cap`: 8% of
+ * it. Staff are paid from this budget, apart from the player payroll, so staff
+ * salaries never count against the cap or the hard ceiling.
+ */
+export function staffBudget(cap: number): number {
+  return Math.round(cap * 0.08);
+}
 
 /** Staff retire at this age. */
 export const STAFF_RETIREMENT_AGE = 65;

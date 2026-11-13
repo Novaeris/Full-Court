@@ -13,6 +13,7 @@ import {
   regularSeasonDate,
   regularSeasonEnd,
   seasonDate,
+  staffBudget,
   staffSalary,
   stageDates,
   weekday,
@@ -200,6 +201,11 @@ describe("camp and staff rules", () => {
     // Four staff at 80 fit in the $10 million budget; four at 95 do not.
     expect(4 * staffSalary(80)).toBeLessThanOrEqual(10_000);
     expect(4 * staffSalary(95)).toBeGreaterThan(10_000);
+  });
+
+  it("gives staff a budget of 8% of the cap, apart from the payroll", () => {
+    expect(staffBudget(125_000)).toBe(10_000);
+    expect(staffBudget(250_000)).toBe(20_000);
   });
 
   it("gives a better scout a clearer board", () => {

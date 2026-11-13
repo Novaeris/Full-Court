@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FREE_AGENCY_DAYS,
+  playerPriorities,
   ROSTER_LIMITS,
   SALARY_CAP_BASE,
   askingSalary,
@@ -40,6 +41,10 @@ function teams(count = 8, payroll = 90_000, acting = true): FaTeam[] {
     positions: Array<Position>(12).fill("PG"),
     mleUsed: false,
     acting,
+    winning: 0.5,
+    market: 0.5,
+    history: 0.5,
+    values: Array<number>(12).fill(55),
   }));
 }
 
@@ -170,6 +175,10 @@ describe("a day of free agency", () => {
           positions: Array<Position>(10).fill("PG"),
           mleUsed: false,
           acting: false,
+          winning: 0.5,
+          market: 0.5,
+          history: 0.5,
+          values: Array<number>(10).fill(55),
         },
         ...teams(4, 120_000),
       ],
@@ -204,6 +213,10 @@ describe("a day of free agency", () => {
             positions: Array<Position>(10).fill("PG"),
             mleUsed: false,
             acting: false,
+            winning: 0.5,
+            market: 0.5,
+            history: 0.5,
+            values: Array<number>(10).fill(55),
           },
           ...teams(6, 80_000),
         ],
@@ -240,6 +253,10 @@ describe("a day of free agency", () => {
             positions: Array<Position>(10).fill("PG"),
             mleUsed: false,
             acting: false,
+            winning: 0.5,
+            market: 0.5,
+            history: 0.5,
+            values: Array<number>(10).fill(55),
           },
         ],
         offers: [lowball],
@@ -263,6 +280,10 @@ describe("a day of free agency", () => {
           positions: Array<Position>(12).fill("PG"),
           mleUsed: false,
           acting: false,
+          winning: 0.5,
+          market: 0.5,
+          history: 0.5,
+          values: Array<number>(10).fill(55),
         },
       ],
       offers: [
@@ -294,7 +315,6 @@ describe("contracts for a league that has none", () => {
     cap: CAP,
     year: 2026,
     players,
-    staffPayroll: new Map(),
   });
 
   it("gives every player a salary and an end year", () => {
@@ -322,5 +342,114 @@ describe("contracts for a league that has none", () => {
     const best = [...players].sort((a, b) => b.overall - a.overall)[0]!;
     const worst = [...players].sort((a, b) => a.overall - b.overall)[0]!;
     expect(salary(best.id)).toBeGreaterThan(salary(worst.id));
+  });
+});
+
+describe("more than the salary", () => {
+  const star = (id: string): FaPlayer => ({
+    id,
+    position: "SF",
+    age: 26,
+    overall: 78,
+    potential: 78,
+    rightsTeamId: null,
+  });
+  const club = (id: string, winning: number, roster: number): FaTeam => ({
+    id,
+    payroll: 60_000,
+    positions: Array<Position>(10).fill("PG"),
+    mleUsed: false,
+    acting: false,
+    winning,
+    market: 0.5,
+    history: 0.5,
+    values: Array<number>(10).fill(roster),
+  });
+
+  /** Which team a player picks, over many days of the same two offers. */
+  function choices(playerId: string, goodSalary: number, badSalary: number) {
+    const player = star(playerId);
+    const price = askingSalary(player, CAP);
+    const wins = { good: 0, bad: 0 };
+    for (let i = 0; i < 60; i++) {
+      const { signings } = run({
+        players: [player],
+        teams: [club("good", 1, 40), club("bad", 0, 90)],
+        offers: [
+          {
+            id: "g",
+            playerId,
+            teamId: "good",
+            salary: Math.round((price * goodSalary) / 10) * 10,
+            years: 3,
+          },
+          {
+            id: "b",
+            playerId,
+            teamId: "bad",
+            salary: Math.round((price * badSalary) / 10) * 10,
+            years: 3,
+          },
+        ],
+        seed: `pref${i}`,
+      });
+      const hit = signings.find((s) => s.playerId === playerId);
+      if (hit?.teamId === "good") wins.good += 1;
+      if (hit?.teamId === "bad") wins.bad += 1;
+    }
+    return wins;
+  }
+
+  it("lets a winning team with a starting job beat a better-paying team, for a player who cares about that", () => {
+    let id = "";
+    for (let i = 0; i < 400 && !id; i++) {
+      const p = playerPriorities(`caring${i}`);
+      if (p.money < 0.25 && p.winning + p.role > 0.45) id = `caring${i}`;
+    }
+    expect(id).not.toBe("");
+    const wins = choices(id, 0.95, 1.05);
+    expect(wins.good).toBeGreaterThan(wins.bad);
+  });
+
+  it("lets the money decide for a player who cares about little else", () => {
+    let id = "";
+    for (let i = 0; i < 400 && !id; i++) {
+      const p = playerPriorities(`mercenary${i}`);
+      if (p.money > 0.58) id = `mercenary${i}`;
+    }
+    expect(id).not.toBe("");
+    const wins = choices(id, 0.95, 1.12);
+    expect(wins.bad).toBeGreaterThan(wins.good);
+  });
+
+  it("gives a team on a rise and in a big city the better of two equal offers, usually", () => {
+    let id = "";
+    for (let i = 0; i < 400 && !id; i++) {
+      const p = playerPriorities(`equal${i}`);
+      if (p.money < 0.3) id = `equal${i}`;
+    }
+    const wins = choices(id, 1, 1);
+    expect(wins.good).toBeGreaterThanOrEqual(wins.bad);
+  });
+});
+
+describe("computer teams and the cap", () => {
+  it("use their cap room, up to the cap and no further", () => {
+    const players = agents(70);
+    const team: FaTeam = {
+      id: "AI",
+      payroll: 60_000,
+      positions: Array<Position>(8).fill("PG"),
+      mleUsed: false,
+      acting: true,
+      winning: 0.6,
+      market: 0.6,
+      history: 0.5,
+      values: Array<number>(8).fill(60),
+    };
+    const { teams: after } = run({ players, teams: [team] });
+    const payroll = after[0]!.payroll;
+    expect(payroll).toBeGreaterThan(60_000 + 20_000);
+    expect(payroll).toBeLessThanOrEqual(Math.round(CAP * 1.1));
   });
 });
