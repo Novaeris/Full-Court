@@ -120,9 +120,10 @@ test.describe("simulation API", () => {
     await expect(
       asOther.leagues.cancelSimulation(league.id),
     ).rejects.toMatchObject({ status: 404 });
-    // The owner's job is untouched.
-    expect((await asOwner.leagues.simulation(league.id)).job?.status).toBe(
-      "queued",
+    // The owner's job is untouched: not cancelled. (Another test's worker may
+    // already have run it, so it can be queued, running or done.)
+    expect(["queued", "running", "done"]).toContain(
+      (await asOwner.leagues.simulation(league.id)).job?.status,
     );
   });
 

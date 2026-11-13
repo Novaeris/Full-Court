@@ -29,6 +29,12 @@ export async function startedLeague(label: string) {
 
 export async function expectAccessible(page: Page) {
   await expect(page).toHaveTitle(/\S/);
+  // Colours still fading in (after a theme change or a hover) fail the contrast
+  // check at random: turn transitions off and let a frame pass first.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => resolve(null))),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
