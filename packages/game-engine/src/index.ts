@@ -82,13 +82,32 @@ export {
 } from "./rng/dmath";
 export { normalSum } from "./rng/helpers";
 export {
-  runOffseason,
-  progress,
+  ageAndRetire,
   draftOrder,
   generateDraftClass,
+  holdDraft,
+  progress,
+  type DraftInput,
   type LotteryEntry,
-  type OffseasonInput,
-  type OffseasonOutput,
   type OffseasonPlayer,
-  type OffseasonResult,
+  type Progressed,
+  type Rookie,
 } from "./offseason/offseason";
+export { fillRosters, type RosterMove } from "./offseason/rosters";
+export {
+  chooseCamp,
+  runCamp,
+  type CampAssignment,
+  type CampPlayer,
+  type CampResult,
+} from "./offseason/camp";
+export {
+  MARKET_PER_ROLE,
+  ageStaff,
+  generateStaff,
+  hireStaff,
+  replenishMarket,
+  staffPayroll,
+  type NewStaff,
+  type StaffMember,
+} from "./offseason/staff";

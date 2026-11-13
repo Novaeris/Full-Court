@@ -1,3 +1,8 @@
+import {
+  CAMP_PROGRAMS,
+  OFFSEASON_STAGES,
+  STAFF_ROLES,
+} from "@fullcourt/game-types";
 import { PLAY_KINDS, POSITIONS, SHOT_ZONES } from "@fullcourt/game-types";
 import { z } from "zod";
 import { SeasonSchema } from "./simulation";
@@ -215,8 +220,32 @@ export type OffseasonPlayer = z.infer<typeof OffseasonPlayerSchema>;
  * `year` is the year of the season it led into, or null before the first
  * offseason. Movers compare each player's overall before and after.
  */
+export const StageInfoSchema = z.object({
+  stage: z.enum(OFFSEASON_STAGES),
+  label: z.string(),
+  /** `YYYY-MM-DD`. */
+  start: z.string(),
+  end: z.string(),
+  status: z.enum(["done", "current", "upcoming"]),
+});
+export type StageInfo = z.infer<typeof StageInfoSchema>;
+
+export const CampReportRowSchema = z.object({
+  player: OffseasonPlayerSchema,
+  program: z.enum(CAMP_PROGRAMS),
+  before: z.number().int(),
+  after: z.number().int(),
+});
+export type CampReportRow = z.infer<typeof CampReportRowSchema>;
+
 export const OffseasonResponseSchema = z.object({
   year: z.number().int().nullable(),
+  /** The current offseason's stage, or null when no offseason is under way. */
+  stage: z.enum(OFFSEASON_STAGES).nullable(),
+  /** The stages of the current offseason with their dates; empty outside one. */
+  stages: z.array(StageInfoSchema),
+  /** Who went to training camp and what changed, for the latest camp. */
+  campReport: z.array(CampReportRowSchema),
   draft: z.array(
     z.object({
       pick: z.number().int(),
@@ -236,3 +265,77 @@ export const OffseasonResponseSchema = z.object({
   fallers: z.array(OffseasonPlayerSchema.extend({ change: z.number().int() })),
 });
 export type OffseasonResponse = z.infer<typeof OffseasonResponseSchema>;
+
+/** A coach or scout. Salary is in thousands of dollars a year. */
+export const StaffMemberSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  role: z.enum(STAFF_ROLES),
+  rating: z.number().int(),
+  age: z.number().int(),
+  salary: z.number().int(),
+  teamId: z.uuid().nullable(),
+  contractYears: z.number().int().nullable(),
+});
+export type StaffMember = z.infer<typeof StaffMemberSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/staff: one of your teams' staff, the market,
+ * and the budget. `open` is true during an offseason, when hiring is allowed.
+ */
+export const StaffResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  /** What a team may spend on staff, in thousands of dollars. */
+  budget: z.number().int(),
+  payroll: z.number().int(),
+  team: z.array(StaffMemberSchema),
+  market: z.array(StaffMemberSchema),
+  open: z.boolean(),
+});
+export type StaffResponse = z.infer<typeof StaffResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/staff: hire a free agent into his role. */
+export const HireStaffRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  staffId: z.uuid(),
+  years: z.number().int().min(1).max(3),
+});
+export type HireStaffRequest = z.infer<typeof HireStaffRequestSchema>;
+
+/** DELETE /api/v1/leagues/:leagueId/staff: let a staff member go. */
+export const ReleaseStaffRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  staffId: z.uuid(),
+});
+export type ReleaseStaffRequest = z.infer<typeof ReleaseStaffRequestSchema>;
+
+/** GET /api/v1/leagues/:leagueId/camp: who can go to training camp and who is going. */
+export const CampResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  /** True while the training-camp stage is under way and the roster can be changed. */
+  open: z.boolean(),
+  places: z.number().int(),
+  programs: z.array(
+    z.object({
+      id: z.enum(CAMP_PROGRAMS),
+      label: z.string(),
+      ratings: z.array(z.string()),
+    }),
+  ),
+  roster: z.array(
+    z.object({
+      player: OffseasonPlayerSchema,
+      program: z.enum(CAMP_PROGRAMS).nullable(),
+    }),
+  ),
+});
+export type CampResponse = z.infer<typeof CampResponseSchema>;
+
+/** PUT /api/v1/leagues/:leagueId/camp: replaces the team's camp roster. */
+export const SetCampRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  assignments: z
+    .array(z.object({ playerId: z.uuid(), program: z.enum(CAMP_PROGRAMS) }))
+    .max(8),
+});
+export type SetCampRequest = z.infer<typeof SetCampRequestSchema>;

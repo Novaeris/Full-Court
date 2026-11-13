@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { CAMP_PROGRAM_INFO } from "@fullcourt/game-rules";
 import type {
+  CampReportRow,
   OffseasonPlayer,
   OffseasonResponse,
   Team,
@@ -216,6 +218,46 @@ export function OffseasonReport({
     },
   ];
 
+  const campColumns: Column<CampReportRow>[] = [
+    {
+      key: "player",
+      header: "Player",
+      cell: (r) => <PlayerLink leagueId={leagueId} player={r.player} />,
+    },
+    {
+      key: "team",
+      header: "Team",
+      priority: 2,
+      cell: (r) => <TeamCell team={team(r.player.teamId)} />,
+    },
+    {
+      key: "program",
+      header: "Program",
+      cell: (r) => CAMP_PROGRAM_INFO[r.program].label,
+    },
+    {
+      key: "overall",
+      header: "Overall",
+      abbr: "OVR",
+      align: "end",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {r.before} to {r.after}
+        </span>
+      ),
+    },
+    {
+      key: "gain",
+      header: "Change",
+      align: "end",
+      cell: (r) => (
+        <span className="font-semibold tabular-nums">
+          {r.after > r.before ? `+${r.after - r.before}` : r.after - r.before}
+        </span>
+      ),
+    },
+  ];
+
   const retiredColumns: Column<OffseasonPlayer>[] = [
     {
       key: "player",
@@ -299,6 +341,20 @@ export function OffseasonReport({
           )}
         </section>
       </div>
+
+      {report.campReport.length > 0 ? (
+        <section aria-labelledby="camp-report-heading">
+          <h2 id="camp-report-heading" className="mb-3 text-xl font-bold">
+            Training camp report
+          </h2>
+          <ResponsiveTable
+            caption="Players who went to training camp and what changed"
+            columns={campColumns}
+            rows={report.campReport}
+            rowKey={(r) => r.player.id}
+          />
+        </section>
+      ) : null}
 
       <section aria-labelledby="retired-heading">
         <h2 id="retired-heading" className="mb-3 text-xl font-bold">

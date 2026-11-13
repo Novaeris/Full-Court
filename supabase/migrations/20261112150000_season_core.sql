@@ -62,7 +62,10 @@ create table public.seasons (
   league_id uuid not null references public.leagues (id) on delete cascade,
   year integer not null check (year between 1900 and 3000),
   phase text not null default 'regular-season'
-    check (phase in ('regular-season', 'playoffs', 'complete')),
+    check (phase in ('offseason', 'regular-season', 'playoffs', 'complete')),
+  -- Where an offseason has got to; null in every other phase.
+  stage text
+    check (stage in ('draft', 'free-agency', 'training-camp', 'preseason')),
   -- The next game day to simulate, starting at 1.
   day integer not null default 1 check (day >= 1),
   -- The last scheduled regular-season day.
@@ -78,8 +81,10 @@ create table public.seasons (
   playoff_config jsonb check (jsonb_typeof(playoff_config) = 'object'),
   unique (league_id, year),
   unique (league_id, id),
-  -- The regular season runs until its last day has been simulated.
-  check ((phase = 'regular-season') = (day <= last_day))
+  -- The regular season runs until its last day has been simulated; before it,
+  -- in the offseason, the first day is still to come.
+  check ((phase in ('offseason', 'regular-season')) = (day <= last_day)),
+  check ((phase = 'offseason') = (stage is not null))
 );
 
 -- Playoff series ------------------------------------------------------------------------------------
@@ -517,7 +522,7 @@ begin
   if not found then
     raise exception 'season_not_found' using errcode = 'P0002';
   end if;
-  if current_season.phase = 'complete' then
+  if current_season.phase in ('complete', 'offseason') then
     raise exception 'season_not_running' using errcode = 'P0001';
   end if;
   -- The playoffs need their bracket first (the server builds it, then queues).
@@ -604,7 +609,9 @@ create function public.admin_create_season(
   season_year integer,
   preset text,
   tiers jsonb,
-  schedule jsonb
+  schedule jsonb,
+  -- True when the season starts with its offseason (draft first).
+  in_offseason boolean default false
 )
 returns public.seasons
 language plpgsql
@@ -643,8 +650,11 @@ begin
   select max(g.day) into last_game_day
   from jsonb_to_recordset(schedule) as g(day integer);
 
-  insert into public.seasons (league_id, year, phase, day, last_day, schedule_preset, schedule_tiers)
-  values (target_league, season_year, 'regular-season', 1, last_game_day, preset, tiers)
+  insert into public.seasons (league_id, year, phase, stage, day, last_day, schedule_preset, schedule_tiers)
+  values (target_league, season_year,
+          case when in_offseason then 'offseason' else 'regular-season' end,
+          case when in_offseason then 'draft' end,
+          1, last_game_day, preset, tiers)
   returning * into created;
 
   insert into public.games (league_id, season_id, day, home_team_id, away_team_id)
@@ -678,9 +688,9 @@ $$;
 comment on function public.admin_create_season is
   'Creates a season with its full schedule in one transaction. Service role only.';
 
-revoke execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb)
+revoke execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb, boolean)
   from public, anon, authenticated;
-grant execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb)
+grant execute on function public.admin_create_season(uuid, integer, text, jsonb, jsonb, boolean)
   to service_role;
 
 -- The simulation worker (server only) ----------------------------------------------------------------------

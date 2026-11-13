@@ -104,6 +104,111 @@ export type Database = {
           },
         ]
       }
+      camp_assignments: {
+        Row: {
+          league_id: string
+          player_id: string
+          program: string
+          season_id: string
+          team_id: string
+        }
+        Insert: {
+          league_id: string
+          player_id: string
+          program: string
+          season_id: string
+          team_id: string
+        }
+        Update: {
+          league_id?: string
+          player_id?: string
+          program?: string
+          season_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "camp_assignments_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camp_assignments_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "camp_assignments_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "camp_assignments_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
+      camp_results: {
+        Row: {
+          league_id: string
+          overall_after: number
+          overall_before: number
+          player_id: string
+          program: string
+          season_year: number
+          team_id: string
+        }
+        Insert: {
+          league_id: string
+          overall_after: number
+          overall_before: number
+          player_id: string
+          program: string
+          season_year: number
+          team_id: string
+        }
+        Update: {
+          league_id?: string
+          overall_after?: number
+          overall_before?: number
+          player_id?: string
+          program?: string
+          season_year?: number
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "camp_results_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camp_results_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "camp_results_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       draft_picks: {
         Row: {
           expected_pick: number
@@ -943,6 +1048,7 @@ export type Database = {
           playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
+          stage: string | null
           year: number
         }
         Insert: {
@@ -957,6 +1063,7 @@ export type Database = {
           playoff_config?: Json | null
           schedule_preset?: string
           schedule_tiers: Json
+          stage?: string | null
           year: number
         }
         Update: {
@@ -971,6 +1078,7 @@ export type Database = {
           playoff_config?: Json | null
           schedule_preset?: string
           schedule_tiers?: Json
+          stage?: string | null
           year?: number
         }
         Relationships: [
@@ -1042,6 +1150,63 @@ export type Database = {
             columns: ["league_id", "season_id"]
             isOneToOne: false
             referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
+      staff_members: {
+        Row: {
+          age: number
+          contract_years: number | null
+          first_name: string
+          id: string
+          last_name: string
+          league_id: string
+          rating: number
+          role: string
+          salary: number
+          status: string
+          team_id: string | null
+        }
+        Insert: {
+          age: number
+          contract_years?: number | null
+          first_name: string
+          id?: string
+          last_name: string
+          league_id: string
+          rating: number
+          role: string
+          salary: number
+          status?: string
+          team_id?: string | null
+        }
+        Update: {
+          age?: number
+          contract_years?: number | null
+          first_name?: string
+          id?: string
+          last_name?: string
+          league_id?: string
+          rating?: number
+          role?: string
+          salary?: number
+          status?: string
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_members_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_members_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["league_id", "id"]
           },
         ]
@@ -1290,7 +1455,35 @@ export type Database = {
         Args: { acknowledged_version: number }
         Returns: undefined
       }
-      admin_apply_offseason: {
+      admin_add_staff: {
+        Args: { members: Json; target_league: string }
+        Returns: number
+      }
+      admin_apply_camp: {
+        Args: { results: Json; target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          offseason_done_at: string | null
+          phase: string
+          playoff_config: Json | null
+          schedule_preset: string
+          schedule_tiers: Json
+          stage: string | null
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_apply_draft: {
         Args: { changes: Json; lottery: Json; target_season: string }
         Returns: {
           archived_at: string | null
@@ -1304,6 +1497,55 @@ export type Database = {
           playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
+          stage: string | null
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_apply_progression: {
+        Args: { changes: Json; staff_changes: Json; target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          offseason_done_at: string | null
+          phase: string
+          playoff_config: Json | null
+          schedule_preset: string
+          schedule_tiers: Json
+          stage: string | null
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_apply_rosters: {
+        Args: { moves: Json; staff_moves: Json; target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          offseason_done_at: string | null
+          phase: string
+          playoff_config: Json | null
+          schedule_preset: string
+          schedule_tiers: Json
+          stage: string | null
           year: number
         }
         SetofOptions: {
@@ -1327,6 +1569,7 @@ export type Database = {
           playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
+          stage: string | null
           year: number
         }
         SetofOptions: {
@@ -1471,6 +1714,7 @@ export type Database = {
           playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
+          stage: string | null
           year: number
         }
         SetofOptions: {
@@ -1482,6 +1726,7 @@ export type Database = {
       }
       admin_create_season: {
         Args: {
+          in_offseason?: boolean
           preset: string
           schedule: Json
           season_year: number
@@ -1500,6 +1745,7 @@ export type Database = {
           playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
+          stage: string | null
           year: number
         }
         SetofOptions: {
@@ -1508,6 +1754,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_create_staff: {
+        Args: { members: Json; target_league: string }
+        Returns: number
       }
       admin_fail_sim_job: {
         Args: { message: string; target_job: string }
@@ -1533,13 +1783,90 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_hire_staff: {
+        Args: {
+          hire_team: string
+          staff: string
+          target_season: string
+          years: number
+        }
+        Returns: {
+          age: number
+          contract_years: number | null
+          first_name: string
+          id: string
+          last_name: string
+          league_id: string
+          rating: number
+          role: string
+          salary: number
+          status: string
+          team_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "staff_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_record_event: {
         Args: { event_name: string; event_path?: string }
         Returns: undefined
       }
+      admin_release_staff: {
+        Args: { staff: string; target_season: string }
+        Returns: {
+          age: number
+          contract_years: number | null
+          first_name: string
+          id: string
+          last_name: string
+          league_id: string
+          rating: number
+          role: string
+          salary: number
+          status: string
+          team_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "staff_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_requeue_stale_sim_jobs: {
         Args: { max_age: string }
         Returns: number
+      }
+      admin_set_camp: {
+        Args: { assignments: Json; camp_team: string; target_season: string }
+        Returns: number
+      }
+      admin_start_season: {
+        Args: { target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          offseason_done_at: string | null
+          phase: string
+          playoff_config: Json | null
+          schedule_preset: string
+          schedule_tiers: Json
+          stage: string | null
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_submit_support_request: {
         Args: {

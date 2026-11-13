@@ -7,17 +7,17 @@ import {
 import {
   DRAFT_ROUNDS,
   LOTTERY_PICKS,
-  lotteryWeights,
   MAX_PLAYER_AGE,
-  ROSTER_LIMITS,
   UNDRAFTED_PROSPECTS,
   clampRating,
   computeOverall,
+  draftNoise,
   expectedChange,
+  lotteryWeights,
   playerValue,
   retirementChance,
 } from "@fullcourt/game-rules";
-import { normalSum, shuffle, weighted } from "../rng/helpers";
+import { normalSum, weighted } from "../rng/helpers";
 import type { Rng } from "../rng/rng";
 import {
   generateBody,
@@ -27,10 +27,11 @@ import {
 } from "../world/generate";
 
 /**
- * One offseason, as pure functions of the league's players and a seeded RNG:
- * players age and change, some retire, a rookie class is drafted, and every
- * team's roster is brought back to full size. Nothing here knows about the
- * database; the result is a list of what changed.
+ * The offseason's player steps, as pure functions of the league's players and a
+ * seeded RNG: players age and some retire (`ageAndRetire`), a rookie class is
+ * drafted (`holdDraft`). Rosters, camp and staff are in the files beside this
+ * one. Nothing here knows about the database; every step returns a list of
+ * what changed.
  */
 
 export type OffseasonPlayer = {
@@ -46,48 +47,6 @@ export type OffseasonPlayer = {
   overall: number;
   potential: number;
 };
-
-export type OffseasonInput = {
-  /** Every team, best regular-season record first. */
-  standingsOrder: readonly string[];
-  /** 0 for a team that missed the playoffs; else rounds played, plus one for the title. */
-  playoffDepth: ReadonlyMap<string, number>;
-  /** Every active player, on a team or free. */
-  players: readonly OffseasonPlayer[];
-  /** Every name already used in the league, including retired players. */
-  takenNames: ReadonlySet<string>;
-};
-
-/** A player after the offseason. `id` is null for a drafted rookie (a new row). */
-export type OffseasonResult = {
-  id: string | null;
-  firstName: string;
-  lastName: string;
-  position: Position;
-  age: number;
-  /** Only set for rookies, who are new rows. */
-  heightInches: number | null;
-  weightPounds: number | null;
-  jersey: number;
-  ratings: Ratings;
-  overall: number;
-  potential: number;
-  /** The overall before this offseason; null for a rookie. */
-  previousOverall: number | null;
-  teamId: string | null;
-  retired: boolean;
-  /** Where a rookie was taken, if drafted. */
-  draft: { round: number; pick: number; teamId: string } | null;
-};
-
-export type OffseasonOutput = {
-  players: OffseasonResult[];
-  /** How each team's draft position came about. */
-  lottery: LotteryEntry[];
-};
-
-/** A player below this value is not worth a roster place a team doesn't need. */
-const REPLACEMENT_LEVEL = 57;
 
 const ATHLETIC: readonly RatingKey[] = ["speed", "strength", "stamina"];
 const SKILL: readonly RatingKey[] = [
@@ -140,14 +99,67 @@ export function progress(
   return { age, ratings, overall, potential };
 }
 
-type Prospect = OffseasonResult & { key: number };
+/** A player after ageing. A retired player has no team. */
+export type Progressed = {
+  id: string;
+  age: number;
+  jersey: number;
+  ratings: Ratings;
+  overall: number;
+  potential: number;
+  previousOverall: number;
+  teamId: string | null;
+  retired: boolean;
+};
+
+/** Step 1: every player ages a year, and some retire. */
+export function ageAndRetire(
+  rng: Rng,
+  players: readonly OffseasonPlayer[],
+): Progressed[] {
+  return players.map((p) => {
+    const next = progress(rng, p);
+    const retired =
+      next.age >= MAX_PLAYER_AGE ||
+      rng.next() < retirementChance(next.age, next.overall, p.teamId !== null);
+    return {
+      id: p.id,
+      age: next.age,
+      jersey: p.jersey,
+      ratings: next.ratings,
+      overall: next.overall,
+      potential: next.potential,
+      previousOverall: p.overall,
+      teamId: retired ? null : p.teamId,
+      retired,
+    };
+  });
+}
+
+/** A prospect and, once the draft has run, where he went. */
+export type Rookie = {
+  key: number;
+  firstName: string;
+  lastName: string;
+  position: Position;
+  age: number;
+  heightInches: number;
+  weightPounds: number;
+  jersey: number;
+  ratings: Ratings;
+  overall: number;
+  potential: number;
+  /** The team that drafted him; null if undrafted. */
+  teamId: string | null;
+  draft: { round: number; pick: number; teamId: string } | null;
+};
 
 /** The rookie class: enough for every pick plus a few undrafted. */
 export function generateDraftClass(
   rng: Rng,
   size: number,
   takenNames: Set<string>,
-): Prospect[] {
+): Rookie[] {
   const positions = ["PG", "SG", "SF", "PF", "C"] as const;
   return Array.from({ length: size }, (_, key) => {
     const position = positions[rng.int(0, positions.length - 1)] as Position;
@@ -164,7 +176,6 @@ export function generateDraftClass(
     const overall = computeOverall(position, ratings);
     return {
       key,
-      id: null,
       ...uniqueName(rng, takenNames),
       position,
       age,
@@ -173,9 +184,7 @@ export function generateDraftClass(
       ratings,
       overall,
       potential: generatePotential(rng, age, overall),
-      previousOverall: null,
       teamId: null,
-      retired: false,
       draft: null,
     };
   });
@@ -254,53 +263,35 @@ export function draftOrder(
   return { order, entries };
 }
 
-function freeJersey(rng: Rng, used: ReadonlySet<number>): number {
-  const free = shuffle(
+export type DraftInput = {
+  /** Every team, best regular-season record first. */
+  standingsOrder: readonly string[];
+  /** 0 for a team that missed the playoffs; else rounds played, plus one for the title. */
+  playoffDepth: ReadonlyMap<string, number>;
+  /** Every name already used in the league, including retired players. */
+  takenNames: ReadonlySet<string>;
+  /** Each team's scout rating, if it has a scout. A better scout means a clearer board. */
+  scouts: ReadonlyMap<string, number | null>;
+};
+
+/**
+ * Step 2: the lottery and the draft. Every team takes the best prospect on its
+ * board, a blend of overall and potential that leans on potential for the
+ * young, seen through the noise its scout leaves. Prospects not taken stay
+ * undrafted (no team).
+ */
+export function holdDraft(
+  rng: Rng,
+  input: DraftInput,
+): { rookies: Rookie[]; lottery: LotteryEntry[] } {
+  const teams = input.standingsOrder;
+  const prospects = generateDraftClass(
     rng,
-    Array.from({ length: 100 }, (_, n) => n),
-  ).find((n) => !used.has(n));
-  return free ?? 0;
-}
-
-/** Runs the whole offseason. The same input and RNG always give the same output. */
-export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
-  const teams = [...input.standingsOrder];
-  const taken = new Set(input.takenNames);
-
-  // 1. Everyone ages a year; some retire.
-  const kept: OffseasonResult[] = [];
-  const out: OffseasonResult[] = [];
-  for (const p of input.players) {
-    const next = progress(rng, p);
-    const retired =
-      next.age >= MAX_PLAYER_AGE ||
-      rng.next() < retirementChance(next.age, next.overall, p.teamId !== null);
-    const result: OffseasonResult = {
-      id: p.id,
-      firstName: p.firstName,
-      lastName: p.lastName,
-      position: p.position,
-      age: next.age,
-      heightInches: null,
-      weightPounds: null,
-      jersey: p.jersey,
-      ratings: next.ratings,
-      overall: next.overall,
-      potential: next.potential,
-      previousOverall: p.overall,
-      teamId: retired ? null : p.teamId,
-      retired,
-      draft: null,
-    };
-    out.push(result);
-    if (!retired) kept.push(result);
-  }
-
-  // 2. The draft: every team sees the same board, with a little noise.
-  const picks = teams.length * DRAFT_ROUNDS;
-  const prospects = generateDraftClass(rng, picks + UNDRAFTED_PROSPECTS, taken);
+    teams.length * DRAFT_ROUNDS + UNDRAFTED_PROSPECTS,
+    new Set(input.takenNames),
+  );
   const available = new Set(prospects.map((p) => p.key));
-  const { order, entries: lottery } = draftOrder(
+  const { order, entries } = draftOrder(
     rng,
     input.standingsOrder,
     input.playoffDepth,
@@ -309,13 +300,14 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
   for (let round = 1; round <= DRAFT_ROUNDS; round++) {
     for (const teamId of order) {
       pickNumber += 1;
-      let best: Prospect | null = null;
+      const noise = draftNoise(input.scouts.get(teamId) ?? null);
+      let best: Rookie | null = null;
       let bestScore = -Infinity;
       for (const prospect of prospects) {
         if (!available.has(prospect.key)) continue;
         const score =
           playerValue(prospect.overall, prospect.potential, prospect.age) +
-          normalSum(rng, 0, 2);
+          normalSum(rng, 0, noise);
         if (score > bestScore) {
           bestScore = score;
           best = prospect;
@@ -327,74 +319,5 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
       best.draft = { round, pick: pickNumber, teamId };
     }
   }
-  // Rookies not taken stay in the pool as undrafted free agents.
-  for (const rookie of prospects) {
-    kept.push(rookie);
-    out.push(rookie);
-  }
-
-  // 3. Rosters. A team may carry from ROSTER_LIMITS.min to ROSTER_LIMITS.max
-  // players: it releases its weakest above the maximum, and signs free agents
-  // (worst team first) only up to the size its front office aims for, which
-  // differs from team to team but is never below the minimum.
-  const byTeam = new Map<string, OffseasonResult[]>(teams.map((t) => [t, []]));
-  for (const p of kept) {
-    if (p.teamId) byTeam.get(p.teamId)?.push(p);
-  }
-  const value = (p: OffseasonResult) =>
-    playerValue(p.overall, p.potential, p.age);
-  for (const roster of byTeam.values()) {
-    roster.sort((a, b) => value(b) - value(a));
-    for (const cut of roster.splice(ROSTER_LIMITS.max)) cut.teamId = null;
-  }
-  const pool = kept.filter((p) => p.teamId === null);
-  for (const teamId of [...teams].reverse()) {
-    const roster = byTeam.get(teamId) as OffseasonResult[];
-    const target = rng.int(ROSTER_LIMITS.min, ROSTER_LIMITS.max);
-    // A team above its target lets go of players who are not worth a place.
-    while (roster.length > Math.max(target, ROSTER_LIMITS.min)) {
-      const weakest = roster[roster.length - 1] as OffseasonResult;
-      if (value(weakest) >= REPLACEMENT_LEVEL) break;
-      roster.pop();
-      weakest.teamId = null;
-      pool.push(weakest);
-    }
-    while (roster.length < target && pool.length > 0) {
-      const counts = new Map<Position, number>();
-      for (const p of roster) {
-        counts.set(p.position, (counts.get(p.position) ?? 0) + 1);
-      }
-      // Prefer a position the team is short of; otherwise the best player.
-      let best = 0;
-      let bestScore = -Infinity;
-      pool.forEach((p, i) => {
-        const score = value(p) - (counts.get(p.position) ?? 0) * 4;
-        if (score > bestScore) {
-          bestScore = score;
-          best = i;
-        }
-      });
-      const [signed] = pool.splice(best, 1) as [OffseasonResult];
-      signed.teamId = teamId;
-      roster.push(signed);
-    }
-  }
-
-  // 4. Jersey numbers: players keep theirs unless a teammate already wears it
-  // (veterans are placed first); new faces take a free one.
-  for (const roster of byTeam.values()) {
-    const used = new Set<number>();
-    const ordered = [
-      ...roster.filter((p) => p.id !== null),
-      ...roster.filter((p) => p.id === null),
-    ];
-    for (const p of ordered) {
-      if (p.id === null || used.has(p.jersey)) p.jersey = freeJersey(rng, used);
-      used.add(p.jersey);
-    }
-  }
-  for (const p of kept) {
-    if (p.id === null && p.teamId === null) p.jersey = rng.int(0, 99);
-  }
-  return { players: out, lottery };
+  return { rookies: prospects, lottery: entries };
 }

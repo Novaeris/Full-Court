@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimJob, SimKind, SimulationStatus } from "@fullcourt/validation";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "./format-date";
 
 /** How often to ask the server how a running simulation is getting on. */
 const POLL_MS = 1200;
@@ -42,6 +43,7 @@ async function call(
 }
 
 const PHASE_TEXT = {
+  offseason: "Offseason",
   "regular-season": "Regular season",
   playoffs: "Playoffs",
   complete: "Season complete",
@@ -75,7 +77,9 @@ export function SimPanel({
   const job = status.job;
   const active = job ? ACTIVE.has(job.status) : false;
   const season = status.season;
-  const running = !season || season.phase !== "complete";
+  const running =
+    !season || (season.phase !== "complete" && season.phase !== "offseason");
+  const offseason = season?.phase === "offseason";
   const playoffs = season?.phase === "playoffs";
 
   /**
@@ -164,7 +168,7 @@ export function SimPanel({
         );
       } else {
         const next = json as { year: number };
-        setMessage(`Started the ${next.year} season.`);
+        setMessage(`The ${next.year} offseason has begun.`);
         await refresh();
         router.refresh();
       }
@@ -200,10 +204,12 @@ export function SimPanel({
         <p className="text-text-muted">
           {season
             ? season.phase === "regular-season"
-              ? `${PHASE_TEXT[season.phase]}: day ${day} of ${season.lastDay}`
-              : season.phase === "complete" && championName
-                ? `Season complete. ${championName} won the championship.`
-                : PHASE_TEXT[season.phase]
+              ? `${PHASE_TEXT[season.phase]}: day ${day} of ${season.lastDay} · ${formatDate(season.date)}`
+              : season.phase === "offseason"
+                ? `Offseason · ${formatDate(season.date)}`
+                : season.phase === "complete" && championName
+                  ? `Season complete. ${championName} won the championship.`
+                  : PHASE_TEXT[season.phase]
             : "Not started yet. The first simulation creates the schedule."}
         </p>
         {season && season.phase === "regular-season" ? (
@@ -247,16 +253,31 @@ export function SimPanel({
             </Button>
           ) : null}
         </div>
+      ) : offseason ? (
+        <div className="mt-4 flex flex-col gap-3">
+          <p className="text-text-muted">
+            The offseason is under way: the draft, free agency, training camp
+            and the preseason come before opening night.
+          </p>
+          <div>
+            <Link
+              href={`/leagues/${leagueId}/offseason`}
+              className="inline-flex min-h-touch items-center rounded-md bg-accent px-4 font-semibold text-on-accent hover:bg-accent-strong"
+            >
+              Go to the offseason
+            </Link>
+          </div>
+        </div>
       ) : (
         <div className="mt-4 flex flex-col gap-3">
           <p className="text-text-muted">
-            The season is over. Starting the next one saves this season&apos;s
-            statistics and awards, then runs the offseason: players age and
-            change, some retire, the draft is held and rosters are refilled.
+            The season is over. Starting the offseason saves this season&apos;s
+            statistics and awards. Players age and change, some retire, and then
+            come the draft, free agency, training camp and the preseason.
           </p>
           <div>
             <Button variant="primary" disabled={busy} onClick={startNext}>
-              Start the {season ? season.year + 1 : ""} season
+              Start the offseason
             </Button>
           </div>
         </div>
@@ -292,14 +313,14 @@ export function SimPanel({
         {message ? (
           <p className="text-win">
             {message}
-            {message.startsWith("Started the") ? (
+            {message.includes("offseason has begun") ? (
               <>
                 {" "}
                 <Link
                   href={`/leagues/${leagueId}/offseason`}
                   className="font-semibold underline"
                 >
-                  See what changed in the offseason.
+                  Go to the offseason.
                 </Link>
               </>
             ) : null}

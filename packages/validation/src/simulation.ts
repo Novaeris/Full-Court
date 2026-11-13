@@ -1,4 +1,8 @@
-import { SCHEDULE_PRESETS, SEASON_PHASES } from "@fullcourt/game-types";
+import {
+  OFFSEASON_STAGES,
+  SCHEDULE_PRESETS,
+  SEASON_PHASES,
+} from "@fullcourt/game-types";
 import { z } from "zod";
 
 /** Simulating time: the request, the queue row and the season it moves. */
@@ -39,6 +43,10 @@ export const SeasonSchema = z.object({
   id: z.uuid(),
   year: z.number().int(),
   phase: z.enum(SEASON_PHASES),
+  /** Where an offseason has got to; null in every other phase. */
+  stage: z.enum(OFFSEASON_STAGES).nullable(),
+  /** The league calendar date the season is at, `YYYY-MM-DD`. */
+  date: z.string(),
   /** The next game day to simulate, from 1. */
   day: z.number().int().min(1),
   /** The last regular-season game day. */

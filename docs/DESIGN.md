@@ -75,18 +75,53 @@ The playoffs follow the league's setup choices (how many teams qualify, conferen
 - **Starting the next season.** From a completed season, one action archives it into history and creates the next season with a new schedule. The offseason runs in between (next section); free agency, contracts and trades are later systems.
 - **History.** A season's history keeps playoff statistics apart from the regular season's, and records how far each team went.
 
+## The calendar (Owner Mode)
+
+A league has dates. The calendar is the same every year, so it is easy to learn, and a season is named for the year it starts in: the 2026 season runs from October 2026 to June 2027 and its draft is the 2027 draft. _Dates are tunable._
+
+| When            | What                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------ |
+| Oct 20          | The regular season opens (game day 1). Its days are spread evenly to Apr 12          |
+| Apr 18          | The playoffs open. A playoff day is two calendar days, so the finals end in mid June |
+| Jun 17          | The offseason begins: players age and some retire                                    |
+| Jun 25          | The draft lottery and the draft                                                      |
+| Jul 1 to Sep 23 | Free agency and the staff market                                                     |
+| Sep 24 to Oct 6 | Training camp                                                                        |
+| Oct 7 to Oct 19 | Preseason: rosters are final, camp results are in, the new schedule is ready         |
+
+There are no exhibition games: the preseason is the week-and-a-half in which the owner reviews the roster and the camp report before the opener. The start date does not change from year to year and is the same for every league.
+
 ## The offseason (Owner Mode)
 
-What happens between one season and the next. This first slice is automatic, so the world keeps moving and every league can play for 50 seasons; the owner's choices (draft picks, free agency, contracts, trades) are added on top in later phases. Numbers marked _tunable_ are expected to change after play-testing.
+What happens between one season and the next, in order. Each step is a button the owner presses on the **Offseason** page; the stage and its dates show at the top. Numbers marked _tunable_ are expected to change after play-testing.
 
-- **Ageing.** Every player is a year older. Players under 25 improve towards their potential, most quickly at 19 to 21; players peak around 26 to 28; from 29 athletic ratings (speed, strength, stamina) fade first while shooting and passing hold; after 33 the decline steepens. Each player's result is the age curve plus luck, so some young players stall and some veterans hold on. _tunable_
-- **Retirement.** Nobody retires young. Weak players of 31 or more may. After 33 the chance climbs each year and everyone has retired by 40. Free agents of 28 or more, and weak free agents of any age, retire sooner. A retired player stays in the history (his statistics and awards remain) but is off every roster and out of the pool.
-- **The draft lottery.** It follows how teams finished. Teams that missed the playoffs are in the lottery; the worse the record, the better the odds, with the three worst teams sharing the best odds (about 14% each for the first pick in a 14-team lottery). The first four picks are drawn; the other lottery teams then pick in record order, so no team falls more than four places. Playoff teams pick after the lottery, ordered by how far they got: teams knocked out earlier pick first, then the finalist, with the champion last, and the worse record first among teams that went equally far. The page shows each lottery team's finish, odds, the pick it would have had and where it landed.
-- **The draft.** Two rounds, one pick per team in each. A class of rookies aged 19 to 22 is created with names not used before in the league: mostly 40s and 50s overall with high potential, a few in the 60s and 70s. Every team takes the best prospect on the board, a blend of overall and potential that leans on potential for the young, with a little noise so teams don't all agree.
-- **Rosters.** A team carries 12 to 15 players and can be anywhere in that range. It releases its weakest above 15, lets go of players who aren't worth a place when it is above the size it aims for, and signs free agents up to a size of its own choosing between 12 and 15. Undrafted rookies join the pool.
-- **Free agency has no cap.** Nothing pushes a free agent out because the pool is big. Players leave only by retiring: a player with no team retires within a few years, sooner if older or weak.
-- **What the owner sees.** An **Offseason** page after each new season starts: the draft pick by pick (with the lottery's result in the order), the biggest improvements and declines, and who retired. Players' ratings for each season are kept, so their development can be shown later.
-- **Not yet.** Choosing your own picks, free agency with offers and contracts, the salary cap, trades and owner finances. Until those exist, the owner's team is run by the same rules as every other.
+1. **The offseason begins** (from a complete season). The season is archived into history. Every player is a year older: young players improve towards their potential (most quickly at 19 to 21), players peak around 26 to 28, and from 29 athletic ratings (speed, strength, stamina) fade first while shooting and passing hold. Each result is the age curve plus luck. Some players retire: nobody retires young, weak players of 31 or more may, the chance climbs after 33 and everyone has retired by 40, and a player with no team retires within a few years. Staff contracts that have run out end. _tunable_
+2. **The draft** (stage "Draft"). **The lottery follows how teams finished.** Teams that missed the playoffs are in it; the worse the record, the better the odds, with the three worst sharing the best (about 14% each in a 14-team lottery). The first four picks are drawn and the other lottery teams follow in record order, so nobody falls more than four places. Playoff teams pick after, ordered by how far they got (earlier exits first, the champion last). Two rounds, one pick per team in each. A rookie class aged 19 to 22 is created (mostly 40s and 50s overall with high potential, a few in the 60s and 70s). Every team takes the best prospect on its board, a blend of overall and potential that leans on potential for the young, with some noise; **a better scout means less noise**, so the owner can hire one before the draft is held.
+3. **Free agency and the staff market** (stage "Free agency"). Players who retired or were released and the undrafted rookies are free agents. **Free agency has no cap**: nobody is pushed out because the pool is big. The staff market is open (below). When the stage ends, teams sign free agents: a team carries **12 to 15 players** and can be anywhere in that range. It releases its weakest above 15, lets go of players who are not worth a place when above its own target, and signs free agents up to a size of its own choosing, worst team first, preferring positions it is short of. The computer teams hire staff too.
+4. **Training camp** (stage "Training camp"). Each team can send some players to camp. The owner picks who goes and what they work on; the other teams send their young, high-potential players. When the stage ends the camp is held and the gains are applied (below).
+5. **Preseason** (stage "Preseason"). Rosters are final and the camp report is in. Starting the season opens the schedule on Oct 20.
+
+### Training camp
+
+- **Programs.** Six, each improving a group of ratings: Shooting (mid-range, three-point, free throw), Inside game (inside scoring, offensive and defensive rebounding), Playmaking (passing, ball handling), Perimeter defense, Interior defense, and Athleticism (speed, strength, stamina).
+- **Places.** A team has 3 places in camp, plus 1 if its head coach is rated 60 or more and 2 if 80 or more. A player attends one program.
+- **Gains.** Each rating in the program improves by about 1.5, plus up to 2.5 for a development coach at 99 (athleticism: the conditioning coach instead), times a factor for age (1.4 up to 22, 1.0 to 27, 0.6 to 30, 0.3 after), plus luck. A player can't be pushed past his potential in overall, and the gains are small enough that no single camp makes a star.
+- **The camp report** lists every player who attended, the program and what changed.
+
+### Staff
+
+- **Roles.** Four, one person each: **head coach** (camp places), **development coach** (camp gains), **conditioning coach** (athleticism gains at camp) and **scout** (a clearer draft board). Every staff member has a rating from 30 to 95, an age and a salary that rises steeply with the rating.
+- **Budget.** Every team has a staff budget of $10 million, and total staff salary can't exceed it, so a team can't have the best of everyone.
+- **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
+- **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
+
+### What the owner sees
+
+An **Offseason** page: the stage and calendar at the top with the button for the next step, then, for the current stage, the lottery and draft, the staff market, the camp (choose players and programs) and the camp report. The draft and the camp reports of past years stay readable.
+
+### Not yet
+
+Choosing your own draft picks, signing players (offers and contracts), the salary cap, trades and owner finances. Until then your team's draft and roster moves are run by the same rules as every other team.
 
 ## Saves and history (Owner Mode)
 

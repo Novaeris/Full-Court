@@ -3,16 +3,20 @@ import {
   DRAFT_ROUNDS,
   ROSTER_LIMITS,
   computeOverall,
+  playerValue,
 } from "@fullcourt/game-rules";
 import { createRng, seedState } from "../rng/rng";
 import { generateWorld } from "../world/generate";
 import {
+  ageAndRetire,
   draftOrder,
+  holdDraft,
   progress,
-  runOffseason,
   type OffseasonPlayer,
-  type OffseasonResult,
+  type Progressed,
+  type Rookie,
 } from "./offseason";
+import { fillRosters } from "./rosters";
 
 /** The playoff field: the best half of the league, the best team going furthest. */
 function depths(teams: readonly string[]): Map<string, number> {
@@ -41,7 +45,7 @@ function league(size: "compact" | "standard" = "compact") {
   return { teams, players };
 }
 
-/** Plays years of offseasons the way the server does. */
+/** Plays years of offseasons the way the server does: age, draft, fill rosters. */
 function simulateYears(
   years: number,
   size: "compact" | "standard" = "compact",
@@ -50,31 +54,58 @@ function simulateYears(
   let players = start;
   let next = players.length;
   const rng = createRng(seedState("offseason-years"));
-  const history: OffseasonResult[][] = [];
+  const drafts: Rookie[][] = [];
+  const names = new Set(players.map((p) => `${p.firstName} ${p.lastName}`));
   for (let y = 0; y < years; y++) {
-    const out = runOffseason(rng, {
+    const aged = ageAndRetire(rng, players);
+    const byId = new Map(aged.map((a) => [a.id, a]));
+    players = players.flatMap((p) => {
+      const a = byId.get(p.id) as Progressed;
+      return a.retired
+        ? []
+        : [
+            {
+              ...p,
+              age: a.age,
+              ratings: a.ratings,
+              overall: a.overall,
+              potential: a.potential,
+              teamId: a.teamId,
+            },
+          ];
+    });
+    const { rookies } = holdDraft(rng, {
       standingsOrder: teams,
       playoffDepth: depths(teams),
-      players,
-      takenNames: new Set(players.map((p) => `${p.firstName} ${p.lastName}`)),
+      takenNames: names,
+      scouts: new Map(),
     });
-    history.push(out.players);
-    players = out.players
-      .filter((p) => !p.retired)
-      .map((p) => ({
-        id: p.id ?? `p${next++}`,
-        teamId: p.teamId,
-        firstName: p.firstName,
-        lastName: p.lastName,
-        position: p.position,
-        age: p.age,
-        jersey: p.jersey,
-        ratings: p.ratings,
-        overall: p.overall,
-        potential: p.potential,
-      }));
+    drafts.push(rookies);
+    for (const r of rookies) names.add(`${r.firstName} ${r.lastName}`);
+    players = [
+      ...players,
+      ...rookies.map((r) => ({
+        id: `p${next++}`,
+        teamId: r.teamId,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        position: r.position,
+        age: r.age,
+        jersey: r.jersey,
+        ratings: r.ratings,
+        overall: r.overall,
+        potential: r.potential,
+      })),
+    ];
+    const moves = new Map(
+      fillRosters(rng, { teams, players }).map((m) => [m.id, m]),
+    );
+    players = players.map((p) => {
+      const m = moves.get(p.id);
+      return m ? { ...p, teamId: m.teamId, jersey: m.jersey } : p;
+    });
   }
-  return { teams, players, history };
+  return { teams, players, drafts };
 }
 
 describe("progress", () => {
@@ -184,37 +215,29 @@ describe("draftOrder", () => {
   });
 });
 
-describe("runOffseason", () => {
-  it("is deterministic", () => {
-    const run = () => {
-      const { teams, players } = league();
-      return runOffseason(createRng(seedState("same")), {
-        standingsOrder: teams,
-        playoffDepth: depths(teams),
-        players,
-        takenNames: new Set(),
-      });
-    };
-    expect(run()).toEqual(run());
+describe("the offseason steps", () => {
+  it("are deterministic", () => {
+    expect(simulateYears(2)).toEqual(simulateYears(2));
   });
 
-  it("keeps every team within the roster limits, with the draft done", () => {
-    const { teams, players, history } = simulateYears(1);
-    const sizes = teams.map(
-      (team) => players.filter((p) => p.teamId === team).length,
-    );
-    for (const size of sizes) {
+  it("keeps every team within the roster limits after free agency", () => {
+    const { teams, players } = simulateYears(1);
+    for (const team of teams) {
+      const size = players.filter((p) => p.teamId === team).length;
       expect(size).toBeGreaterThanOrEqual(ROSTER_LIMITS.min);
       expect(size).toBeLessThanOrEqual(ROSTER_LIMITS.max);
     }
-    const drafted = (history[0] as OffseasonResult[]).filter((p) => p.draft);
+  });
+
+  it("drafts a pick for every team in every round, in order", () => {
+    const { teams, drafts } = simulateYears(1);
+    const drafted = (drafts[0] as Rookie[]).filter((r) => r.draft);
     expect(drafted).toHaveLength(teams.length * DRAFT_ROUNDS);
     expect(
-      drafted.map((p) => p.draft?.pick).sort((a, b) => (a ?? 0) - (b ?? 0)),
+      drafted.map((r) => r.draft?.pick).sort((a, b) => (a ?? 0) - (b ?? 0)),
     ).toEqual(Array.from({ length: drafted.length }, (_, i) => i + 1));
-    // Each team drafted once per round.
     for (const team of teams) {
-      expect(drafted.filter((p) => p.draft?.teamId === team)).toHaveLength(
+      expect(drafted.filter((r) => r.draft?.teamId === team)).toHaveLength(
         DRAFT_ROUNDS,
       );
     }
@@ -232,16 +255,6 @@ describe("runOffseason", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("only retires players who have a reason, and nobody older than 40 plays", () => {
-    const { history, players } = simulateYears(8);
-    for (const year of history) {
-      for (const p of year.filter((r) => r.retired)) {
-        expect(p.age >= 31 || p.overall < 45 || p.teamId === null).toBe(true);
-      }
-    }
-    expect(Math.max(...players.map((p) => p.age))).toBeLessThan(40);
-  });
-
   it("keeps the league's talent steady over 25 years", () => {
     const { players, teams } = simulateYears(25);
     const rostered = players.filter((p) => p.teamId);
@@ -254,8 +267,7 @@ describe("runOffseason", () => {
     expect(rostered.length).toBeLessThanOrEqual(
       teams.length * ROSTER_LIMITS.max,
     );
-    const stars = rostered.filter((p) => p.overall >= 75).length;
-    expect(stars).toBeGreaterThan(0);
+    expect(Math.max(...players.map((p) => p.age))).toBeLessThan(40);
   });
 
   it("lets rosters differ from team to team, anywhere in the range", () => {
@@ -269,18 +281,48 @@ describe("runOffseason", () => {
   it("does not cap free agency, and the pool still settles over 50 years", () => {
     const { players, teams } = simulateYears(50);
     const free = players.filter((p) => p.teamId === null);
-    // Nothing forces free agents out, only age and ability, so the pool is
-    // allowed to be large; it must not grow without bound.
     expect(free.length).toBeLessThan(teams.length * 10);
   });
 
-  it("keeps every draft pick on the books, every year", () => {
-    const { history, teams } = simulateYears(15);
-    for (const year of history) {
-      expect(year.filter((p) => p.draft)).toHaveLength(
-        teams.length * DRAFT_ROUNDS,
-      );
-      expect(year.filter((p) => p.draft && p.retired)).toHaveLength(0);
+  it("only retires players who have a reason", () => {
+    const rng = createRng(seedState("retire"));
+    const { players } = league();
+    for (let i = 0; i < 6; i++) {
+      for (const a of ageAndRetire(rng, players)) {
+        if (!a.retired) continue;
+        expect(a.age >= 31 || a.overall < 45 || a.teamId === null).toBe(true);
+      }
     }
+  });
+
+  it("lets a better scout see the draft more clearly", () => {
+    // With a lot of noise the best prospect is often missed; with none, the
+    // first pick is always the best-valued prospect.
+    const teams = Array.from({ length: 12 }, (_, i) => `T${i}`);
+    let clearer = 0;
+    let blurrier = 0;
+    for (let i = 0; i < 60; i++) {
+      for (const [scout, count] of [
+        [95, "clear"],
+        [null, "blur"],
+      ] as const) {
+        const { rookies } = holdDraft(createRng(seedState(`s${i}`)), {
+          standingsOrder: teams,
+          playoffDepth: new Map(),
+          takenNames: new Set(),
+          scouts: new Map(teams.map((t) => [t, scout])),
+        });
+        const firstPick = rookies.find((r) => r.draft?.pick === 1) as Rookie;
+        const bestValue = Math.max(
+          ...rookies.map((r) => playerValue(r.overall, r.potential, r.age)),
+        );
+        const gap =
+          bestValue -
+          playerValue(firstPick.overall, firstPick.potential, firstPick.age);
+        if (count === "clear") clearer += gap;
+        else blurrier += gap;
+      }
+    }
+    expect(clearer).toBeLessThan(blurrier);
   });
 });

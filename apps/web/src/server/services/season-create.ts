@@ -19,6 +19,7 @@ export async function createSeason(
   ctx: UserContext,
   league: { id: string },
   year: number,
+  options: { inOffseason?: boolean } = {},
 ): Promise<void> {
   const tiers = DEFAULT_SCHEDULE_TIERS;
   const structure = await getStructure(ctx, league.id);
@@ -56,6 +57,7 @@ export async function createSeason(
       preset: "standard",
       tiers,
       games,
+      inOffseason: options.inOffseason ?? false,
     });
   } catch (e) {
     // Two requests can race to create the same season: the loser is fine.

@@ -7,7 +7,9 @@ import {
   LeagueStructureSchema,
   GameDetailSchema,
   GamePlaysSchema,
+  CampResponseSchema,
   OffseasonResponseSchema,
+  StaffResponseSchema,
   PlayoffsResponseSchema,
   SeasonSchema,
   ScheduleResponseSchema,
@@ -19,7 +21,12 @@ import {
   type ChooseTeamRequest,
   type GameDetail,
   type GamePlays,
+  type CampResponse,
+  type HireStaffRequest,
   type OffseasonResponse,
+  type ReleaseStaffRequest,
+  type SetCampRequest,
+  type StaffResponse,
   type PlayoffsResponse,
   type Season,
   type ScheduleResponse,
@@ -73,7 +80,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export function createApiClient(options: ApiClientOptions) {
   const base = options.baseUrl.replace(/\/+$/, "");
@@ -230,6 +237,58 @@ export function createApiClient(options: ApiClientOptions) {
       offseason: (id: string): Promise<OffseasonResponse> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/offseason`, (b) =>
           OffseasonResponseSchema.parse(b),
+        ),
+      /** Takes the current offseason stage's step and moves to the next stage. */
+      advanceOffseason: (id: string): Promise<Season> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/offseason/advance`,
+          (b) => SeasonSchema.parse(b),
+          {},
+        ),
+      /** One of your teams' staff, the staff market and the budget. */
+      staff: (id: string, teamId?: string): Promise<StaffResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/staff${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
+          (b) => StaffResponseSchema.parse(b),
+        ),
+      /** Hires a free agent into his role on your team. */
+      hireStaff: (
+        id: string,
+        input: HireStaffRequest,
+      ): Promise<StaffResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/staff`,
+          (b) => StaffResponseSchema.parse(b),
+          input,
+        ),
+      /** Lets one of your staff go; he joins the market. */
+      releaseStaff: (
+        id: string,
+        input: ReleaseStaffRequest,
+      ): Promise<StaffResponse> =>
+        request(
+          "DELETE",
+          `/leagues/${encodeURIComponent(id)}/staff`,
+          (b) => StaffResponseSchema.parse(b),
+          input,
+        ),
+      /** Who can go to training camp and who is going. */
+      camp: (id: string, teamId?: string): Promise<CampResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/camp${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
+          (b) => CampResponseSchema.parse(b),
+        ),
+      /** Replaces your team's training camp roster. */
+      setCamp: (id: string, input: SetCampRequest): Promise<CampResponse> =>
+        request(
+          "PUT",
+          `/leagues/${encodeURIComponent(id)}/camp`,
+          (b) => CampResponseSchema.parse(b),
+          input,
         ),
       /** The game's plays, replayed by the server. */
       gamePlays: (id: string, gameId: string): Promise<GamePlays> =>

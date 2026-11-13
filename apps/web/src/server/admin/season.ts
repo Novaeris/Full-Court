@@ -23,6 +23,8 @@ export async function insertSeason(input: {
   preset: SchedulePreset;
   tiers: ScheduleTiers;
   games: readonly Game[];
+  /** True when the season starts with its offseason (draft first). */
+  inOffseason?: boolean;
 }): Promise<SeasonRow> {
   const { data, error } = await createAdminClient().rpc("admin_create_season", {
     target_league: input.leagueId,
@@ -34,6 +36,7 @@ export async function insertSeason(input: {
       home_team_id: g.homeTeamId,
       away_team_id: g.awayTeamId,
     })),
+    in_offseason: input.inOffseason ?? false,
   });
   if (error) throw error;
   return data;
@@ -83,33 +86,6 @@ export async function archiveSeason(input: {
     {
       target_season: input.seasonId,
       standings_order: [...input.standingsOrder],
-    },
-  );
-  if (error) throw error;
-  return data;
-}
-
-/**
- * Stores one offseason (progression, retirements, the draft, roster moves) in
- * one transaction, through public.admin_apply_offseason().
- */
-export async function applyOffseason(input: {
-  seasonId: string;
-  changes: readonly Record<string, unknown>[];
-  /** One entry per team: how it finished and what the draft lottery did for it. */
-  lottery: readonly {
-    team_id: string;
-    finish_rank: number;
-    expected_pick: number;
-    odds: number | null;
-  }[];
-}): Promise<SeasonRow> {
-  const { data, error } = await createAdminClient().rpc(
-    "admin_apply_offseason",
-    {
-      target_season: input.seasonId,
-      changes: input.changes as never,
-      lottery: input.lottery as never,
     },
   );
   if (error) throw error;

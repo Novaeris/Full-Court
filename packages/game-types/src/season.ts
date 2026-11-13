@@ -6,13 +6,46 @@
  * worker job payload without conversion.
  */
 
-/** Where a league is in its yearly cycle. Later phases add the offseason. */
+/**
+ * Where a league is in its yearly cycle. The offseason leads into a season: it
+ * runs in stages (docs/DESIGN.md, "The offseason") before the regular season.
+ */
 export const SEASON_PHASES = [
+  "offseason",
   "regular-season",
   "playoffs",
   "complete",
 ] as const;
 export type SeasonPhase = (typeof SEASON_PHASES)[number];
+
+/** The stages of an offseason, in order. */
+export const OFFSEASON_STAGES = [
+  "draft",
+  "free-agency",
+  "training-camp",
+  "preseason",
+] as const;
+export type OffseasonStage = (typeof OFFSEASON_STAGES)[number];
+
+/** Staff roles: one person each on a team. */
+export const STAFF_ROLES = [
+  "head-coach",
+  "development-coach",
+  "conditioning-coach",
+  "scout",
+] as const;
+export type StaffRole = (typeof STAFF_ROLES)[number];
+
+/** What a player can work on at training camp. */
+export const CAMP_PROGRAMS = [
+  "shooting",
+  "inside",
+  "playmaking",
+  "perimeter-defense",
+  "interior-defense",
+  "athleticism",
+] as const;
+export type CampProgram = (typeof CAMP_PROGRAMS)[number];
 
 /**
  * The league calendar. `day` is the next game day to simulate, starting at 1;

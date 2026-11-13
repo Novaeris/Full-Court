@@ -14,7 +14,7 @@ import type {
 import { archiveSeason, insertPlayoffs } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
-import { runSeasonOffseason } from "./offseason";
+import { beginOffseason } from "./offseason";
 import { getLeague, getSettings, parseLeagueId } from "./leagues";
 import { createSeason } from "./season-create";
 import { latestSeason, seasonView } from "./season-shared";
@@ -182,10 +182,12 @@ export async function startNextSeason(
   if (!season.archived_at) {
     await archiveSeason({ seasonId: season.id, standingsOrder });
   }
-  // The offseason runs once; a retry after a failure skips it.
-  await runSeasonOffseason(ctx, league.id, season, standingsOrder);
+  // Players age and staff turn over, once; a retry after a failure skips what
+  // already happened. The next season then starts with its offseason.
+  const archived = (await latestSeason(ctx, league.id)) ?? season;
+  await beginOffseason(ctx, league.id, archived);
   try {
-    await createSeason(ctx, league, season.year + 1);
+    await createSeason(ctx, league, season.year + 1, { inOffseason: true });
   } catch (error) {
     if ((error as { message?: string }).message === "season_limit_reached") {
       throw new ApiError(

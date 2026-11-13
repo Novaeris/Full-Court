@@ -1,5 +1,7 @@
 import "server-only";
 import type { Database } from "@fullcourt/api-client";
+import { seasonDate } from "@fullcourt/game-rules";
+import type { OffseasonStage } from "@fullcourt/game-types";
 import type { Season } from "@fullcourt/validation";
 import type { UserContext } from "@/server/auth/session";
 
@@ -15,6 +17,14 @@ export function toSeason(
     id: row.id,
     year: row.year,
     phase: row.phase as Season["phase"],
+    stage: (row.stage as OffseasonStage | null) ?? null,
+    date: seasonDate({
+      year: row.year,
+      phase: row.phase as Season["phase"],
+      stage: (row.stage as OffseasonStage | null) ?? null,
+      day: row.day,
+      lastDay: row.last_day,
+    }),
     day: row.day,
     lastDay: row.last_day,
     schedulePreset: row.schedule_preset as Season["schedulePreset"],

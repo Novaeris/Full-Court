@@ -2,6 +2,96 @@ import { expect, test } from "@playwright/test";
 import { startedLeague } from "./support/season";
 import { finishJob } from "./support/worker";
 
+type Api = Awaited<ReturnType<typeof startedLeague>>["api"];
+
+/**
+ * The first offseason, step by step: staff, the camp's places and rules, the
+ * budget, and what the stages refuse. It leaves the league in the preseason.
+ */
+async function firstOffseason(api: Api, leagueId: string) {
+  // Staff: four roles on the team, a market, a budget.
+  const staff = await api.leagues.staff(leagueId);
+  expect(staff.team.map((s) => s.role).sort()).toEqual([
+    "conditioning-coach",
+    "development-coach",
+    "head-coach",
+    "scout",
+  ]);
+  expect(staff.payroll).toBeLessThanOrEqual(staff.budget);
+  for (const role of [
+    "head-coach",
+    "development-coach",
+    "conditioning-coach",
+    "scout",
+  ]) {
+    expect(
+      staff.market.filter((m) => m.role === role).length,
+    ).toBeGreaterThanOrEqual(4);
+  }
+
+  // Let the scout go and hire the best scout on the market that fits the budget.
+  const scout = staff.team.find((s) => s.role === "scout")!;
+  const released = await api.leagues.releaseStaff(leagueId, {
+    staffId: scout.id,
+  });
+  expect(released.team.some((s) => s.role === "scout")).toBe(false);
+  expect(released.market.some((m) => m.id === scout.id)).toBe(true);
+  const best = released.market
+    .filter(
+      (m) =>
+        m.role === "scout" && released.payroll + m.salary <= released.budget,
+    )
+    .sort((a, b) => b.rating - a.rating)[0]!;
+  const hired = await api.leagues.hireStaff(leagueId, {
+    staffId: best.id,
+    years: 2,
+  });
+  expect(hired.team.find((s) => s.role === "scout")?.id).toBe(best.id);
+  expect(hired.payroll).toBeLessThanOrEqual(hired.budget);
+  // He is not on the market any more, so hiring him again is refused.
+  await expect(
+    api.leagues.hireStaff(leagueId, { staffId: best.id, years: 2 }),
+  ).rejects.toMatchObject({ status: 409 });
+
+  // Camp is not open during the draft.
+  await expect(
+    api.leagues.setCamp(leagueId, { assignments: [] }),
+  ).rejects.toMatchObject({ status: 409, code: "wrong_stage" });
+
+  await api.leagues.advanceOffseason(leagueId); // the draft
+  await api.leagues.advanceOffseason(leagueId); // free agency
+  const camp = await api.leagues.camp(leagueId);
+  expect(camp.open).toBe(true);
+  // More players than places is refused; exactly the places is fine.
+  const players = camp.roster.map((r) => r.player.id);
+  await expect(
+    api.leagues.setCamp(leagueId, {
+      assignments: players
+        .slice(0, camp.places + 1)
+        .map((playerId) => ({ playerId, program: "shooting" as const })),
+    }),
+  ).rejects.toMatchObject({ status: 422, code: "camp_full" });
+  const set = await api.leagues.setCamp(leagueId, {
+    assignments: players
+      .slice(0, camp.places)
+      .map((playerId) => ({ playerId, program: "athleticism" as const })),
+  });
+  expect(set.roster.filter((r) => r.program !== null)).toHaveLength(
+    camp.places,
+  );
+  await api.leagues.advanceOffseason(leagueId); // camp
+  const report = await api.leagues.offseason(leagueId);
+  expect(report.stage).toBe("preseason");
+  expect(report.campReport.length).toBeGreaterThanOrEqual(camp.places);
+  // Camp only improves ratings, never past potential.
+  for (const row of report.campReport) {
+    expect(row.after).toBeGreaterThanOrEqual(row.before);
+    expect(row.after).toBeLessThanOrEqual(
+      Math.max(row.player.potential, row.before),
+    );
+  }
+}
+
 /**
  * Several seasons in a row. It runs after every other spec (see the
  * "long-runs" project in playwright.config.ts): a worker claims the oldest
@@ -26,9 +116,15 @@ test.describe("several seasons", () => {
       await api.leagues.simulate(league.id, { kind: "season" });
       await finishJob(api, league.id);
       await api.leagues.startNextSeason(league.id);
+      if (i === 0) await firstOffseason(api, league.id);
+      // The remaining stages, ending with the season's opening.
+      for (let stage = 0; stage < (i === 0 ? 1 : 4); stage++) {
+        await api.leagues.advanceOffseason(league.id);
+      }
       const report = await api.leagues.offseason(league.id);
       expect(report.year).toBe(first + i + 1);
       expect(report.draft).toHaveLength(24);
+      expect(report.stage).toBeNull();
     }
     const { teams } = await api.leagues.teams(league.id);
     for (const t of teams) {

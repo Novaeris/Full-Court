@@ -100,53 +100,118 @@ test.describe("playoffs", () => {
     const standings = await api.leagues.standings(league.id);
     expect(standings.rows.every((r) => r.wins + r.losses === 29)).toBe(true);
 
-    // Start the next season from the page.
+    // Start the offseason from the page.
     await page.goto(`/leagues/${league.id}/playoffs`);
-    const start = page.getByRole("button", { name: /Start the \d+ season/ });
+    const start = page.getByRole("button", { name: "Start the offseason" });
     await expect(start).toBeVisible();
     await start.click();
-    await expect(page.getByText(/Started the \d+ season\./)).toBeVisible();
+    await expect(page.getByText(/The \d+ offseason has begun\./)).toBeVisible();
     const next = await api.leagues.simulation(league.id);
     expect(next.season).toMatchObject({
       year: (season?.year ?? 0) + 1,
-      phase: "regular-season",
+      phase: "offseason",
+      stage: "draft",
       day: 1,
       championTeamId: null,
     });
-    // The new season has a fresh schedule and no playoffs yet.
+    // The offseason begins in the calendar's fixed place, and no playoffs are
+    // left over from the season before.
+    expect(next.season?.date).toBe(`${next.season?.year}-06-25`);
     expect((await api.leagues.playoffs(league.id)).series).toEqual([]);
     await expect(api.leagues.startNextSeason(league.id)).rejects.toMatchObject({
       status: 409,
       code: "season_not_complete",
     });
+    // The simulation can not run in the offseason.
+    await expect(
+      api.leagues.simulate(league.id, { kind: "day" }),
+    ).rejects.toMatchObject({ status: 409 });
 
-    // The offseason happened in between: a draft with a pick for every team in
-    // every round, rosters back to full size, and a page that shows it.
+    // The draft stage: the offseason page shows the stages.
+    await page.goto(`/leagues/${league.id}/offseason`);
+    await expect(
+      page.getByRole("heading", { name: `${next.season?.year} offseason` }),
+    ).toBeVisible();
+    await expect(
+      page.locator('li[aria-current="step"]').filter({ hasText: "Draft" }),
+    ).toBeVisible();
+    const staff = await api.leagues.staff(league.id);
+    expect(staff.open).toBe(true);
+    expect(staff.payroll).toBeLessThanOrEqual(staff.budget);
+    await page.getByRole("button", { name: "Hold the draft" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Draft lottery" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "End free agency" }),
+    ).toBeVisible();
+
     const report = await api.leagues.offseason(league.id);
     expect(report.year).toBe(next.season?.year);
+    expect(report.stage).toBe("free-agency");
     expect(report.draft).toHaveLength(24);
     expect(report.draft.map((d) => d.pick)).toEqual(
       Array.from({ length: 24 }, (_, i) => i + 1),
     );
+    // The lottery covers the teams that missed the playoffs, odds adding to 100%.
+    const odds = report.draft
+      .filter((d) => d.round === 1 && d.lotteryOdds !== null)
+      .map((d) => d.lotteryOdds as number);
+    expect(odds.length).toBeGreaterThan(0);
+    expect(odds.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
+
+    // Free agency, then training camp where the owner chooses who goes.
+    await page.getByRole("button", { name: "End free agency" }).click();
+    await expect(
+      page.getByRole("button", { name: "Hold training camp" }),
+    ).toBeVisible();
+    const camp = await api.leagues.camp(league.id);
+    expect(camp.open).toBe(true);
+    expect(camp.places).toBeGreaterThanOrEqual(3);
+    const youngest = [...camp.roster].sort(
+      (a, b) => a.player.age - b.player.age,
+    )[0]!;
+    await page
+      .getByLabel(`Camp program for ${youngest.player.name}`)
+      .selectOption("shooting");
+    await page.getByRole("button", { name: "Save camp roster" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    expect(
+      (await api.leagues.camp(league.id)).roster.find(
+        (r) => r.player.id === youngest.player.id,
+      )?.program,
+    ).toBe("shooting");
+    await page.getByRole("button", { name: "Hold training camp" }).click();
+    await expect(
+      page.getByRole("button", { name: "Start the regular season" }),
+    ).toBeVisible();
+    const afterCamp = await api.leagues.offseason(league.id);
+    expect(afterCamp.stage).toBe("preseason");
+    expect(
+      afterCamp.campReport.some((r) => r.player.id === youngest.player.id),
+    ).toBe(true);
+    await expect(
+      page.getByRole("heading", { name: "Training camp report" }),
+    ).toBeVisible();
+
+    // Rosters are 12 to 15 players, anywhere in the range.
     const { teams } = await api.leagues.teams(league.id);
     for (const t of teams) {
       const detail = await api.leagues.team(league.id, t.id);
       expect(detail.players.length).toBeGreaterThanOrEqual(12);
       expect(detail.players.length).toBeLessThanOrEqual(15);
     }
-    await page.goto(`/leagues/${league.id}/offseason`);
-    await expect(
-      page.getByRole("heading", { name: `${report.year} draft` }),
-    ).toBeVisible();
-    // The lottery covers the teams that missed the playoffs, odds adding to 100%.
-    await expect(
-      page.getByRole("heading", { name: "Draft lottery" }),
-    ).toBeVisible();
-    const odds = report.draft
-      .filter((d) => d.round === 1 && d.lotteryOdds !== null)
-      .map((d) => d.lotteryOdds as number);
-    expect(odds.length).toBeGreaterThan(0);
-    expect(odds.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
+
+    // The season opens on October 20 with its schedule ready.
+    await page
+      .getByRole("button", { name: "Start the regular season" })
+      .click();
+    await expect
+      .poll(async () => (await api.leagues.simulation(league.id)).season?.phase)
+      .toBe("regular-season");
+    const opened = (await api.leagues.simulation(league.id)).season;
+    expect(opened).toMatchObject({ stage: null, day: 1 });
+    expect(opened?.date).toBe(`${opened?.year}-10-20`);
   });
 
   test("the playoff pages fit the screen, pass axe and have big enough targets", async ({
@@ -188,8 +253,12 @@ test.describe("playoffs", () => {
 
     await check(`${base}/playoffs`);
     await check(`${base}/games/${gameId}?tab=box`);
-    // The offseason page exists once the next season has been started.
+    // The offseason page exists once the offseason has begun: check it at the
+    // draft, with the staff market, and at training camp.
     await api.leagues.startNextSeason(league.id);
+    await check(`${base}/offseason`);
+    await api.leagues.advanceOffseason(league.id);
+    await api.leagues.advanceOffseason(league.id);
     await check(`${base}/offseason`);
   });
 });
