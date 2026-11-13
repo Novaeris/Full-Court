@@ -1593,6 +1593,64 @@ export type Database = {
           },
         ]
       }
+      trades: {
+        Row: {
+          created_at: string
+          day: number
+          gave_a: string[]
+          gave_b: string[]
+          id: string
+          league_id: string
+          season_year: number
+          team_a: string
+          team_b: string
+        }
+        Insert: {
+          created_at?: string
+          day?: number
+          gave_a: string[]
+          gave_b: string[]
+          id?: string
+          league_id: string
+          season_year: number
+          team_a: string
+          team_b: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          gave_a?: string[]
+          gave_b?: string[]
+          id?: string
+          league_id?: string
+          season_year?: number
+          team_a?: string
+          team_b?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_league_id_team_a_fkey"
+            columns: ["league_id", "team_a"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "trades_league_id_team_b_fkey"
+            columns: ["league_id", "team_b"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1713,6 +1771,32 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_apply_trade: {
+        Args: {
+          from_a: string[]
+          from_b: string[]
+          target_season: string
+          trade_team_a: string
+          trade_team_b: string
+        }
+        Returns: {
+          created_at: string
+          day: number
+          gave_a: string[]
+          gave_b: string[]
+          id: string
+          league_id: string
+          season_year: number
+          team_a: string
+          team_b: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trades"
           isOneToOne: true
           isSetofReturn: false
         }

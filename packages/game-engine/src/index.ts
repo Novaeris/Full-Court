@@ -127,3 +127,4 @@ export {
   type FaSigning,
   type FaTeam,
 } from "./offseason/freeagency";
+export { shopPlayers, type ShopOffer, type ShopTeam } from "./offseason/trades";

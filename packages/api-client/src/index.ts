@@ -10,6 +10,11 @@ import {
   AiAssistResponseSchema,
   CampResponseSchema,
   DraftResponseSchema,
+  ShopResponseSchema,
+  TradeEvaluationSchema,
+  TradePartnerResponseSchema,
+  TradeResultSchema,
+  TradesResponseSchema,
   FreeAgencyResponseSchema,
   RosterResponseSchema,
   OffseasonResponseSchema,
@@ -30,6 +35,13 @@ import {
   type DraftPickRequest,
   type DraftResponse,
   type DraftSimRequest,
+  type ShopRequest,
+  type ShopResponse,
+  type TradeEvaluation,
+  type TradePartnerResponse,
+  type TradeProposal,
+  type TradeResult,
+  type TradesResponse,
   type FreeAgencyResponse,
   type MakeOfferRequest,
   type SimFreeAgencyRequest,
@@ -288,6 +300,50 @@ export function createApiClient(options: ApiClientOptions) {
           "DELETE",
           `/leagues/${encodeURIComponent(id)}/staff`,
           (b) => StaffResponseSchema.parse(b),
+          input,
+        ),
+      /** Whether trades are open, your roster with contracts, the teams to trade with and recent trades. */
+      trades: (id: string, teamId?: string): Promise<TradesResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/trades${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
+          (b) => TradesResponseSchema.parse(b),
+        ),
+      /** A computer team's roster with contracts. */
+      tradePartner: (
+        id: string,
+        partnerId: string,
+      ): Promise<TradePartnerResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/trades/partner?partner=${encodeURIComponent(partnerId)}`,
+          (b) => TradePartnerResponseSchema.parse(b),
+        ),
+      /** Whether a trade is legal and what the computer team would say, without making it. */
+      evaluateTrade: (
+        id: string,
+        input: TradeProposal,
+      ): Promise<TradeEvaluation> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades/evaluate`,
+          (b) => TradeEvaluationSchema.parse(b),
+          input,
+        ),
+      /** Proposes a trade: made if it is legal and the computer team accepts. */
+      proposeTrade: (id: string, input: TradeProposal): Promise<TradeResult> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades`,
+          (b) => TradeResultSchema.parse(b),
+          input,
+        ),
+      /** What the computer teams would give for your players. */
+      shopPlayers: (id: string, input: ShopRequest): Promise<ShopResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades/shop`,
+          (b) => ShopResponseSchema.parse(b),
           input,
         ),
       /** Free agency's 21 days: the market, your offers, the cap and what has happened. */

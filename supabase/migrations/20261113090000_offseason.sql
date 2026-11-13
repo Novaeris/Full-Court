@@ -272,7 +272,7 @@ create table public.player_transactions (
   -- The free-agency day, or 0.
   day smallint not null default 0,
   kind text not null
-    check (kind in ('drafted', 'signed', 're-signed', 'released', 'contract-ended')),
+    check (kind in ('drafted', 'signed', 're-signed', 'released', 'contract-ended', 'traded')),
   player_id uuid not null,
   team_id uuid,
   salary integer,
@@ -1441,8 +1441,12 @@ begin
   if not found then
     raise exception 'season_not_found' using errcode = 'P0002';
   end if;
-  if current_season.phase <> 'offseason'
-     or current_season.stage not in ('free-agency', 'training-camp', 'preseason') then
+  -- Open from free agency to the preseason, and through the regular season.
+  if not (
+    (current_season.phase = 'offseason'
+     and current_season.stage in ('free-agency', 'training-camp', 'preseason'))
+    or current_season.phase = 'regular-season'
+  ) then
     raise exception 'wrong_stage' using errcode = 'P0001';
   end if;
   if not exists (
@@ -1472,7 +1476,8 @@ begin
   insert into public.player_transactions (
     league_id, season_year, day, kind, player_id, team_id, salary, years
   ) values (
-    current_season.league_id, current_season.year, current_season.fa_day,
+    current_season.league_id, current_season.year,
+    case when current_season.phase = 'offseason' then current_season.fa_day else current_season.day end,
     'signed', player, sign_team, sign_salary, sign_years
   );
   update public.player_ratings_history set team_id = sign_team
@@ -1505,14 +1510,19 @@ begin
   if not found then
     raise exception 'season_not_found' using errcode = 'P0002';
   end if;
-  if current_season.phase <> 'offseason'
-     or current_season.stage not in ('free-agency', 'training-camp', 'preseason') then
+  -- Open from free agency to the preseason, and through the regular season.
+  if not (
+    (current_season.phase = 'offseason'
+     and current_season.stage in ('free-agency', 'training-camp', 'preseason'))
+    or current_season.phase = 'regular-season'
+  ) then
     raise exception 'wrong_stage' using errcode = 'P0001';
   end if;
   insert into public.player_transactions (
     league_id, season_year, day, kind, player_id, team_id, salary, years
   )
-  select current_season.league_id, current_season.year, current_season.fa_day,
+  select current_season.league_id, current_season.year,
+         case when current_season.phase = 'offseason' then current_season.fa_day else current_season.day end,
          'released', p.id, release_team, p.salary, null
   from public.players p
   where p.id = player and p.league_id = current_season.league_id
@@ -1529,6 +1539,10 @@ begin
     and season_year = current_season.year and player_id = player;
   select count(*) into roster from public.players
   where team_id = release_team and status = 'active';
+  -- In the season a roster is never below 12.
+  if current_season.phase = 'regular-season' and roster < 12 then
+    raise exception 'roster_too_small' using errcode = 'P0001';
+  end if;
   return roster;
 end;
 $$;
@@ -1570,3 +1584,142 @@ $$;
 revoke execute on function public.admin_set_ai_assist(uuid, jsonb)
   from public, anon, authenticated;
 grant execute on function public.admin_set_ai_assist(uuid, jsonb) to service_role;
+
+-- Trades (server only) ---------------------------------------------------------------------------------------
+
+-- Every trade, for the league's history: the two teams and the players each
+-- gave. Open from free agency to the preseason, and in the regular season up to
+-- the deadline (two thirds of the way through).
+create table public.trades (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_year smallint not null,
+  -- The season's day when it was made, or 0 in the offseason.
+  day smallint not null default 0,
+  team_a uuid not null,
+  team_b uuid not null,
+  gave_a uuid[] not null,
+  gave_b uuid[] not null,
+  created_at timestamptz not null default now(),
+  foreign key (league_id, team_a)
+    references public.teams (league_id, id) on delete cascade,
+  foreign key (league_id, team_b)
+    references public.teams (league_id, id) on delete cascade,
+  check (team_a <> team_b),
+  check (cardinality(gave_a) + cardinality(gave_b) > 0)
+);
+
+create index trades_league_idx on public.trades (league_id, season_year);
+create index trades_team_a_idx on public.trades (league_id, team_a);
+create index trades_team_b_idx on public.trades (league_id, team_b);
+
+alter table public.trades enable row level security;
+grant select on public.trades to authenticated;
+create policy "trades: league owner can read"
+  on public.trades for select to authenticated
+  using (app_private.owns_league(league_id));
+
+-- Applies a trade the server has already judged: team A gives `gave_a`, team B
+-- gives `gave_b`. The database holds what nothing can pass: both rosters (at
+-- most 15, and at least 12 in the season), the hard ceiling, the window and the
+-- deadline, and that each player is on the team that gives him.
+create function public.admin_apply_trade(
+  target_season uuid,
+  trade_team_a uuid,
+  trade_team_b uuid,
+  from_a uuid[],
+  from_b uuid[]
+)
+returns public.trades
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  made public.trades;
+  moved uuid;
+  size_a integer;
+  size_b integer;
+  in_season boolean;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  in_season := current_season.phase = 'regular-season';
+  if not (
+    (current_season.phase = 'offseason'
+     and current_season.stage in ('free-agency', 'training-camp', 'preseason'))
+    or (in_season and current_season.day <= current_season.last_day * 2 / 3)
+  ) then
+    raise exception 'trades_closed' using errcode = 'P0001';
+  end if;
+  if trade_team_a = trade_team_b
+     or cardinality(from_a) + cardinality(from_b) = 0
+     or exists (select 1 from unnest(from_a) x where x = any (from_b)) then
+    raise exception 'invalid_trade' using errcode = '22023';
+  end if;
+  if (select count(*) from public.teams
+      where league_id = current_season.league_id
+        and id in (trade_team_a, trade_team_b)) <> 2 then
+    raise exception 'team_not_found' using errcode = 'P0002';
+  end if;
+  if (select count(*) from public.players
+      where league_id = current_season.league_id and status = 'active'
+        and team_id = trade_team_a and id = any (from_a)) <> cardinality(from_a)
+     or (select count(*) from public.players
+         where league_id = current_season.league_id and status = 'active'
+           and team_id = trade_team_b and id = any (from_b)) <> cardinality(from_b) then
+    raise exception 'player_not_on_team' using errcode = 'P0001';
+  end if;
+
+  foreach moved in array from_a loop
+    update public.players set team_id = trade_team_b where id = moved;
+    update public.players set jersey = app_private.free_jersey(trade_team_b) where id = moved;
+  end loop;
+  foreach moved in array from_b loop
+    update public.players set team_id = trade_team_a where id = moved;
+    update public.players set jersey = app_private.free_jersey(trade_team_a) where id = moved;
+  end loop;
+
+  select count(*) into size_a from public.players
+  where team_id = trade_team_a and status = 'active';
+  select count(*) into size_b from public.players
+  where team_id = trade_team_b and status = 'active';
+  if size_a > 15 or size_b > 15 or (in_season and (size_a < 12 or size_b < 12)) then
+    raise exception 'invalid_rosters' using errcode = '22023';
+  end if;
+  if app_private.team_payroll(trade_team_a) > app_private.salary_ceiling(current_season.league_id)
+     or app_private.team_payroll(trade_team_b) > app_private.salary_ceiling(current_season.league_id) then
+    raise exception 'over_ceiling' using errcode = '22023';
+  end if;
+
+  update public.player_ratings_history h set team_id = p.team_id
+  from public.players p
+  where h.league_id = current_season.league_id and h.season_year = current_season.year
+    and h.player_id = p.id and p.id = any (from_a || from_b);
+  delete from public.camp_assignments
+  where season_id = target_season and player_id = any (from_a || from_b);
+
+  insert into public.trades (league_id, season_year, day, team_a, team_b, gave_a, gave_b)
+  values (current_season.league_id, current_season.year,
+          case when in_season then current_season.day else 0 end,
+          trade_team_a, trade_team_b, from_a, from_b)
+  returning * into made;
+  insert into public.player_transactions (
+    league_id, season_year, day, kind, player_id, team_id, salary, years
+  )
+  select current_season.league_id, current_season.year, made.day, 'traded',
+         p.id, p.team_id, p.salary, null
+  from public.players p where p.id = any (from_a || from_b);
+  return made;
+end;
+$$;
+
+comment on function public.admin_apply_trade is
+  'Applies a trade between two teams, atomically. Service role only.';
+revoke execute on function public.admin_apply_trade(uuid, uuid, uuid, uuid[], uuid[])
+  from public, anon, authenticated;
+grant execute on function public.admin_apply_trade(uuid, uuid, uuid, uuid[], uuid[])
+  to service_role;

@@ -36,3 +36,4 @@ export * from "./season/calendar";
 export * from "./season/camp";
 export * from "./season/finance";
 export * from "./season/preferences";
+export * from "./season/trade";

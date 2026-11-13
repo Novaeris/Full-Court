@@ -458,8 +458,9 @@ export type CapFigures = z.infer<typeof CapFiguresSchema>;
 /**
  * GET /api/v1/leagues/:leagueId/roster?team=: one of your rosters with
  * contracts, the cap figures and the best free agents. `open` is true from
- * free agency to the end of the preseason, when players can be released and
- * signed (after free agency's days, at 75% of the asking price).
+ * free agency to the end of the preseason and through the regular season,
+ * when players can be released and signed (after free agency's days, at 75% of
+ * the asking price).
  */
 export const RosterResponseSchema = z.object({
   teamId: z.uuid().nullable(),
@@ -599,3 +600,107 @@ export const SimFreeAgencyRequestSchema = z.object({
   days: z.union([z.literal(1), z.literal(7), z.literal("end")]).default(1),
 });
 export type SimFreeAgencyRequest = z.infer<typeof SimFreeAgencyRequestSchema>;
+
+/** A player in a trade: with his contract and what he is worth in a trade. */
+export const TradePlayerSchema = OffseasonPlayerSchema.extend({
+  salary: z.number().int(),
+  /** Seasons left on his contract, counting the current one. */
+  yearsLeft: z.number().int(),
+  /** His trade value, rounded (only the comparison matters). */
+  value: z.number().int(),
+});
+export type TradePlayer = z.infer<typeof TradePlayerSchema>;
+
+/** A trade that was made. */
+export const TradeRecordSchema = z.object({
+  id: z.uuid(),
+  seasonYear: z.number().int(),
+  /** The season's day, or 0 in the offseason. */
+  day: z.number().int(),
+  teamA: z.uuid(),
+  teamB: z.uuid(),
+  gaveA: z.array(OffseasonPlayerSchema),
+  gaveB: z.array(OffseasonPlayerSchema),
+});
+export type TradeRecord = z.infer<typeof TradeRecordSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/trades?team=: whether trades are open, your
+ * roster with contracts, the computer teams you can trade with and recent trades.
+ */
+export const TradesResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  open: z.boolean(),
+  /** Why trades are closed, when they are. */
+  closedReason: z.string().nullable(),
+  /** The last game day trades are open, in the regular season. */
+  deadlineDay: z.number().int().nullable(),
+  day: z.number().int(),
+  cap: z.number().int(),
+  payroll: z.number().int(),
+  roster: z.array(TradePlayerSchema),
+  partners: z.array(
+    z.object({
+      teamId: z.uuid(),
+      payroll: z.number().int(),
+      size: z.number().int(),
+    }),
+  ),
+  history: z.array(TradeRecordSchema),
+});
+export type TradesResponse = z.infer<typeof TradesResponseSchema>;
+
+/** GET /api/v1/leagues/:leagueId/trades/partner?partner=: a computer team's roster with contracts. */
+export const TradePartnerResponseSchema = z.object({
+  teamId: z.uuid(),
+  payroll: z.number().int(),
+  roster: z.array(TradePlayerSchema),
+});
+export type TradePartnerResponse = z.infer<typeof TradePartnerResponseSchema>;
+
+/** POST /trades/evaluate and POST /trades: your players (`give`) for theirs (`get`). */
+export const TradeProposalSchema = z.object({
+  teamId: z.uuid().optional(),
+  partnerId: z.uuid(),
+  give: z.array(z.uuid()).max(5),
+  get: z.array(z.uuid()).max(5),
+});
+export type TradeProposal = z.infer<typeof TradeProposalSchema>;
+
+export const TradeEvaluationSchema = z.object({
+  /** The trade is legal: rosters, the hard ceiling and salary matching. */
+  legal: z.boolean(),
+  problems: z.array(z.string()),
+  /** The computer team would say yes. */
+  accepts: z.boolean(),
+  reasons: z.array(z.string()),
+  /** How the deal looks to them, in words. */
+  deal: z.string(),
+  payrollAfter: z.object({ yours: z.number().int(), theirs: z.number().int() }),
+});
+export type TradeEvaluation = z.infer<typeof TradeEvaluationSchema>;
+
+export const TradeResultSchema = z.object({
+  evaluation: TradeEvaluationSchema,
+  /** The trade was made. */
+  done: z.boolean(),
+});
+export type TradeResult = z.infer<typeof TradeResultSchema>;
+
+/** POST /api/v1/leagues/:leagueId/trades/shop: what the computer teams would give for your players. */
+export const ShopRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerIds: z.array(z.uuid()).min(1).max(3),
+});
+export type ShopRequest = z.infer<typeof ShopRequestSchema>;
+
+export const ShopResponseSchema = z.object({
+  offers: z.array(
+    z.object({
+      teamId: z.uuid(),
+      get: z.array(TradePlayerSchema),
+      deal: z.string(),
+    }),
+  ),
+});
+export type ShopResponse = z.infer<typeof ShopResponseSchema>;

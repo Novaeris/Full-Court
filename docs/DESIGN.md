@@ -123,6 +123,18 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **After day 21.** Anyone left unsigned can still be signed by a team that fits him in at 75% of his asking price, for one year (the computer teams do this to fill rosters; so can the owner).
 - **What is kept.** Every signing, draft pick, release and contract that ends is recorded for the league's history.
 
+### Trades and roster moves in the season
+
+_Numbers are tunable._ This is the first slice of trading: the owner proposes, the computer teams answer. Computer-initiated offers and trades between computer teams come later.
+
+- **Roster moves in the season.** Until the playoffs the owner can **sign a free agent** and **release a player**. A free agent signs for the rest of the season (a one-year contract) at 75% of his asking price, under the cap rules (cap room, or the minimum contract); a release removes his salary from the payroll. A roster is always 12 to 15 players, so a release that would leave fewer than 12 is refused. The same moves are open from free agency to the preseason.
+- **When trades are open.** From free agency to the preseason, and in the regular season up to the **trade deadline**, two thirds of the way through it. Not during the draft, the playoffs or after the season.
+- **What can be traded.** Players under contract, one or more on each side. (Draft picks aren't tradeable yet: picks are created when the lottery is held.) A trade must leave both teams with 12 to 15 players in the season (at most 15 in the offseason) and neither above the **hard ceiling**, and it must pass the **salary-matching rule**: a team that ends over the cap may take back at most 125% of the salary it sends out, plus the minimum salary; a team that ends under the cap needs no matching.
+- **What a player is worth in a trade.** His value (rating and potential, leaning on potential for the young, less for the old) raised steeply for stars, adjusted for his contract: a player paid less than he asks, with years left, is worth more; an overpaid player is worth less. A computer team also values a position it is short of.
+- **How a computer team answers.** It accepts if what it receives is worth at least 8% more than what it gives, and if the trade is legal for it. It protects its best two players: it needs 40% more value to give one up. It says why when it says no (not enough value, its roster would be too small or too large, a cap rule).
+- **Shopping a player.** The owner can ask what the computer teams would give for one of their players: each team looks for a package from its roster that it would accept and that fits the cap, and the best few are shown. The owner can take one or use it as a starting point.
+- **What is kept.** Every trade is recorded (the teams, the players each side gave and the day), and each traded player gets a transaction.
+
 ### AI Assist
 
 AI Assist is for owners who want a less hands-on game, or who simulate through a stretch and don't want to do a job they find tedious. Each franchise the user runs has five switches. **On means the AI does that job for the franchise when the owner simulates or moves on, with the same rules as a computer team; off means the owner has to do it and the game waits. Either way the owner can always do the job themselves first: AI Assist only takes over what the owner leaves undone.** The switches can be changed at any time, from the Offseason page or from the league's settings.
@@ -165,7 +177,7 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **1. AI Assist is stored but not used, so the owner has no say.** Every team has five AI Assist switches (trades, roster coverage, roster management, scouting, drafting), and the setup screen saves them, but nothing reads them. The offseason runs your team's draft and roster moves with the computer teams' rules whatever the switches say. The intended meaning is the opposite: with a switch off the owner decides, with it on the AI decides for that job. This is the first thing to fix because every other owner action hangs on it.
 
-**2. Draft and roster moves.** The draft class doesn't exist until the draft is held, so there is nothing to scout, rank or choose from. The owner can't pick, can't trade picks, can't release or sign a player (the free agents are listed nowhere), can't set the roster before free agency ends, and has no say in who retires or is cut when a team is over 15. During the season there are no roster moves at all.
+**2. Draft and roster moves (done in Phases 18 and 20).** The draft class doesn't exist until the draft is held, so there is nothing to scout, rank or choose from. The owner can't pick, can't trade picks, can't release or sign a player (the free agents are listed nowhere), can't set the roster before free agency ends, and has no say in who retires or is cut when a team is over 15. During the season there are no roster moves at all.
 
 **3. Player signings, and with them money (built in Phase 19).** Players have no contract, no salary and no length, so there is nothing to offer, extend, let expire or cap. Free agency is only the computer filling rosters. Signings need a money model first: a salary for every player, contract years, a salary cap (soft or hard, and the rules for exceptions), the draft's rookie scale, and how a free agent chooses between offers. Without it "sign a player" would be a button with no consequence.
 

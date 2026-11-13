@@ -130,10 +130,11 @@ export async function getRoster(
   return {
     teamId,
     open:
-      season?.phase === "offseason" &&
-      ["free-agency", "training-camp", "preseason"].includes(
-        season.stage ?? "",
-      ),
+      season?.phase === "regular-season" ||
+      (season?.phase === "offseason" &&
+        ["free-agency", "training-camp", "preseason"].includes(
+          season.stage ?? "",
+        )),
     min: ROSTER_LIMITS.min,
     max: ROSTER_LIMITS.max,
     figures:
@@ -151,7 +152,11 @@ function refusal(error: unknown): never {
   const known: Record<string, [number, string]> = {
     wrong_stage: [
       409,
-      "Players can be signed and released from free agency to the end of the preseason.",
+      "Players can be signed and released from free agency until the playoffs.",
+    ],
+    roster_too_small: [
+      409,
+      "A roster can't go below 12 players in the season.",
     ],
     roster_full: [409, "A roster holds at most 15 players."],
     player_not_available: [409, "That player isn't a free agent."],
@@ -165,11 +170,14 @@ function refusal(error: unknown): never {
 
 async function seasonForMoves(ctx: UserContext, leagueId: string) {
   const season = await latestSeason(ctx, leagueId);
-  if (!season || season.phase !== "offseason") {
+  if (
+    !season ||
+    (season.phase !== "offseason" && season.phase !== "regular-season")
+  ) {
     throw new ApiError(
       409,
       "wrong_stage",
-      "Players can be signed and released from free agency to the end of the preseason.",
+      "Players can be signed and released from free agency until the playoffs.",
     );
   }
   return season;

@@ -296,3 +296,21 @@ export async function applyFaDay(input: {
   if (error) throw error;
   return data;
 }
+
+/** Applies a trade the server has judged: team A gives `fromA`, team B gives `fromB`. */
+export async function applyTrade(input: {
+  seasonId: string;
+  teamA: string;
+  teamB: string;
+  fromA: readonly string[];
+  fromB: readonly string[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_apply_trade", {
+    target_season: input.seasonId,
+    trade_team_a: input.teamA,
+    trade_team_b: input.teamB,
+    from_a: [...input.fromA],
+    from_b: [...input.fromB],
+  });
+  if (error) throw error;
+}
