@@ -161,7 +161,10 @@ test("shows all three modes, fits the screen and passes axe", async ({
 
   await noOverflow(page);
   await expectAccessible(page);
-  await page.emulateMedia({ colorScheme: "dark" });
+  // Switching themes starts a 120ms colour transition, and axe measures
+  // whatever colours it finds mid-way (grey text on orange, 3.7:1). Reduced
+  // motion removes the transition, as in account.spec.ts and visual.spec.ts.
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await expectAccessible(page);
 
   await page.setViewportSize({ width: 320, height: 640 });
