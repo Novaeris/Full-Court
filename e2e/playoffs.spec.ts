@@ -86,8 +86,14 @@ test.describe("playoffs", () => {
     for (const g of playoffGames) expect(g.gameNumber).not.toBeNull();
 
     // A finished game can still be watched; it says which playoff game it was.
-    const some = bracket.series[0]?.games[0] as { id: string };
-    await page.goto(`/leagues/${league.id}/games/${some.id}`);
+    await page.goto(`/leagues/${league.id}/playoffs`);
+    await page
+      .getByRole("button", { name: /Show the games/ })
+      .first()
+      .click();
+    const games = page.getByRole("list", { name: "Games" }).first();
+    await expect(games).toBeVisible();
+    await games.getByRole("link").first().click();
     await expect(page.getByText(/Playoffs · Round \d · Game \d/)).toBeVisible();
 
     // Standings count the regular season only: 12 teams play 29 games each.

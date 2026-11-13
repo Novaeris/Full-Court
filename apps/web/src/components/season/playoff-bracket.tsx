@@ -1,9 +1,10 @@
+import Link from "next/link";
 import type {
   PlayoffSeries,
   PlayoffsResponse,
   Team,
 } from "@fullcourt/validation";
-import { TeamBadge } from "@/components/leagues/team-badge";
+import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 
 type Round = PlayoffsResponse["rounds"][number];
 
@@ -24,12 +25,12 @@ function MiniTeam({
   return (
     <div
       className={[
-        "flex items-center gap-2 px-3 py-2 text-base",
+        "flex items-center gap-1.5 px-1.5 py-1.5 text-sm",
         winner ? "font-bold" : "",
         eliminated ? "text-text-muted" : "",
       ].join(" ")}
     >
-      <span className="w-4 text-xs text-text-muted">{seed ?? ""}</span>
+      <span className="w-3 text-xs text-text-muted">{seed ?? ""}</span>
       {team ? (
         <>
           <TeamBadge team={team} size="sm" />
@@ -43,23 +44,25 @@ function MiniTeam({
       ) : (
         <span className="flex-1 text-text-muted">TBD</span>
       )}
-      <span className="w-4 text-right text-base tabular-nums">
-        {wins ?? ""}
-      </span>
+      <span className="w-4 text-right text-sm tabular-nums">{wins ?? ""}</span>
     </div>
   );
 }
 
 function MiniSeries({
+  leagueId,
   series,
   teams,
+  final = false,
 }: {
+  leagueId: string;
   series: PlayoffSeries | undefined;
   teams: ReadonlyMap<string, Team>;
+  final?: boolean;
 }) {
   const done = series?.winnerTeamId != null;
-  return (
-    <div className="w-52 rounded-lg border border-border bg-surface">
+  const card = (
+    <>
       {[series?.a, series?.b].map((side, i) => (
         <div key={i} className={i === 1 ? "border-t border-text-muted" : ""}>
           <MiniTeam
@@ -71,7 +74,81 @@ function MiniSeries({
           />
         </div>
       ))}
-    </div>
+    </>
+  );
+  const frame = [
+    "rounded-lg border bg-surface text-left",
+    final
+      ? "w-44 border-2 border-accent shadow-md"
+      : "w-[8.5rem] border-border",
+  ].join(" ");
+  const played = series?.games.filter((g) => g.status === "final") ?? [];
+  if (!series || played.length === 0)
+    return <div className={frame}>{card}</div>;
+
+  const id = `series-${series.id}`;
+  const a = teams.get(series.a.teamId);
+  const b = teams.get(series.b.teamId);
+  const winner = done
+    ? series.winnerTeamId === series.a.teamId
+      ? a
+      : b
+    : null;
+  const hi = Math.max(series.a.wins, series.b.wins);
+  const lo = Math.min(series.a.wins, series.b.wins);
+  return (
+    <>
+      <button
+        type="button"
+        popoverTarget={id}
+        className={`${frame} block cursor-pointer hover:bg-surface-muted`}
+      >
+        {card}
+        <span className="sr-only">Show the games in this series</span>
+      </button>
+      <div
+        id={id}
+        popover="auto"
+        className="m-auto w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-4 text-text shadow-lg backdrop:bg-black/40"
+      >
+        <h3 className="text-lg font-bold">
+          {a?.abbreviation} vs {b?.abbreviation}
+        </h3>
+        <p className="mb-3 text-sm text-text-muted">
+          {winner
+            ? `${teamName(winner)} win ${hi}–${lo}`
+            : hi === lo
+              ? `Series tied ${hi}–${lo}`
+              : `${teamName((series.a.wins > series.b.wins ? a : b) as Team)} lead ${hi}–${lo}`}
+        </p>
+        <ol aria-label="Games" className="flex flex-wrap gap-2">
+          {played.map((g) => {
+            const home = (g.homeScore ?? 0) > (g.awayScore ?? 0);
+            const w = teams.get(home ? g.homeTeamId : g.awayTeamId);
+            return (
+              <li key={g.id}>
+                <Link
+                  href={`/leagues/${leagueId}/games/${g.id}`}
+                  className="inline-flex min-h-touch items-center rounded-md border border-border px-3 text-sm font-semibold hover:bg-surface-muted"
+                >
+                  G{g.gameNumber} {w?.abbreviation}{" "}
+                  {Math.max(g.homeScore ?? 0, g.awayScore ?? 0)}–
+                  {Math.min(g.homeScore ?? 0, g.awayScore ?? 0)}
+                </Link>
+              </li>
+            );
+          })}
+        </ol>
+        <button
+          type="button"
+          popoverTarget={id}
+          popoverTargetAction="hide"
+          className="mt-4 inline-flex min-h-touch items-center rounded-md border border-border px-4 text-sm font-semibold hover:bg-surface-muted"
+        >
+          Close
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -82,11 +159,12 @@ function MiniSeries({
  * complete. Scrolls sideways on narrow screens.
  */
 export function PlayoffBracket({
+  leagueId,
   rounds,
   series,
   teams: teamList,
 }: {
-  leagueId?: string;
+  leagueId: string;
   rounds: readonly Round[];
   series: readonly PlayoffSeries[];
   teams: readonly Team[];
@@ -119,24 +197,28 @@ export function PlayoffBracket({
             <div key={g[0]} className="relative flex flex-1 flex-col py-1">
               {g.map((slot) => (
                 <div key={slot} className="flex flex-1 items-center py-1">
-                  <MiniSeries series={find(round, slot)} teams={teams} />
+                  <MiniSeries
+                    leagueId={leagueId}
+                    series={find(round, slot)}
+                    teams={teams}
+                  />
                 </div>
               ))}
               {g.length === 2 ? (
                 <>
                   <span
                     aria-hidden
-                    className={`absolute top-1/4 bottom-1/4 w-3 border-y ${line} ${outward === "right" ? "-right-3 border-r" : "-left-3 border-l"}`}
+                    className={`absolute top-1/4 bottom-1/4 w-2 border-y ${line} ${outward === "right" ? "-right-2 border-r" : "-left-2 border-l"}`}
                   />
                   <span
                     aria-hidden
-                    className={`absolute top-1/2 w-3 border-t ${line} ${outward === "right" ? "-right-6" : "-left-6"}`}
+                    className={`absolute top-1/2 w-2 border-t ${line} ${outward === "right" ? "-right-4" : "-left-4"}`}
                   />
                 </>
               ) : (
                 <span
                   aria-hidden
-                  className={`absolute top-1/2 w-6 border-t ${line} ${outward === "right" ? "-right-6" : "-left-6"}`}
+                  className={`absolute top-1/2 w-4 border-t ${line} ${outward === "right" ? "-right-4" : "-left-4"}`}
                 />
               )}
             </div>
@@ -154,14 +236,19 @@ export function PlayoffBracket({
       tabIndex={0}
       className="overflow-x-auto pb-2"
     >
-      <div className="mx-auto flex min-w-max justify-center gap-6">
+      <div className="mx-auto flex min-w-max justify-center gap-4">
         {early.map((r) => (
           <Column key={`l${r}`} round={r} side="left" />
         ))}
         <div className="flex flex-col">
           <p className="mb-2 text-center text-sm font-bold">{label(total)}</p>
           <div className="flex flex-1 items-center">
-            <MiniSeries series={find(total, 0)} teams={teams} />
+            <MiniSeries
+              leagueId={leagueId}
+              series={find(total, 0)}
+              teams={teams}
+              final
+            />
           </div>
         </div>
         {[...early].reverse().map((r) => (
