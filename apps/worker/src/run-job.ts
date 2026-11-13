@@ -61,7 +61,12 @@ export async function runJob(
     ) {
       try {
         const made = await runTradeRound(
-          { loadTradeTeams: db.loadTradeTeams, applyTrade: db.applyTrade },
+          {
+            loadTradeTeams: db.loadTradeTeams,
+            applyTrade: db.applyTrade,
+            loadOfferTeams: db.loadOfferTeams,
+            replaceOffers: db.replaceOffers,
+          },
           season,
         );
         if (made > 0)

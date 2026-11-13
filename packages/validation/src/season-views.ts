@@ -624,6 +624,27 @@ export const TradeRecordSchema = z.object({
 });
 export type TradeRecord = z.infer<typeof TradeRecordSchema>;
 
+/** An offer from a computer team: you give `give` and get `get`. */
+export const TradeOfferSchema = z.object({
+  id: z.uuid(),
+  /** The season's day it was made, or 0 in the offseason. */
+  day: z.number().int(),
+  teamId: z.uuid(),
+  partnerId: z.uuid(),
+  give: z.array(TradePlayerSchema),
+  get: z.array(TradePlayerSchema),
+  /** Whether it is still legal to accept, and if not why. */
+  problems: z.array(z.string()),
+});
+export type TradeOffer = z.infer<typeof TradeOfferSchema>;
+
+/** POST /api/v1/leagues/:leagueId/trades/offers: accept or decline an offer. */
+export const OfferAnswerSchema = z.object({
+  offerId: z.uuid(),
+  action: z.enum(["accept", "decline"]),
+});
+export type OfferAnswer = z.infer<typeof OfferAnswerSchema>;
+
 /**
  * GET /api/v1/leagues/:leagueId/trades?team=: whether trades are open, your
  * roster with contracts, the computer teams you can trade with and recent trades.
@@ -647,6 +668,8 @@ export const TradesResponseSchema = z.object({
     }),
   ),
   history: z.array(TradeRecordSchema),
+  /** Open offers from computer teams to this team. */
+  offers: z.array(TradeOfferSchema),
 });
 export type TradesResponse = z.infer<typeof TradesResponseSchema>;
 

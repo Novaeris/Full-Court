@@ -130,6 +130,8 @@ export {
 export { shopPlayers, type ShopOffer, type ShopTeam } from "./offseason/trades";
 export {
   proposeAiTrades,
+  proposeOwnerOffers,
+  type OwnerOffer,
   AI_TRADE_EDGE,
   type AiTrade,
   type AiTradeTeam,

@@ -6,6 +6,7 @@ import {
 } from "@fullcourt/game-rules";
 import type { Rng } from "../rng/rng";
 import { shuffle } from "../rng/helpers";
+import { shopPlayers, type ShopTeam } from "./trades";
 
 /**
  * Trades between teams the computer runs (docs/DESIGN.md, "Computer teams
@@ -134,4 +135,55 @@ export function proposeAiTrades(
     }
   }
   return trades;
+}
+
+/** An offer a computer team makes to the owner. */
+export type OwnerOffer = {
+  partnerId: string;
+  /** What the owner would give and what he would get. */
+  give: string[];
+  get: string[];
+};
+
+/**
+ * Offers from computer teams to the owner: up to `most`, from different teams.
+ * A computer team picks one of the owner's better players it would like (the
+ * rest are not interesting enough to ask about), and offers the best package
+ * `shopPlayers` finds for him. So every offer is one the team would make, is
+ * legal for both sides, and is worth about what he is.
+ */
+export function proposeOwnerOffers(
+  rng: Rng,
+  input: {
+    owner: { payroll: number; roster: readonly TradeAsset[] };
+    teams: readonly ShopTeam[];
+    cap: number;
+    inSeason: boolean;
+    most: number;
+  },
+): OwnerOffer[] {
+  const value = (a: TradeAsset) => tradeValue(a, input.cap);
+  const wanted = [...input.owner.roster]
+    .sort((a, b) => value(b) - value(a))
+    .slice(0, 8);
+  const offers: OwnerOffer[] = [];
+  const used = new Set<string>();
+  for (const target of shuffle(rng, wanted)) {
+    if (offers.length >= input.most) break;
+    const best = shopPlayers({
+      assets: [target],
+      teams: input.teams.filter((t) => !used.has(t.id)),
+      owner: input.owner,
+      cap: input.cap,
+      inSeason: input.inSeason,
+    })[0];
+    if (!best) continue;
+    used.add(best.teamId);
+    offers.push({
+      partnerId: best.teamId,
+      give: [target.id],
+      get: best.get.map((a) => a.id),
+    });
+  }
+  return offers;
 }

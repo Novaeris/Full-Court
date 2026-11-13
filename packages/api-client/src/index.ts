@@ -37,6 +37,7 @@ import {
   type DraftSimRequest,
   type ShopRequest,
   type ShopResponse,
+  type OfferAnswer,
   type TradeEvaluation,
   type TradePartnerResponse,
   type TradeProposal,
@@ -336,6 +337,14 @@ export function createApiClient(options: ApiClientOptions) {
           "POST",
           `/leagues/${encodeURIComponent(id)}/trades`,
           (b) => TradeResultSchema.parse(b),
+          input,
+        ),
+      /** Accepts or declines an offer from a computer team. */
+      answerOffer: (id: string, input: OfferAnswer): Promise<TradesResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades/offers`,
+          (b) => TradesResponseSchema.parse(b),
           input,
         ),
       /** What the computer teams would give for your players. */

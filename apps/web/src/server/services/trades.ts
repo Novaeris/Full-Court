@@ -2,6 +2,7 @@ import "server-only";
 import {
   createRng,
   proposeAiTrades,
+  proposeOwnerOffers,
   seedState,
   shopPlayers,
 } from "@fullcourt/game-engine";
@@ -16,18 +17,25 @@ import {
 } from "@fullcourt/game-rules";
 import type { Position } from "@fullcourt/game-types";
 import type {
+  OfferAnswer,
   OffseasonPlayer,
   ShopRequest,
   ShopResponse,
   TradeEvaluation,
   TradePartnerResponse,
+  TradeOffer,
   TradePlayer,
   TradeProposal,
   TradeRecord,
   TradeResult,
   TradesResponse,
 } from "@fullcourt/validation";
-import { applyTrade } from "@/server/admin/offseason";
+import {
+  acceptTradeOffer,
+  applyTrade,
+  declineTradeOffer,
+  replaceTradeOffers,
+} from "@/server/admin/offseason";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { getLeague, parseLeagueId } from "./leagues";
@@ -229,6 +237,8 @@ export async function getTrades(
     gaveB: named(t.gave_b),
   }));
 
+  const offers = await openOffers(ctx, league.id, season, teamId, rows, w);
+
   return {
     teamId,
     open: w.open && teamId !== null,
@@ -252,6 +262,7 @@ export async function getTrades(
         size: rows.filter((r) => r.team_id === t.id).length,
       })),
     history,
+    offers,
   };
 }
 
@@ -544,5 +555,196 @@ export async function runComputerTrades(
       // The database holds the limits; a refused trade just doesn't happen.
     }
   }
+  await refreshTradeOffers(ctx, leagueId, season, round);
   return made;
+}
+
+/** Open offers to a team, each checked again against the rosters as they are now. */
+async function openOffers(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow | null,
+  teamId: string | null,
+  rows: readonly Row[],
+  w: ReturnType<typeof window>,
+): Promise<TradeOffer[]> {
+  if (!season || !teamId) return [];
+  const found = await ctx.supabase
+    .from("trade_offers")
+    .select("id, day, team_id, partner_id, give, get")
+    .eq("league_id", leagueId)
+    .eq("season_id", season.id)
+    .eq("team_id", teamId)
+    .eq("status", "open")
+    .order("created_at");
+  if (found.error) throw found.error;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const sum = (list: readonly Row[]) =>
+    list.reduce((s, r) => s + (r.salary ?? 0), 0);
+  const cap = season.salary_cap;
+  return found.data.map((o) => {
+    const give = o.give.flatMap((id) => byId.get(id) ?? []);
+    const get = o.get.flatMap((id) => byId.get(id) ?? []);
+    const mine = rows.filter((r) => r.team_id === o.team_id);
+    const theirs = rows.filter((r) => r.team_id === o.partner_id);
+    const problems: string[] = [];
+    if (!w.open) problems.push(w.reason ?? "Trades are closed.");
+    if (
+      give.length !== o.give.length ||
+      get.length !== o.get.length ||
+      give.some((r) => r.team_id !== o.team_id) ||
+      get.some((r) => r.team_id !== o.partner_id)
+    ) {
+      problems.push("A player in this offer has moved.");
+    } else {
+      problems.push(
+        ...tradeProblems({
+          a: {
+            payroll: sum(mine),
+            size: mine.length,
+            out: give.map((r) => assetOf(r, season)),
+            in: get.map((r) => assetOf(r, season)),
+          },
+          b: {
+            payroll: sum(theirs),
+            size: theirs.length,
+            out: get.map((r) => assetOf(r, season)),
+            in: give.map((r) => assetOf(r, season)),
+          },
+          cap,
+          ceiling: hardCeiling(cap),
+          inSeason: w.inSeason,
+        }),
+      );
+    }
+    return {
+      id: o.id,
+      day: o.day,
+      teamId: o.team_id,
+      partnerId: o.partner_id,
+      give: give.map((r) => tradePlayer(r, season)),
+      get: get.map((r) => tradePlayer(r, season)),
+      problems,
+    };
+  });
+}
+
+/** Accepts or declines an offer from a computer team. */
+export async function answerTradeOffer(
+  ctx: UserContext,
+  leagueIdParam: string,
+  input: OfferAnswer,
+): Promise<TradesResponse> {
+  const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
+  const found = await ctx.supabase
+    .from("trade_offers")
+    .select("id, team_id, status")
+    .eq("league_id", league.id)
+    .eq("id", input.offerId)
+    .maybeSingle();
+  if (found.error) throw found.error;
+  if (!found.data) {
+    throw new ApiError(404, "offer_not_found", "That offer isn't there.");
+  }
+  if (found.data.status !== "open") {
+    throw new ApiError(409, "offer_not_open", "That offer is no longer open.");
+  }
+  const teamId = found.data.team_id;
+  if (input.action === "decline") {
+    await declineTradeOffer(input.offerId);
+    return getTrades(ctx, leagueIdParam, teamId);
+  }
+  const before = await getTrades(ctx, leagueIdParam, teamId);
+  const offer = before.offers.find((o) => o.id === input.offerId);
+  if (!offer || offer.problems.length > 0) {
+    throw new ApiError(
+      409,
+      "offer_unavailable",
+      offer?.problems[0] ?? "That offer can't be accepted now.",
+    );
+  }
+  try {
+    await acceptTradeOffer(input.offerId);
+  } catch (error) {
+    const message = (error as { message?: string }).message;
+    if (
+      message === "trades_closed" ||
+      message === "invalid_rosters" ||
+      message === "over_ceiling" ||
+      message === "player_not_on_team" ||
+      message === "offer_not_open"
+    ) {
+      throw new ApiError(
+        409,
+        message,
+        "That offer can't be accepted as things stand.",
+      );
+    }
+    throw error;
+  }
+  return getTrades(ctx, leagueIdParam, teamId);
+}
+
+/** The most offers one owner team has open at once. */
+const OFFERS_PER_TEAM = 2;
+
+/**
+ * Replaces the open offers with new ones from the computer teams, for every
+ * owner team that has not handed trades to AI Assist. Seeded like a round.
+ */
+export async function refreshTradeOffers(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+  round: number,
+): Promise<void> {
+  const w = window(season);
+  const owned = await ownedTeams(ctx, leagueId);
+  const targets = owned.filter((t) => !t.assist.trades);
+  if (targets.length === 0) return;
+  if (!w.open) {
+    await replaceTradeOffers({ seasonId: season.id, offers: [] });
+    return;
+  }
+  const ownedIds = new Set(owned.map((t) => t.id));
+  const rows = await rosterRows(ctx, leagueId);
+  const teamIds = [
+    ...new Set(
+      rows.flatMap((r) =>
+        r.team_id && !ownedIds.has(r.team_id) ? [r.team_id] : [],
+      ),
+    ),
+  ].sort();
+  const computer = teamIds.map((id) => ({
+    id,
+    payroll: payrollOf(rows, id),
+    roster: rows.filter((r) => r.team_id === id).map((r) => assetOf(r, season)),
+  }));
+  const offers = targets.flatMap((t) =>
+    proposeOwnerOffers(
+      createRng(
+        seedState(
+          `${leagueId}:offers:${t.id}:${season.year}:${season.stage ?? season.phase}:${round}`,
+        ),
+      ),
+      {
+        owner: {
+          payroll: payrollOf(rows, t.id),
+          roster: rows
+            .filter((r) => r.team_id === t.id)
+            .map((r) => assetOf(r, season)),
+        },
+        teams: computer,
+        cap: season.salary_cap,
+        inSeason: w.inSeason,
+        most: OFFERS_PER_TEAM,
+      },
+    ).map((o) => ({
+      team_id: t.id,
+      partner_id: o.partnerId,
+      give: o.give,
+      get: o.get,
+    })),
+  );
+  await replaceTradeOffers({ seasonId: season.id, offers });
 }

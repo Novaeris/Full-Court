@@ -161,6 +161,14 @@ export function TradePanel({
     if (result) setShop(result);
   }
 
+  async function answerOffer(offerId: string, action: "accept" | "decline") {
+    const result = await call<TradesResponse>("/offers", "POST", {
+      offerId,
+      action,
+    });
+    if (result) router.refresh();
+  }
+
   function takeOffer(offer: ShopResponse["offers"][number]) {
     void choosePartner(offer.teamId).then(() => {
       setGet(offer.get.map((p) => p.id));
@@ -304,6 +312,54 @@ export function TradePanel({
               {reason.charAt(0).toUpperCase() + reason.slice(1)}.
             </p>
           ))}
+        </div>
+      ) : null}
+
+      {data.offers.length > 0 ? (
+        <div className="mt-5">
+          <h3 className="font-bold">Offers to you</h3>
+          <ul>
+            {data.offers.map((o) => (
+              <li
+                key={o.id}
+                className="border-t border-border py-2 first:border-t-0"
+              >
+                <p>
+                  <span className="font-semibold">
+                    {teamLabel(teams, o.partnerId)}
+                  </span>{" "}
+                  offers{" "}
+                  {o.get
+                    .map((p) => `${p.name} (${p.overall}, ${money(p.salary)})`)
+                    .join(" and ")}{" "}
+                  for{" "}
+                  {o.give
+                    .map((p) => `${p.name} (${p.overall}, ${money(p.salary)})`)
+                    .join(" and ")}
+                </p>
+                {o.problems.length > 0 ? (
+                  <p className="text-sm text-text-muted">
+                    Can&apos;t be accepted now: {o.problems.join("; ")}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <Button
+                    disabled={busy || o.problems.length > 0}
+                    onClick={() => void answerOffer(o.id, "accept")}
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void answerOffer(o.id, "decline")}
+                  >
+                    Decline
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

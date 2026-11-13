@@ -1593,6 +1593,77 @@ export type Database = {
           },
         ]
       }
+      trade_offers: {
+        Row: {
+          created_at: string
+          day: number
+          get: string[]
+          give: string[]
+          id: string
+          league_id: string
+          partner_id: string
+          resolved_at: string | null
+          season_id: string
+          status: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          day?: number
+          get: string[]
+          give: string[]
+          id?: string
+          league_id: string
+          partner_id: string
+          resolved_at?: string | null
+          season_id: string
+          status?: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          get?: string[]
+          give?: string[]
+          id?: string
+          league_id?: string
+          partner_id?: string
+          resolved_at?: string | null
+          season_id?: string
+          status?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_offers_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offers_league_id_partner_id_fkey"
+            columns: ["league_id", "partner_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "trade_offers_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "trade_offers_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trades: {
         Row: {
           created_at: string
@@ -1660,6 +1731,26 @@ export type Database = {
       acknowledge_alpha_notice: {
         Args: { acknowledged_version: number }
         Returns: undefined
+      }
+      admin_accept_trade_offer: {
+        Args: { target_offer: string }
+        Returns: {
+          created_at: string
+          day: number
+          gave_a: string[]
+          gave_b: string[]
+          id: string
+          league_id: string
+          season_year: number
+          team_a: string
+          team_b: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trades"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_add_staff: {
         Args: { members: Json; target_league: string }
@@ -2016,6 +2107,10 @@ export type Database = {
         Args: { members: Json; target_league: string }
         Returns: number
       }
+      admin_decline_trade_offer: {
+        Args: { target_offer: string }
+        Returns: undefined
+      }
       admin_ensure_contracts: {
         Args: { contracts: Json; target_league: string }
         Returns: number
@@ -2156,6 +2251,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_replace_trade_offers: {
+        Args: { new_offers: Json; target_season: string }
+        Returns: number
       }
       admin_requeue_stale_sim_jobs: {
         Args: { max_age: string }

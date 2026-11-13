@@ -1,6 +1,7 @@
 import {
   createRng,
   proposeAiTrades,
+  proposeOwnerOffers,
   seedState,
   type AiTrade,
 } from "@fullcourt/game-engine";
@@ -26,11 +27,31 @@ export type TradeTeam = {
   roster: TradeAsset[];
 };
 
+/** An offer to store: a computer team to an owner team. */
+export type StoredOffer = {
+  team_id: string;
+  partner_id: string;
+  give: string[];
+  get: string[];
+};
+
+/** The most offers one owner team has open at once. */
+export const OFFERS_PER_TEAM = 2;
+
 /** What a round needs from the database. */
 export interface TradeStore {
   /** Teams the computer runs: not owned, or owned with AI Assist trades on. */
   loadTradeTeams(seasonId: string): Promise<TradeTeam[]>;
   applyTrade(seasonId: string, trade: AiTrade): Promise<void>;
+  /** Owner teams that haven't handed trades to AI Assist, and the computer teams. */
+  loadOfferTeams?:
+    | ((
+        seasonId: string,
+      ) => Promise<{ owners: TradeTeam[]; computer: TradeTeam[] }>)
+    | undefined;
+  /** Expires the open offers and stores these. */
+  replaceOffers?:
+    ((seasonId: string, offers: StoredOffer[]) => Promise<void>) | undefined;
 }
 
 /**
@@ -69,6 +90,35 @@ export async function runTradeRound(
       made++;
     } catch {
       // The database holds the limits; a refused trade just doesn't happen.
+    }
+  }
+  if (store.loadOfferTeams && store.replaceOffers) {
+    try {
+      const { owners, computer } = await store.loadOfferTeams(season.id);
+      const offers = owners.flatMap((owner) =>
+        proposeOwnerOffers(
+          createRng(
+            seedState(
+              `${season.league_id}:offers:${owner.id}:${season.year}:regular-season:${season.day}`,
+            ),
+          ),
+          {
+            owner,
+            teams: computer,
+            cap: season.salary_cap,
+            inSeason: true,
+            most: OFFERS_PER_TEAM,
+          },
+        ).map((o) => ({
+          team_id: owner.id,
+          partner_id: o.partnerId,
+          give: o.give,
+          get: o.get,
+        })),
+      );
+      if (owners.length > 0) await store.replaceOffers(season.id, offers);
+    } catch {
+      // Offers are a courtesy; a failure here never stops the job.
     }
   }
   return made;

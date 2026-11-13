@@ -314,3 +314,39 @@ export async function applyTrade(input: {
   });
   if (error) throw error;
 }
+
+/** Replaces a season's open trade offers with a new set (the old ones expire). */
+export async function replaceTradeOffers(input: {
+  seasonId: string;
+  offers: readonly {
+    team_id: string;
+    partner_id: string;
+    give: readonly string[];
+    get: readonly string[];
+  }[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc(
+    "admin_replace_trade_offers",
+    {
+      target_season: input.seasonId,
+      new_offers: input.offers as never,
+    },
+  );
+  if (error) throw error;
+}
+
+/** Accepts an open offer: the trade is made and the offer marked accepted. */
+export async function acceptTradeOffer(offerId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_accept_trade_offer", {
+    target_offer: offerId,
+  });
+  if (error) throw error;
+}
+
+/** Declines an open offer. */
+export async function declineTradeOffer(offerId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_decline_trade_offer", {
+    target_offer: offerId,
+  });
+  if (error) throw error;
+}

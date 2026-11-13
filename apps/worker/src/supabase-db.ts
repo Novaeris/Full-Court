@@ -3,7 +3,7 @@ import type { AiTrade } from "@fullcourt/game-engine";
 import { createClient } from "@supabase/supabase-js";
 import type { WorkerConfig } from "./config";
 import { describeError } from "./errors";
-import type { TradeTeam } from "./trade-round";
+import type { StoredOffer, TradeTeam } from "./trade-round";
 import {
   CommitRefused,
   CommitRejected,
@@ -26,6 +26,74 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
       detectSessionInUrl: false,
     },
   });
+
+  /**
+   * Every active player with a team, grouped: computer teams, owner teams
+   * that haven't given trades to AI Assist, and `acting` (the computer teams
+   * plus owner teams that have).
+   */
+  async function loadRosters(seasonId: string) {
+    const season = await client
+      .from("seasons")
+      .select("league_id, year")
+      .eq("id", seasonId)
+      .single();
+    if (season.error) throw season.error;
+    const leagueId = season.data.league_id;
+    const [teams, players] = await Promise.all([
+      client
+        .from("teams")
+        .select("id, local_player_slot, ai_trades")
+        .eq("league_id", leagueId),
+      client
+        .from("players")
+        .select(
+          "id, team_id, position, age, overall, potential, salary, contract_expires",
+        )
+        .eq("league_id", leagueId)
+        .eq("status", "active")
+        .not("team_id", "is", null)
+        .limit(5000),
+    ]);
+    if (teams.error) throw teams.error;
+    if (players.error) throw players.error;
+    const byTeam = new Map<string, TradeTeam>(
+      teams.data.map((t) => [t.id, { id: t.id, payroll: 0, roster: [] }]),
+    );
+    for (const p of players.data) {
+      const team = p.team_id ? byTeam.get(p.team_id) : undefined;
+      if (!team) continue;
+      const salary = p.salary ?? 0;
+      team.payroll += salary;
+      team.roster.push({
+        id: p.id,
+        position: p.position,
+        age: p.age,
+        overall: p.overall,
+        potential: p.potential,
+        salary,
+        yearsLeft: Math.max(
+          1,
+          (p.contract_expires ?? season.data.year) - season.data.year + 1,
+        ),
+      });
+    }
+    const sorted = (list: TradeTeam[]) =>
+      list.sort((a, b) => a.id.localeCompare(b.id));
+    const pick = (
+      keep: (t: NonNullable<typeof teams.data>[number]) => boolean,
+    ) =>
+      sorted(
+        teams.data.flatMap((t) =>
+          keep(t) ? [byTeam.get(t.id) as TradeTeam] : [],
+        ),
+      );
+    return {
+      computer: pick((t) => t.local_player_slot === null),
+      owners: pick((t) => t.local_player_slot !== null && !t.ai_trades),
+      acting: pick((t) => t.local_player_slot === null || t.ai_trades),
+    };
+  }
 
   return {
     async claimJob(worker: string): Promise<SimJobRow | null> {
@@ -121,60 +189,13 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
     },
 
     async loadTradeTeams(seasonId: string): Promise<TradeTeam[]> {
-      const season = await client
-        .from("seasons")
-        .select("league_id, year")
-        .eq("id", seasonId)
-        .single();
-      if (season.error) throw season.error;
-      const leagueId = season.data.league_id;
-      const [teams, players] = await Promise.all([
-        client
-          .from("teams")
-          .select("id, local_player_slot, ai_trades")
-          .eq("league_id", leagueId),
-        client
-          .from("players")
-          .select(
-            "id, team_id, position, age, overall, potential, salary, contract_expires",
-          )
-          .eq("league_id", leagueId)
-          .eq("status", "active")
-          .not("team_id", "is", null)
-          .limit(5000),
-      ]);
-      if (teams.error) throw teams.error;
-      if (players.error) throw players.error;
-      const acting = new Set(
-        teams.data
-          .filter((t) => t.local_player_slot === null || t.ai_trades)
-          .map((t) => t.id),
-      );
-      const byTeam = new Map<string, TradeTeam>();
-      for (const p of players.data) {
-        if (!p.team_id || !acting.has(p.team_id)) continue;
-        const team = byTeam.get(p.team_id) ?? {
-          id: p.team_id,
-          payroll: 0,
-          roster: [],
-        };
-        const salary = p.salary ?? 0;
-        team.payroll += salary;
-        team.roster.push({
-          id: p.id,
-          position: p.position,
-          age: p.age,
-          overall: p.overall,
-          potential: p.potential,
-          salary,
-          yearsLeft: Math.max(
-            1,
-            (p.contract_expires ?? season.data.year) - season.data.year + 1,
-          ),
-        });
-        byTeam.set(p.team_id, team);
-      }
-      return [...byTeam.values()].sort((a, b) => a.id.localeCompare(b.id));
+      const { acting } = await loadRosters(seasonId);
+      return acting;
+    },
+
+    async loadOfferTeams(seasonId: string) {
+      const { owners, computer } = await loadRosters(seasonId);
+      return { owners, computer };
     },
 
     async applyTrade(seasonId: string, trade: AiTrade): Promise<void> {
@@ -184,6 +205,17 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         trade_team_b: trade.teamB,
         from_a: trade.fromA,
         from_b: trade.fromB,
+      });
+      if (error) throw error;
+    },
+
+    async replaceOffers(
+      seasonId: string,
+      offers: StoredOffer[],
+    ): Promise<void> {
+      const { error } = await client.rpc("admin_replace_trade_offers", {
+        target_season: seasonId,
+        new_offers: offers as never,
       });
       if (error) throw error;
     },

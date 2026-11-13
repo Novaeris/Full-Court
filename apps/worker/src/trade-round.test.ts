@@ -65,6 +65,33 @@ describe("runTradeRound", () => {
     expect(await run()).toEqual(await run());
   });
 
+  it("stores offers to the owner's team, and keeps going if that fails", async () => {
+    const stored: unknown[][] = [];
+    const store: TradeStore = {
+      loadTradeTeams: async () => teams,
+      applyTrade: async () => {},
+      loadOfferTeams: async () => ({
+        owners: [team("me", "C", "PG")],
+        computer: teams,
+      }),
+      replaceOffers: async (_s, offers) => {
+        stored.push(offers);
+      },
+    };
+    await runTradeRound(store, season);
+    expect(stored).toHaveLength(1);
+    for (const o of stored[0] as { team_id: string }[]) {
+      expect(o.team_id).toBe("me");
+    }
+    const failing: TradeStore = {
+      ...store,
+      replaceOffers: async () => {
+        throw new Error("boom");
+      },
+    };
+    await expect(runTradeRound(failing, season)).resolves.toBeTypeOf("number");
+  });
+
   it("skips a trade the database refuses", async () => {
     const store: TradeStore = {
       loadTradeTeams: async () => teams,

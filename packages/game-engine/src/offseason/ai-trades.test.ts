@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { SALARY_CAP_BASE, type TradeAsset } from "@fullcourt/game-rules";
 import { createRng, seedState } from "../rng/rng";
-import { proposeAiTrades, type AiTradeTeam } from "./ai-trades";
+import {
+  proposeAiTrades,
+  proposeOwnerOffers,
+  type AiTradeTeam,
+} from "./ai-trades";
 
 const CAP = SALARY_CAP_BASE;
 const POS = ["PG", "SG", "SF", "PF", "C"];
@@ -73,5 +77,47 @@ describe("proposeAiTrades", () => {
       most: 3,
     });
     expect(out).toEqual([]);
+  });
+});
+
+describe("proposeOwnerOffers", () => {
+  const owner = team("me", "C", "PG");
+  const make = (seed: string, most = 2) =>
+    proposeOwnerOffers(createRng(seedState(seed)), {
+      owner: { payroll: owner.payroll, roster: owner.roster },
+      teams,
+      cap: CAP,
+      inSeason: false,
+      most,
+    });
+
+  it("is the same for the same seed", () => {
+    expect(make("o")).toEqual(make("o"));
+  });
+
+  it("offers something for one of the owner's players, from different teams", () => {
+    for (const seed of ["1", "2", "3", "4", "5", "6"]) {
+      const offers = make(seed);
+      expect(offers.length).toBeLessThanOrEqual(2);
+      const partners = offers.map((o) => o.partnerId);
+      expect(new Set(partners).size).toBe(partners.length);
+      for (const o of offers) {
+        expect(o.give).toHaveLength(1);
+        expect(o.get.length).toBeGreaterThan(0);
+        expect(owner.roster.some((p) => p.id === o.give[0])).toBe(true);
+      }
+    }
+  });
+
+  it("does make offers", () => {
+    const total = ["1", "2", "3", "4", "5", "6"].reduce(
+      (n, seed) => n + make(seed).length,
+      0,
+    );
+    expect(total).toBeGreaterThan(0);
+  });
+
+  it("offers nothing when no team can take the player", () => {
+    expect(make("x", 0)).toEqual([]);
   });
 });
