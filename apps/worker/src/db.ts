@@ -45,7 +45,7 @@ export type DayCommit = {
     away_score: number;
     overtimes: number;
   }[];
-  plays: Record<string, unknown>[];
+  replays: Record<string, unknown>[];
   lines: Record<string, unknown>[];
 };
 

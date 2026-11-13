@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameRow } from "./db";
-import { toDbPlay, toRngState, toSimTeams } from "./map";
+import { toDbReplay, toRngState, toSimTeams } from "./map";
 import { fakePlayers } from "./test-fakes";
 
 const games = [
@@ -56,36 +56,33 @@ describe("toSimTeams", () => {
   });
 });
 
-describe("toDbPlay", () => {
-  it("flattens the court position and keeps nulls", () => {
-    const row = toDbPlay({
+describe("toDbReplay", () => {
+  it("keeps what is needed to replay a game, in database column names", () => {
+    const row = toDbReplay({
       gameId: "g1",
-      seq: 3,
-      period: 1,
-      clock: 700,
-      kind: "made-shot",
-      teamId: "t1",
-      playerId: "p1",
-      assistPlayerId: null,
-      blockPlayerId: null,
-      stealPlayerId: null,
-      outPlayerId: null,
-      shotZone: "three",
-      made: true,
-      offensive: null,
-      points: 3,
-      homeScore: 3,
-      awayScore: 0,
-      transition: false,
-      at: { x: 80.5, y: 12 },
+      engineVersion: 1,
+      rngState: [1, 2, 3, 4],
+      snapshot: {
+        home: {
+          id: "t1",
+          strategy: ["normal", "normal", "balanced"],
+          players: [],
+        },
+        away: { id: "t2", strategy: ["fast", "high", "interior"], players: [] },
+      },
     });
-    expect(row).toMatchObject({
+    expect(row).toEqual({
       game_id: "g1",
-      shot_zone: "three",
-      at_x: 80.5,
-      at_y: 12,
-      assist_player_id: null,
+      engine_version: 1,
+      rng_state: [1, 2, 3, 4],
+      snapshot: {
+        home: {
+          id: "t1",
+          strategy: ["normal", "normal", "balanced"],
+          players: [],
+        },
+        away: { id: "t2", strategy: ["fast", "high", "interior"], players: [] },
+      },
     });
-    expect(row).not.toHaveProperty("at");
   });
 });

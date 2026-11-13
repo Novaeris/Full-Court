@@ -1,3 +1,4 @@
+import { ENGINE_VERSION } from "@fullcourt/game-engine";
 import { describe, expect, it } from "vitest";
 import { CommitRefused, CommitRejected } from "./db";
 import { runJob } from "./run-job";
@@ -9,7 +10,7 @@ describe("runJob", () => {
     await runJob(fake.db, fake.job);
     expect(fake.commits.map((c) => c.day)).toEqual([1, 2, 3]);
     expect(fake.commits.every((c) => c.games.length === 2)).toBe(true);
-    expect(fake.commits.every((c) => c.plays.length > 100)).toBe(true);
+    expect(fake.commits.every((c) => c.replays.length === 2)).toBe(true);
     expect(fake.job.status).toBe("done");
     expect(fake.season.phase).toBe("playoffs");
     expect(fake.failures).toEqual([]);
@@ -31,16 +32,16 @@ describe("runJob", () => {
       id: "g-1-1",
       overtimes: expect.any(Number),
     });
-    const shot = commit?.plays.find((p) => p.kind === "made-shot");
-    expect(shot).toMatchObject({
-      game_id: expect.any(String),
-      shot_zone: expect.any(String),
-      at_x: expect.any(Number),
-      at_y: expect.any(Number),
-      transition: expect.any(Boolean),
+    expect(commit?.replays).toHaveLength(2);
+    const replay = commit?.replays[0] as Record<string, unknown>;
+    expect(replay).toMatchObject({
+      game_id: "g-1-1",
+      engine_version: ENGINE_VERSION,
+      rng_state: expect.any(Array),
+      snapshot: { home: { id: "t1" }, away: { id: "t2" } },
     });
-    const start = commit?.plays.find((p) => p.kind === "period-start");
-    expect(start).toMatchObject({ at_x: null, at_y: null, player_id: null });
+    expect(replay.rng_state).toHaveLength(4);
+    expect(replay).not.toHaveProperty("plays");
     expect(commit?.lines[0]).toHaveProperty("fgm");
   });
 

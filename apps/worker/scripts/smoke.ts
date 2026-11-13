@@ -10,16 +10,20 @@
  */
 import type { Database } from "@fullcourt/api-client";
 import {
+  ENGINE_VERSION,
   createRng,
   generateSchedule,
   generateWorld,
+  replayGame,
   seedState,
+  type ReplaySnapshot,
 } from "@fullcourt/game-engine";
 import { rankStandings, validateScheduleTiers } from "@fullcourt/game-rules";
 import { DEFAULT_SCHEDULE_TIERS } from "@fullcourt/game-types";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { work } from "../src/loop";
+import { toRngState } from "../src/map";
 import { createSupabaseDb } from "../src/supabase-db";
 
 const url = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -251,7 +255,7 @@ async function main(): Promise<void> {
       "the league's RNG state moved on",
     );
 
-    // Plays and box scores add up, read as the owner.
+    // Box scores add up, and the stored recipe replays the game, as the owner sees it.
     const first = played[0] as {
       id: string;
       home_score: number;
@@ -260,7 +264,7 @@ async function main(): Promise<void> {
     const lines = must(
       await owner
         .from("box_score_lines")
-        .select("team_id, points")
+        .select("player_id, team_id, points")
         .eq("game_id", first.id),
     );
     check(
@@ -268,21 +272,46 @@ async function main(): Promise<void> {
         first.home_score + first.away_score,
       "a box score adds up to its game's score",
     );
-    const plays = must(
+    const firstGame = must(
       await owner
-        .from("play_events")
-        .select("seq, kind, home_score, away_score")
-        .eq("game_id", first.id)
-        .order("seq"),
+        .from("games")
+        .select("id, day, home_team_id, away_team_id")
+        .eq("id", first.id)
+        .single(),
     );
-    const last = plays[plays.length - 1] as {
-      home_score: number;
-      away_score: number;
-    };
+    const recipe = must(
+      await owner
+        .from("game_replays")
+        .select("engine_version, rng_state, snapshot")
+        .eq("game_id", first.id)
+        .single(),
+    );
     check(
-      last.home_score === first.home_score &&
-        last.away_score === first.away_score,
-      `the play-by-play (${plays.length} plays) ends on the final score`,
+      recipe.engine_version === ENGINE_VERSION,
+      `the recipe records engine version ${ENGINE_VERSION}`,
+    );
+    const replayed = replayGame(
+      {
+        id: firstGame.id,
+        day: firstGame.day,
+        homeTeamId: firstGame.home_team_id,
+        awayTeamId: firstGame.away_team_id,
+      },
+      recipe.snapshot as unknown as ReplaySnapshot,
+      toRngState(recipe.rng_state),
+    );
+    check(
+      replayed.game.homeScore === first.home_score &&
+        replayed.game.awayScore === first.away_score,
+      `replaying the stored recipe (${replayed.plays.length} plays) gives the final score`,
+    );
+    check(
+      replayed.boxScore.lines.length === lines.length &&
+        replayed.boxScore.lines.every(
+          (l) =>
+            lines.find((s) => s.player_id === l.playerId)?.points === l.points,
+        ),
+      "the replay's box score matches the stored one",
     );
 
     // The rest of the regular season.
@@ -357,20 +386,110 @@ async function main(): Promise<void> {
     console.log(`     average score ${avgPoints.toFixed(1)} points per team`);
     check(avgPoints > 98 && avgPoints < 112, "scoring is in the NBA-era range");
 
-    const counts = await Promise.all(
-      ["play_events", "box_score_lines"].map(async (table) => {
+    const detailRows = await Promise.all(
+      ["game_replays", "box_score_lines", "games"].map(async (table) => {
         const r = await admin
-          .from(table as "play_events")
+          .from(table as "games")
           .select("*", { count: "exact", head: true })
           .eq("league_id", leagueId);
         return `${table}: ${r.count}`;
       }),
     );
-    console.log(`     stored ${counts.join(", ")}`);
+    console.log(`     the season's detail: ${detailRows.join(", ")}`);
+
+    if (process.env.SMOKE_KEEP === "before-archive") {
+      console.log(
+        `     SMOKE_KEEP: stopped before archiving; league ${leagueId} kept`,
+      );
+      return;
+    }
+
+    // Archive the finished season into history. Playoffs aren't built yet, so
+    // the season is marked complete by hand.
+    const pointsInGames = all.reduce(
+      (s, g) => s + (g.home_score as number) + (g.away_score as number),
+      0,
+    );
+    must(
+      await admin
+        .from("seasons")
+        .update({ phase: "complete" })
+        .eq("id", season.id)
+        .select(),
+    );
+    const archived = must(
+      await admin.rpc("admin_archive_season", {
+        target_season: season.id,
+        standings_order: standings.map((s) => s.teamId),
+      }),
+    );
+    check(archived.archived_at !== null, "the season is archived");
+
+    const teamStats = must(
+      await owner
+        .from("team_season_stats")
+        .select("team_id, wins, losses, points_for, rank_overall")
+        .eq("season_id", season.id),
+    );
+    check(teamStats.length === 30, "all 30 teams have season records");
+    check(
+      teamStats.reduce((s, t) => s + t.wins, 0) === 1140 &&
+        teamStats.reduce((s, t) => s + t.points_for, 0) === pointsInGames,
+      "the records add up to the 1140 games and every point scored",
+    );
+    check(
+      teamStats.find((t) => t.rank_overall === 1)?.team_id ===
+        standings[0]?.teamId,
+      "the best team in the standings ranks first",
+    );
+    const playerStats = must(
+      await owner
+        .from("player_season_stats")
+        .select("player_id, games_played, points, high_points")
+        .eq("season_id", season.id),
+    );
+    check(
+      playerStats.reduce((s, p) => s + p.points, 0) === pointsInGames,
+      `${playerStats.length} players' season points add up to every point scored`,
+    );
+    const top = [...playerStats].sort((a, b) => b.points - a.points)[0];
+    console.log(
+      `     top scorer: ${((top?.points ?? 0) / (top?.games_played ?? 1)).toFixed(1)} per game, best game ${top?.high_points}`,
+    );
+
+    const left = await Promise.all(
+      ["game_replays", "box_score_lines", "games"].map(async (table) => {
+        const r = await admin
+          .from(table as "games")
+          .select("*", { count: "exact", head: true })
+          .eq("league_id", leagueId);
+        return r.count;
+      }),
+    );
+    check(
+      left.every((n) => n === 0),
+      "the season's games, box scores and replays are deleted",
+    );
+
+    // The next season can start; the previous one was archived first.
+    must(
+      await admin.rpc("admin_create_season", {
+        target_league: leagueId,
+        season_year: 2027,
+        preset: "standard",
+        tiers: { ...DEFAULT_SCHEDULE_TIERS },
+        schedule: games.map((g) => ({
+          day: g.day,
+          home_team_id: g.homeTeamId,
+          away_team_id: g.awayTeamId,
+        })),
+      }),
+    );
+    check(true, "the next season starts after the last was archived");
 
     must(await admin.from("leagues").delete().eq("id", leagueId).select());
   } finally {
-    await admin.auth.admin.deleteUser(userId);
+    if (!process.env.SMOKE_KEEP) await admin.auth.admin.deleteUser(userId);
   }
   console.log("smoke test passed");
 }

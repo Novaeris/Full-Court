@@ -1,6 +1,7 @@
 import type { BoxScore, Game, PlayEvent } from "@fullcourt/game-types";
 import { createRng, type RngState } from "../rng/rng";
 import { simulateGame } from "./game";
+import { ENGINE_VERSION, snapshotTeams, type GameReplay } from "./replay";
 import type { SimTeam } from "./types";
 
 export type SimulateDayInput = {
@@ -17,6 +18,8 @@ export type SimulateDayResult = {
   games: Game[];
   plays: PlayEvent[];
   boxScores: BoxScore[];
+  /** What to store to replay each game later, in the order of `games`. */
+  replays: GameReplay[];
   /** The league's RNG state after this day; save it for the next one. */
   rngState: RngState;
 };
@@ -37,6 +40,7 @@ export function simulateDay(input: SimulateDayInput): SimulateDayResult {
   const games: Game[] = [];
   const plays: PlayEvent[] = [];
   const boxScores: BoxScore[] = [];
+  const replays: GameReplay[] = [];
   for (const game of input.games) {
     if (game.status !== "scheduled") {
       throw new Error(`Game ${game.id} has already been played.`);
@@ -48,10 +52,17 @@ export function simulateDay(input: SimulateDayInput): SimulateDayResult {
       if (busy.has(id)) throw new Error(`Team ${id} plays twice on one day.`);
       busy.add(id);
     }
+    const rngState = rng.state();
     const result = simulateGame(game, home, away, rng);
+    replays.push({
+      gameId: game.id,
+      engineVersion: ENGINE_VERSION,
+      rngState,
+      snapshot: snapshotTeams(home, away),
+    });
     games.push(result.game);
     plays.push(...result.plays);
     boxScores.push(result.boxScore);
   }
-  return { games, plays, boxScores, rngState: rng.state() };
+  return { games, plays, boxScores, replays, rngState: rng.state() };
 }

@@ -95,7 +95,7 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         sim_day: input.day,
         new_rng_state: input.rngState,
         day_games: input.games,
-        day_plays: input.plays as never,
+        day_replays: input.replays as never,
         day_lines: input.lines as never,
       });
       if (error) {

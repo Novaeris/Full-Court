@@ -1,4 +1,5 @@
--- Season core: seasons, games, play-by-play, box scores and the simulation queue.
+-- Season core: seasons, games, replays, box scores, season history and the
+-- simulation queue.
 --
 -- Everything hangs off a league and is deleted with it. Clients can read their
 -- own league's rows and nothing else. Every write comes from the service role:
@@ -7,8 +8,21 @@
 -- referenced with (league_id, id) pairs, so a row can never point into another
 -- league.
 --
--- Plays are the bulk of the data (a few hundred rows per game). Keeping only
--- recent seasons' plays is a later decision; nothing here prevents it.
+-- Storage is the main constraint (a league has at most 50 seasons, an account
+-- at most 5 leagues), so data is kept in tiers:
+--
+--   * The CURRENT season keeps its games, box scores and a replay recipe for
+--     every game. A game's plays are not stored: the engine is deterministic,
+--     so the recipe (rosters as they were, the RNG state and the engine
+--     version) replays the game exactly. That is about 2 MB a season, against
+--     105 MB for one row per play.
+--   * When a season is archived (admin_archive_season), its detail is
+--     summarised into permanent history (player season totals, team season
+--     records, awards) and then deleted. Per-game averages are totals divided
+--     by games played, so they need no storage of their own.
+--
+-- What archiving does not store can never be recovered, so the history tables
+-- carry everything we want to keep: change them before a season is archived.
 
 -- A game's players are referenced by league too.
 alter table public.players add unique (league_id, id);
@@ -58,6 +72,8 @@ create table public.seasons (
   schedule_tiers jsonb not null
     check (app_private.valid_schedule_tiers(schedule_tiers)),
   created_at timestamptz not null default now(),
+  -- Set when the season's detail was summarised into history and deleted.
+  archived_at timestamptz,
   unique (league_id, year),
   unique (league_id, id),
   -- The regular season runs until its last day has been simulated.
@@ -99,51 +115,32 @@ create index games_season_day_idx on public.games (season_id, day);
 create index games_home_team_idx on public.games (season_id, home_team_id);
 create index games_away_team_idx on public.games (season_id, away_team_id);
 
--- Play-by-play ---------------------------------------------------------------------------------
+-- Game replays ----------------------------------------------------------------------------------
 
--- One row per event, in the shape of PlayEvent in @fullcourt/game-types. The
--- plays are the source of truth for a game: scores and box scores derive from
--- them. at_x runs 0-94 along the court and at_y 0-50 across it.
-create table public.play_events (
+-- One recipe per game of the current season: replaying it with the game engine
+-- gives back the exact plays, score and box score. `snapshot` is the two
+-- teams' rosters, ratings and strategies as they were when the game was played
+-- (ReplaySnapshot in @fullcourt/game-engine), `rng_state` the league's RNG
+-- state just before it, and `engine_version` the simulation version (ENGINE_VERSION).
+-- After an engine change the older recipes can no longer be replayed exactly;
+-- their scores and box scores stay.
+create table public.game_replays (
+  game_id uuid primary key,
   league_id uuid not null references public.leagues (id) on delete cascade,
-  game_id uuid not null,
-  seq integer not null check (seq >= 1),
-  period smallint not null check (period between 1 and 24),
-  clock smallint not null check (clock between 0 and 720),
-  kind text not null check (kind in (
-    'period-start', 'made-shot', 'missed-shot', 'free-throw', 'rebound',
-    'turnover', 'foul', 'substitution', 'period-end'
-  )),
-  team_id uuid,
-  player_id uuid,
-  -- The other players an event can name. Written by the worker from the same
-  -- rosters, so they are not constrained separately.
-  assist_player_id uuid,
-  block_player_id uuid,
-  steal_player_id uuid,
-  out_player_id uuid,
-  shot_zone text check (shot_zone in ('inside', 'mid-range', 'three')),
-  made boolean,
-  offensive boolean,
-  points smallint not null default 0 check (points between 0 and 3),
-  home_score smallint not null check (home_score >= 0),
-  away_score smallint not null check (away_score >= 0),
-  transition boolean not null default false,
-  at_x numeric(4, 1) check (at_x between 0 and 94),
-  at_y numeric(3, 1) check (at_y between 0 and 50),
-  primary key (game_id, seq),
+  engine_version smallint not null check (engine_version >= 1),
+  rng_state bigint[] not null check (cardinality(rng_state) = 4),
+  snapshot jsonb not null check (jsonb_typeof(snapshot) = 'object'),
   foreign key (league_id, game_id)
-    references public.games (league_id, id) on delete cascade,
-  foreign key (league_id, team_id)
-    references public.teams (league_id, id) on delete cascade,
-  foreign key (league_id, player_id)
-    references public.players (league_id, id)
+    references public.games (league_id, id) on delete cascade
 );
+
+create index game_replays_league_idx on public.game_replays (league_id);
 
 -- Box scores ---------------------------------------------------------------------------------------
 
 -- One row per player who took the court, derived from the plays when the day
--- is committed. Totals add up to the final score (checked on commit).
+-- is committed. Totals add up to the final score (checked on commit). Kept for
+-- the current season only; archiving turns them into player_season_stats.
 create table public.box_score_lines (
   league_id uuid not null references public.leagues (id) on delete cascade,
   game_id uuid not null,
@@ -177,12 +174,109 @@ create table public.box_score_lines (
 
 create index box_score_lines_player_idx on public.box_score_lines (league_id, player_id);
 
--- Foreign keys that cascade or restrict need an index on the referencing columns.
--- Without them, deleting a league scans the plays once per team, player and game:
--- 28 seconds for one simulated season, past the API's 8 second limit. With them: under one.
-create index play_events_team_idx on public.play_events (league_id, team_id);
-create index play_events_player_idx on public.play_events (league_id, player_id);
+-- Foreign keys that cascade or restrict need an index on the referencing columns,
+-- or deleting a league (or a game) scans the table once per row it removes.
 create index box_score_lines_team_idx on public.box_score_lines (league_id, team_id);
+
+-- Season history (kept for every archived season) ------------------------------------------------------
+
+-- A player's totals for one season with one team (a traded player has a row per
+-- team). Per-game averages are these totals divided by `games_played`.
+-- `high_points`, `double_doubles` and `triple_doubles` can't be recovered from
+-- totals, which is why they are captured here, from the box scores, at archive time.
+create table public.player_season_stats (
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_id uuid not null,
+  player_id uuid not null,
+  team_id uuid not null,
+  games_played smallint not null check (games_played >= 1),
+  games_started smallint not null check (games_started between 0 and games_played),
+  minutes integer not null check (minutes >= 0),
+  points integer not null check (points >= 0),
+  rebounds integer not null check (rebounds >= 0),
+  assists integer not null check (assists >= 0),
+  steals integer not null check (steals >= 0),
+  blocks integer not null check (blocks >= 0),
+  turnovers integer not null check (turnovers >= 0),
+  fouls integer not null check (fouls >= 0),
+  fgm integer not null check (fgm >= 0),
+  fga integer not null check (fga >= 0),
+  tpm integer not null check (tpm >= 0),
+  tpa integer not null check (tpa >= 0),
+  ftm integer not null check (ftm >= 0),
+  fta integer not null check (fta >= 0),
+  high_points smallint not null check (high_points >= 0),
+  double_doubles smallint not null check (double_doubles between 0 and games_played),
+  triple_doubles smallint not null check (triple_doubles between 0 and double_doubles),
+  primary key (season_id, player_id, team_id),
+  foreign key (league_id, season_id)
+    references public.seasons (league_id, id) on delete cascade,
+  foreign key (league_id, player_id)
+    references public.players (league_id, id),
+  foreign key (league_id, team_id)
+    references public.teams (league_id, id) on delete cascade
+);
+
+create index player_season_stats_player_idx
+  on public.player_season_stats (league_id, player_id);
+create index player_season_stats_team_idx
+  on public.player_season_stats (league_id, team_id);
+
+-- A team's record and scoring for one season, with where it finished.
+create table public.team_season_stats (
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_id uuid not null,
+  team_id uuid not null,
+  wins smallint not null check (wins >= 0),
+  losses smallint not null check (losses >= 0),
+  home_wins smallint not null check (home_wins >= 0),
+  home_losses smallint not null check (home_losses >= 0),
+  division_wins smallint not null check (division_wins >= 0),
+  division_losses smallint not null check (division_losses >= 0),
+  conference_wins smallint not null check (conference_wins >= 0),
+  conference_losses smallint not null check (conference_losses >= 0),
+  points_for integer not null check (points_for >= 0),
+  points_against integer not null check (points_against >= 0),
+  -- Where the team finished, 1 = best, by the standings rules.
+  rank_overall smallint not null check (rank_overall >= 1),
+  rank_conference smallint not null check (rank_conference >= 1),
+  rank_division smallint not null check (rank_division >= 1),
+  primary key (season_id, team_id),
+  foreign key (league_id, season_id)
+    references public.seasons (league_id, id) on delete cascade,
+  foreign key (league_id, team_id)
+    references public.teams (league_id, id) on delete cascade,
+  check (home_wins <= wins and home_losses <= losses),
+  check (division_wins <= wins and division_losses <= losses),
+  check (conference_wins <= wins and conference_losses <= losses)
+);
+
+create index team_season_stats_team_idx
+  on public.team_season_stats (league_id, team_id);
+
+-- Who won what: the champion, the most valuable player and so on. The award
+-- names are free text so new awards need no migration. Written by the server
+-- when the playoffs and awards exist.
+create table public.season_awards (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_id uuid not null,
+  award text not null check (award ~ '^[a-z0-9][a-z0-9-]{0,39}$'),
+  team_id uuid,
+  player_id uuid,
+  created_at timestamptz not null default now(),
+  foreign key (league_id, season_id)
+    references public.seasons (league_id, id) on delete cascade,
+  foreign key (league_id, team_id)
+    references public.teams (league_id, id) on delete cascade,
+  foreign key (league_id, player_id)
+    references public.players (league_id, id),
+  check (team_id is not null or player_id is not null)
+);
+
+create index season_awards_season_idx on public.season_awards (season_id);
+create index season_awards_team_idx on public.season_awards (league_id, team_id);
+create index season_awards_player_idx on public.season_awards (league_id, player_id);
 
 -- Simulation queue ----------------------------------------------------------------------------------
 
@@ -218,13 +312,17 @@ create index sim_jobs_queue_idx
 
 alter table public.seasons enable row level security;
 alter table public.games enable row level security;
-alter table public.play_events enable row level security;
+alter table public.game_replays enable row level security;
+alter table public.player_season_stats enable row level security;
+alter table public.team_season_stats enable row level security;
+alter table public.season_awards enable row level security;
 alter table public.box_score_lines enable row level security;
 alter table public.sim_jobs enable row level security;
 
 grant select on
-  public.seasons, public.games, public.play_events,
-  public.box_score_lines, public.sim_jobs
+  public.seasons, public.games, public.game_replays, public.box_score_lines,
+  public.player_season_stats, public.team_season_stats, public.season_awards,
+  public.sim_jobs
 to authenticated;
 
 create policy "seasons: league owner can read"
@@ -233,8 +331,17 @@ create policy "seasons: league owner can read"
 create policy "games: league owner can read"
   on public.games for select to authenticated
   using (app_private.owns_league(league_id));
-create policy "play_events: league owner can read"
-  on public.play_events for select to authenticated
+create policy "game_replays: league owner can read"
+  on public.game_replays for select to authenticated
+  using (app_private.owns_league(league_id));
+create policy "player_season_stats: league owner can read"
+  on public.player_season_stats for select to authenticated
+  using (app_private.owns_league(league_id));
+create policy "team_season_stats: league owner can read"
+  on public.team_season_stats for select to authenticated
+  using (app_private.owns_league(league_id));
+create policy "season_awards: league owner can read"
+  on public.season_awards for select to authenticated
   using (app_private.owns_league(league_id));
 create policy "box_score_lines: league owner can read"
   on public.box_score_lines for select to authenticated
@@ -351,6 +458,17 @@ grant execute on function public.cancel_sim_job(uuid) to authenticated;
 
 -- `schedule` is a JSON array of {day, home_team_id, away_team_id}, built by
 -- @fullcourt/game-engine from the league's teams.
+-- A league can play at most this many seasons. The detail of each is archived
+-- into a small summary, so history stays cheap, but it is not unbounded.
+create function public.season_limit()
+returns integer
+language sql
+immutable
+set search_path = ''
+as $$ select 50 $$;
+
+grant execute on function public.season_limit() to authenticated, service_role;
+
 create function public.admin_create_season(
   target_league uuid,
   season_year integer,
@@ -377,6 +495,19 @@ begin
   perform 1 from public.leagues where id = target_league for update;
   if not found then
     raise exception 'league_not_found' using errcode = 'P0002';
+  end if;
+
+  if (select count(*) from public.seasons where league_id = target_league)
+     >= public.season_limit() then
+    raise exception 'season_limit_reached' using errcode = 'P0001',
+      detail = format('A league can play up to %s seasons.', public.season_limit());
+  end if;
+  -- Detail is kept for one season at a time: archive the last one first.
+  if exists (
+    select 1 from public.seasons
+    where league_id = target_league and archived_at is null
+  ) then
+    raise exception 'previous_season_not_archived' using errcode = 'P0001';
   end if;
 
   select max(g.day) into last_game_day
@@ -456,14 +587,14 @@ grant execute on function public.admin_claim_sim_job(text) to service_role;
 -- out-of-order commit is refused, which makes resuming a job safe.
 --
 -- day_games: [{id, home_score, away_score, overtimes}]
--- day_plays: PlayEvent rows in snake_case, each with game_id
+-- day_replays: [{game_id, engine_version, rng_state: [4 numbers], snapshot}], one per game
 -- day_lines: box score rows in snake_case, each with game_id
 create function public.admin_commit_sim_day(
   target_job uuid,
   sim_day integer,
   new_rng_state bigint[],
   day_games jsonb,
-  day_plays jsonb,
+  day_replays jsonb,
   day_lines jsonb
 )
 returns public.sim_jobs
@@ -515,29 +646,19 @@ begin
                       sim_day, scheduled, finished);
   end if;
 
-  insert into public.play_events (
-    league_id, game_id, seq, period, clock, kind, team_id, player_id,
-    assist_player_id, block_player_id, steal_player_id, out_player_id,
-    shot_zone, made, offensive, points, home_score, away_score, transition,
-    at_x, at_y
-  )
-  select current_season.league_id, p.game_id, p.seq, p.period, p.clock, p.kind,
-         p.team_id, p.player_id, p.assist_player_id, p.block_player_id,
-         p.steal_player_id, p.out_player_id, p.shot_zone, p.made, p.offensive,
-         p.points, p.home_score, p.away_score, p.transition, p.at_x, p.at_y
-  from jsonb_to_recordset(day_plays) as p(
-    game_id uuid, seq integer, period integer, clock integer, kind text,
-    team_id uuid, player_id uuid, assist_player_id uuid, block_player_id uuid,
-    steal_player_id uuid, out_player_id uuid, shot_zone text, made boolean,
-    offensive boolean, points integer, home_score integer, away_score integer,
-    transition boolean, at_x numeric, at_y numeric
+  insert into public.game_replays (league_id, game_id, engine_version, rng_state, snapshot)
+  select current_season.league_id, r.game_id, r.engine_version,
+         array(select jsonb_array_elements_text(r.rng_state)::bigint),
+         r.snapshot
+  from jsonb_to_recordset(day_replays) as r(
+    game_id uuid, engine_version integer, rng_state jsonb, snapshot jsonb
   )
   join public.games g
-    on g.id = p.game_id and g.season_id = current_season.id and g.day = sim_day;
+    on g.id = r.game_id and g.season_id = current_season.id and g.day = sim_day;
   get diagnostics inserted = row_count;
-  if inserted <> jsonb_array_length(day_plays) then
+  if inserted <> jsonb_array_length(day_replays) or inserted <> finished then
     raise exception 'invalid_day_data' using errcode = '22023',
-      detail = 'Some plays belong to games that are not part of this day.';
+      detail = 'The day needs exactly one replay for each of its games.';
   end if;
 
   insert into public.box_score_lines (
@@ -601,7 +722,7 @@ end;
 $$;
 
 comment on function public.admin_commit_sim_day is
-  'Commits one simulated day (results, plays, box scores, RNG state, calendar and job progress) in one transaction. Service role only.';
+  'Commits one simulated day (results, replays, box scores, RNG state, calendar and job progress) in one transaction. Service role only.';
 
 revoke execute on function public.admin_commit_sim_day(uuid, integer, bigint[], jsonb, jsonb, jsonb)
   from public, anon, authenticated;
@@ -646,3 +767,166 @@ $$;
 revoke execute on function public.admin_requeue_stale_sim_jobs(interval)
   from public, anon, authenticated;
 grant execute on function public.admin_requeue_stale_sim_jobs(interval) to service_role;
+
+-- Archiving a season (server only) ---------------------------------------------------------------------------
+
+-- Summarises a finished season into permanent history, then deletes its detail
+-- (games, box scores and replays), in one transaction.
+--
+-- `standings_order` is every team of the league, best first, as ranked by the
+-- standings rules in @fullcourt/game-rules (rankStandings). The records and
+-- totals themselves are computed here from the stored games and box scores, so
+-- they can't disagree with them; before anything is deleted, each team's points
+-- must equal the sum of its players' points and wins must equal losses.
+--
+-- The season must be `complete` (playoffs included), and the next season can't
+-- be created until this has run. What isn't summarised here is lost for good.
+create function public.admin_archive_season(
+  target_season uuid,
+  standings_order uuid[]
+)
+returns public.seasons
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  archived public.seasons;
+  team_total integer;
+begin
+  select * into archived from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if archived.archived_at is not null then
+    raise exception 'season_already_archived' using errcode = 'P0001';
+  end if;
+  if archived.phase <> 'complete' then
+    raise exception 'season_not_complete' using errcode = 'P0001';
+  end if;
+  if exists (
+    select 1 from public.games where season_id = target_season and status <> 'final'
+  ) then
+    raise exception 'season_has_unplayed_games' using errcode = 'P0001';
+  end if;
+
+  select count(*) into team_total from public.teams where league_id = archived.league_id;
+  if standings_order is null
+     or cardinality(standings_order) <> team_total
+     or (select count(distinct t) from unnest(standings_order) as t) <> team_total
+     or exists (
+       select 1 from unnest(standings_order) as t
+       where not exists (
+         select 1 from public.teams
+         where id = t and league_id = archived.league_id
+       )
+     ) then
+    raise exception 'invalid_standings_order' using errcode = '22023';
+  end if;
+
+  -- Team records and scoring.
+  insert into public.team_season_stats (
+    league_id, season_id, team_id, wins, losses, home_wins, home_losses,
+    division_wins, division_losses, conference_wins, conference_losses,
+    points_for, points_against, rank_overall, rank_conference, rank_division
+  )
+  with results as (
+    select g.home_team_id as team_id, g.away_team_id as opponent_id,
+           true as at_home, g.home_score as scored, g.away_score as allowed,
+           g.home_score > g.away_score as won
+    from public.games g where g.season_id = target_season
+    union all
+    select g.away_team_id, g.home_team_id, false, g.away_score, g.home_score,
+           g.away_score > g.home_score
+    from public.games g where g.season_id = target_season
+  ),
+  totals as (
+    select r.team_id,
+           count(*) filter (where r.won) as wins,
+           count(*) filter (where not r.won) as losses,
+           count(*) filter (where r.won and r.at_home) as home_wins,
+           count(*) filter (where not r.won and r.at_home) as home_losses,
+           count(*) filter (where r.won and t.division_id = o.division_id) as division_wins,
+           count(*) filter (where not r.won and t.division_id = o.division_id) as division_losses,
+           count(*) filter (where r.won and t.conference_id = o.conference_id) as conference_wins,
+           count(*) filter (where not r.won and t.conference_id = o.conference_id) as conference_losses,
+           sum(r.scored) as points_for,
+           sum(r.allowed) as points_against
+    from results r
+    join public.teams t on t.id = r.team_id
+    join public.teams o on o.id = r.opponent_id
+    group by r.team_id
+  ),
+  ordered as (
+    select u.team_id, u.place::integer as rank_overall
+    from unnest(standings_order) with ordinality as u(team_id, place)
+  )
+  select archived.league_id, target_season, t.id,
+         coalesce(a.wins, 0), coalesce(a.losses, 0),
+         coalesce(a.home_wins, 0), coalesce(a.home_losses, 0),
+         coalesce(a.division_wins, 0), coalesce(a.division_losses, 0),
+         coalesce(a.conference_wins, 0), coalesce(a.conference_losses, 0),
+         coalesce(a.points_for, 0), coalesce(a.points_against, 0),
+         o.rank_overall,
+         row_number() over (partition by t.conference_id order by o.rank_overall),
+         row_number() over (partition by t.division_id order by o.rank_overall)
+  from public.teams t
+  join ordered o on o.team_id = t.id
+  left join totals a on a.team_id = t.id
+  where t.league_id = archived.league_id;
+
+  -- Player totals, plus what totals can't give back later.
+  insert into public.player_season_stats (
+    league_id, season_id, player_id, team_id, games_played, games_started,
+    minutes, points, rebounds, assists, steals, blocks, turnovers, fouls,
+    fgm, fga, tpm, tpa, ftm, fta, high_points, double_doubles, triple_doubles
+  )
+  select archived.league_id, target_season, l.player_id, l.team_id,
+         count(*), count(*) filter (where l.started),
+         sum(l.minutes), sum(l.points), sum(l.rebounds), sum(l.assists),
+         sum(l.steals), sum(l.blocks), sum(l.turnovers), sum(l.fouls),
+         sum(l.fgm), sum(l.fga), sum(l.tpm), sum(l.tpa), sum(l.ftm), sum(l.fta),
+         max(l.points),
+         count(*) filter (where cats.n >= 2),
+         count(*) filter (where cats.n >= 3)
+  from public.box_score_lines l
+  join public.games g on g.id = l.game_id
+  cross join lateral (
+    select (l.points >= 10)::integer + (l.rebounds >= 10)::integer
+         + (l.assists >= 10)::integer + (l.steals >= 10)::integer
+         + (l.blocks >= 10)::integer as n
+  ) cats
+  where g.season_id = target_season
+  group by l.player_id, l.team_id;
+
+  -- Nothing is deleted unless the summaries agree with each other.
+  if exists (
+    select 1 from public.team_season_stats t
+    where t.season_id = target_season
+      and t.points_for <> coalesce((
+        select sum(p.points) from public.player_season_stats p
+        where p.season_id = target_season and p.team_id = t.team_id
+      ), 0)
+  ) or (
+    select coalesce(sum(wins), 0) <> coalesce(sum(losses), 0)
+    from public.team_season_stats where season_id = target_season
+  ) then
+    raise exception 'inconsistent_archive' using errcode = '22023';
+  end if;
+
+  -- Deleting the games removes their box scores and replays with them.
+  delete from public.games where season_id = target_season;
+
+  update public.seasons set archived_at = now()
+  where id = target_season
+  returning * into archived;
+  return archived;
+end;
+$$;
+
+comment on function public.admin_archive_season is
+  'Summarises a complete season into player and team history, checks the summaries, then deletes its games, box scores and replays. Service role only.';
+
+revoke execute on function public.admin_archive_season(uuid, uuid[])
+  from public, anon, authenticated;
+grant execute on function public.admin_archive_season(uuid, uuid[]) to service_role;

@@ -1,9 +1,13 @@
-import type { RngState, SimPlayer, SimTeam } from "@fullcourt/game-engine";
+import type {
+  GameReplay,
+  RngState,
+  SimPlayer,
+  SimTeam,
+} from "@fullcourt/game-engine";
 import {
   DEFAULT_TEAM_STRATEGY,
   isPosition,
   type Game,
-  type PlayEvent,
   type PlayerGameLine,
 } from "@fullcourt/game-types";
 import type { GameRow, PlayerRow } from "./db";
@@ -106,28 +110,13 @@ export function toDbResult(game: Game): {
   };
 }
 
-export function toDbPlay(p: PlayEvent): Record<string, unknown> {
+/** A replay recipe as the row `admin_commit_sim_day` expects. */
+export function toDbReplay(r: GameReplay): Record<string, unknown> {
   return {
-    game_id: p.gameId,
-    seq: p.seq,
-    period: p.period,
-    clock: p.clock,
-    kind: p.kind,
-    team_id: p.teamId,
-    player_id: p.playerId,
-    assist_player_id: p.assistPlayerId,
-    block_player_id: p.blockPlayerId,
-    steal_player_id: p.stealPlayerId,
-    out_player_id: p.outPlayerId,
-    shot_zone: p.shotZone,
-    made: p.made,
-    offensive: p.offensive,
-    points: p.points,
-    home_score: p.homeScore,
-    away_score: p.awayScore,
-    transition: p.transition,
-    at_x: p.at?.x ?? null,
-    at_y: p.at?.y ?? null,
+    game_id: r.gameId,
+    engine_version: r.engineVersion,
+    rng_state: [...r.rngState],
+    snapshot: r.snapshot,
   };
 }
 

@@ -119,7 +119,7 @@ Rule: if a write needs game rules or touches more than one aggregate, it goes th
 
 ### Database rules
 
-- **Rows, not blobs.** Data lives in normal relational rows keyed by `league_id`. A simulation step writes only what changed.
+- **Rows, not blobs.** Data lives in normal relational rows keyed by `league_id`. A simulation step writes only what changed. The one exception is a game's replay recipe (`game_replays.snapshot`), an append-only snapshot that is only ever read whole.
 - **Migrations.** Every schema change is a Supabase CLI migration in `supabase/migrations/`. `supabase gen types` writes the database types into `@fullcourt/api-client`.
 - **No client access by default.** The baseline migration revokes the grants Supabase normally gives `anon` and `authenticated` on new objects in `public`. A migration that adds a table must enable RLS, write policies, and grant only what clients need. pgTAP tests prove one user can't read or change another user's data.
 - **Internal tables** (job queue internals, audit logs) live in a schema the Data API doesn't expose.
@@ -202,48 +202,95 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
   - `generateSchedule({ structure, teams, tiers }, rng)` returns every regular-season `Game`. Pairs with an odd meeting count get their extra home game along an Euler circuit, so each team's home and away totals differ by at most one. Games go on the earliest day both teams are free.
   - `simulateGame(game, home, away, rng)` plays a game possession by possession and returns `{ game, plays, boxScore, starters }`. Inputs are `SimTeam` (id, roster of `SimPlayer`, `TeamStrategy`), so the engine needs no database rows.
   - `buildBoxScore(gameId, plays, starters, teamOf)` derives the box score from the plays alone. `simulateGame` uses it, and the tests check that lines add up to the score.
-  - `simulateDay({ games, teams, rngState })` returns `{ games, plays, boxScores, rngState }`: only the rows that changed. Games run in the order given and share one RNG.
+  - `simulateDay({ games, teams, rngState })` returns `{ games, plays, boxScores, replays, rngState }`: only the rows that changed. Games run in the order given and share one RNG. `replays` holds, for each game, what is needed to play it again: see [Season tables, replays and history](#season-tables-replays-and-history-phase-12-and-13).
+  - `game-engine/src/season/replay.ts`: `ENGINE_VERSION`, `snapshotTeams`, `restoreTeams` (which rejects a malformed snapshot) and `replayGame(game, snapshot, rngState)`, which reproduces a stored game exactly.
   - A possession starts from an `Origin` (steal, defensive rebound or other). `transitionChance` turns that, the teams' speed ratings and pace into the chance of a fast break; breaks use a shorter clock, a rim-heavy shot mix and a make-chance bonus. Substitutions only happen on dead balls.
   - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, threes, free throws, fouls, steals, blocks, assists, turnovers, rebounds, fast-break share, starter minutes, home edge) inside NBA 2010 to 2020 bounds, so a change that wrecks the balance fails a test.
 - Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
 - Still to come: the season pages.
 
-### Season tables and the simulation queue (Phase 12)
+### Season tables, replays and history (Phase 12 and 13)
 
 Migration `20261112150000_season_core.sql`. Every table hangs off `league_id` with `on delete cascade`, is read-only for the league owner under RLS, and is written only by service-role functions.
 
-| Table             | Holds                                                                                                                                              |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `seasons`         | `year`, `phase` (`regular-season`, `playoffs`, `complete`), `day` (next day to simulate), `last_day`, and the schedule preset and tiers used       |
-| `games`           | One row per scheduled game: day, home and away team, `status`, scores and overtimes. Scores exist only when final, and there are no ties           |
-| `play_events`     | The play-by-play, one row per `PlayEvent` (snake_case columns, `at_x`/`at_y` on the full court). Primary key `(game_id, seq)`                      |
-| `box_score_lines` | One row per player who played, derived from the plays. The lines of each team add up to the game's score (checked on commit)                       |
-| `sim_jobs`        | The queue: `kind` (`day`, `week`, `season`), `status`, `days_requested`, `days_done`, `error`, `worker` and a heartbeat. One active job per league |
+**Storage is the main constraint**, so data lives in tiers. An account has at most 5 leagues and a league plays at most 50 seasons (`season_limit()`).
 
-Rules that keep it consistent:
+| Tier                                   | Tables                                                      | Kept                                       |
+| -------------------------------------- | ----------------------------------------------------------- | ------------------------------------------ |
+| Current season (detail)                | `games`, `game_replays`, `box_score_lines`                  | Until the season is archived               |
+| History (summary of every past season) | `player_season_stats`, `team_season_stats`, `season_awards` | Forever (and `seasons`, marked `archived`) |
+| Queue                                  | `sim_jobs`                                                  | Forever (a few rows)                       |
 
-- **Same-league references.** Games, plays, lines and jobs reference seasons, teams and players by `(league_id, id)`, so nothing can point into another league. `players` gained `unique (league_id, id)` for this.
+| Table                 | Holds                                                                                                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `seasons`             | `year`, `phase` (`regular-season`, `playoffs`, `complete`), `day` (next day to simulate), `last_day`, the schedule preset and tiers, and `archived_at`                                                                                            |
+| `games`               | One row per game: day, teams, `status`, scores, overtimes. Scores exist only when final, and there are no ties                                                                                                                                    |
+| `game_replays`        | The recipe to replay a game: `snapshot` (both rosters' ratings and strategies as they were), `rng_state` (the league's RNG just before the game) and `engine_version`. **No plays are stored**                                                    |
+| `box_score_lines`     | One row per player who played, derived from the plays. Each team's lines add up to its score (checked on commit)                                                                                                                                  |
+| `player_season_stats` | A player's season totals per team: games, starts, minutes, points, rebounds, assists, steals, blocks, turnovers, fouls, shooting splits, plus `high_points`, `double_doubles` and `triple_doubles`. Per-game averages are totals divided by games |
+| `team_season_stats`   | A team's record (overall, home, division, conference), points for and against, and where it finished (overall, conference, division)                                                                                                              |
+| `season_awards`       | Award winners per season (`award` is free text such as `champion`, with a team and/or player). Empty until playoffs and awards exist                                                                                                              |
+| `sim_jobs`            | The queue: `kind` (`day`, `week`, `season`), `status`, `days_requested`, `days_done`, `error`, `worker` and a heartbeat. One active job per league                                                                                                |
+
+**Plays are replayed, not stored.** The engine is deterministic, so a game's recipe gives back the exact plays, score and box score (`replayGame` in `@fullcourt/game-engine`, about 1.3 ms a game, on a server, in a browser or on a phone). Storing 416 plays a game as rows cost 105 MB a season; the recipe costs about 3 MB.
+
+- **Engine versions.** `ENGINE_VERSION` (`game-engine/src/season/replay.ts`) is stored with every recipe. Any change that makes the same recipe produce different plays must bump it: `replay.test.ts` fingerprints the engine's output and fails otherwise. Games stored under an older version keep their scores and box scores but can't be replayed exactly.
+- **Self-check.** The worker replays every game of a day (after a JSON round trip, as the database stores it) and compares the plays and box score with the originals before committing. A recipe that doesn't reproduce its game fails the job instead of being stored.
+- **Cross-device caveat.** Node against Node reproduces exactly (tested). The engine uses `Math.log` and `Math.cos`, which the JavaScript specification doesn't require to give identical results in every browser engine. A viewer should check that its replay ends on the stored final score and, if it doesn't, ask the server to regenerate the game.
+- **A snapshot must hold everything that affects a game.** Features that add inputs (injuries, lineup settings) have to add them to `ReplaySnapshot`.
+
+**Archiving.** `admin_archive_season(season, standings_order)` runs in one transaction. It computes player and team summaries from the stored games and box scores, takes only the ranking from `rankStandings` (so the tiebreakers stay in one place), checks that each team's points equal its players' points and that wins equal losses, and only then deletes the season's games (their box scores and replays go with them). It needs the season to be `complete`. `admin_create_season` refuses to start a season while an earlier one isn't archived, so detail for more than one season never builds up. **What archiving doesn't summarise is lost for good**, so change the history tables before a season is archived. The offseason flow (Phase 7+) calls it when starting the next season; until playoffs exist nothing marks a season `complete`, so nothing is archived yet.
+
+**Measured** on a local database for one 30-team season (1,140 games), plus a league's own teams and players (about 0.5 MB):
+
+| Part                                | Size                          |
+| ----------------------------------- | ----------------------------- |
+| `games`                             | 0.6 MB                        |
+| `game_replays`                      | 3.4 MB                        |
+| `box_score_lines` (21,700 lines)    | 4.6 MB                        |
+| **Detail of the current season**    | **8.7 MB**                    |
+| History per archived season         | about 0.35 MB                 |
+| Time to simulate and store a season | about 8 seconds on the worker |
+
+So a slot costs about 9 MB plus 0.35 MB for each archived season, and an account's five slots at the same point cost:
+
+| Seasons simulated | One slot | Five slots |
+| ----------------- | -------- | ---------- |
+| 1                 | 9 MB     | 46 MB      |
+| 10                | 12 MB    | 62 MB      |
+| 20                | 16 MB    | 79 MB      |
+| 50 (the limit)    | 26 MB    | 132 MB     |
+
+Box scores are the largest piece of the current season. They could be regenerated from the replays on demand (saving about 4.6 MB a slot), but then they'd disappear for older games after an engine update, so they're stored for now.
+
+Other rules that keep it consistent:
+
+- **Same-league references.** Games, replays, lines, history and jobs reference seasons, teams and players by `(league_id, id)`, so nothing can point into another league. `players` has `unique (league_id, id)` for this.
 - **The calendar.** A season is in `regular-season` exactly while `day <= last_day`. Committing the last day moves it to `playoffs`.
-- **Schedule choice.** The preset and tiers are stored on the season. The league setup does not collect them yet; until it does, the server creates seasons with the standard preset.
+- **Schedule choice.** The preset and tiers are stored on the season. The league setup doesn't collect them yet; until it does, the server creates seasons with the standard preset.
+- **Indexes on cascading foreign keys.** Deleting a league scans a table once per row it removes unless the referencing columns are indexed. Without them, deleting one season of one-row-per-play data took 28 seconds, past the API's 8 second limit.
+- **PostgREST returns at most 1,000 rows per request.** A season has 1,140 games, so pages that list a whole season must read it in pages.
 
 Functions:
 
-| Function                                                         | Caller       | Does                                                                                                                                                                                                              |
-| ---------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enqueue_sim_job(league, kind)`                                  | owner (RPC)  | Queues a day, week (capped at the days left) or the rest of the regular season. Needs an active league and a running season; refuses a second active job                                                          |
-| `cancel_sim_job(job)`                                            | owner (RPC)  | Cancels a queued or running job. Days already committed stay                                                                                                                                                      |
-| `admin_create_season(league, year, preset, tiers, schedule)`     | service role | Creates the season and its games in one transaction; refuses an empty schedule or a team playing twice in a day                                                                                                   |
-| `admin_claim_sim_job(worker)`                                    | worker       | Claims the oldest queued job with `FOR UPDATE SKIP LOCKED`, or returns nothing                                                                                                                                    |
-| `admin_commit_sim_day(job, day, rng_state, games, plays, lines)` | worker       | Commits one day atomically: results, plays, box scores, the league's RNG state, the calendar and job progress. Refuses a repeat, an out-of-order day, a cancelled job or a box score that doesn't match the score |
-| `admin_fail_sim_job(job, message)`                               | worker       | Marks a job failed with a trimmed error                                                                                                                                                                           |
-| `admin_requeue_stale_sim_jobs(max_age)`                          | worker       | Puts running jobs whose heartbeat is older than `max_age` back in the queue; committed days are never repeated, so the next worker resumes                                                                        |
+| Function                                                           | Caller       | Does                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enqueue_sim_job(league, kind)`                                    | owner (RPC)  | Queues a day, week (capped at the days left) or the rest of the regular season. Needs an active league and a running season; refuses a second active job                                                                        |
+| `cancel_sim_job(job)`                                              | owner (RPC)  | Cancels a queued or running job. Days already committed stay                                                                                                                                                                    |
+| `season_limit()`                                                   | anyone       | The most seasons a league can play (50)                                                                                                                                                                                         |
+| `admin_create_season(league, year, preset, tiers, schedule)`       | service role | Creates the season and its games in one transaction. Refuses an empty schedule, a team playing twice in a day, a 51st season, and a new season while an earlier one isn't archived                                              |
+| `admin_claim_sim_job(worker)`                                      | worker       | Claims the oldest queued job with `FOR UPDATE SKIP LOCKED`, or returns nothing                                                                                                                                                  |
+| `admin_commit_sim_day(job, day, rng_state, games, replays, lines)` | worker       | Commits one day atomically: results, one replay per game, box scores, the league's RNG state, the calendar and job progress. Refuses a repeat, an out-of-order day, a cancelled job or a box score that doesn't match the score |
+| `admin_fail_sim_job(job, message)`                                 | worker       | Marks a job failed with a trimmed error                                                                                                                                                                                         |
+| `admin_requeue_stale_sim_jobs(max_age)`                            | worker       | Puts running jobs whose heartbeat is older than `max_age` back in the queue; committed days are never repeated, so the next worker resumes                                                                                      |
+| `admin_archive_season(season, standings_order)`                    | service role | Summarises a complete season into history, checks it, then deletes the season's detail                                                                                                                                          |
 
 `sim_jobs` and `seasons` are in the `supabase_realtime` publication, so a client sees progress and the calendar change as days commit.
 
 ### Simulation (Phase 13)
 
 1. **Queue.** `POST /api/v1/leagues/:id/sim` (`{ "kind": "day" | "week" | "season" }`) calls `startSimulation` in `apps/web/src/server/services/simulation.ts`. It requires an active league, creates the league's first season if there is none, then calls `enqueue_sim_job`. The first season uses the standard schedule preset, built by `generateSchedule` from the league's own structure and teams, with an RNG seeded from the league id and year so it never disturbs the league's simulation RNG. `GET` returns the season and the latest job; `DELETE` cancels the active job. Errors use the usual envelope (`league_not_active`, `season_not_running`, `job_already_running`, `job_not_found`, `schedule_not_supported`). A successful `POST` counts `simulation_started`.
-2. **Worker.** `apps/worker` (Node, run with tsx) loops: it puts jobs whose heartbeat is older than `STALE_AFTER_MS` back in the queue, claims a job with `admin_claim_sim_job`, plays it, and polls every `POLL_INTERVAL_MS` when the queue is empty. For each day it loads that day's games, the rosters of the teams playing and the league's RNG state, runs `simulateDay` from `@fullcourt/game-engine`, and commits with `admin_commit_sim_day`. Teams use the default coaching strategy until strategies are stored.
+2. **Worker.** `apps/worker` (Node, run with tsx) loops: it puts jobs whose heartbeat is older than `STALE_AFTER_MS` back in the queue, claims a job with `admin_claim_sim_job`, plays it, and polls every `POLL_INTERVAL_MS` when the queue is empty. For each day it loads that day's games, the rosters of the teams playing and the league's RNG state, runs `simulateDay` from `@fullcourt/game-engine`, replays every game to check its recipe reproduces it, and commits with `admin_commit_sim_day` (results, one replay per game, box scores). Teams use the default coaching strategy until strategies are stored.
    - `src/db.ts` is the `WorkerDb` interface, `src/supabase-db.ts` the real implementation, `src/map.ts` the row mapping, `src/run-job.ts` the job logic and `src/loop.ts` the loop. Tests run the job logic against an in-memory `WorkerDb`.
    - **Cancelled or repeated work.** If the commit is refused because the job was cancelled, requeued or the day was already committed, the worker stops without failing anything. Days already committed stay.
    - **Bad data.** If the engine can't simulate the day (a team with fewer than five players, an invalid RNG state), or the database rejects the data (a constraint, or the commit's own consistency checks), the job is marked failed with the reason: retrying the same data can't succeed.
@@ -253,9 +300,7 @@ Functions:
 
 Long simulations never run inside an HTTP request or on a client device.
 
-`pnpm --filter @fullcourt/worker smoke` checks the whole chain against a local Supabase (a league, a season, a week, the rest of the season, standings and scoring, then deleting the league). It found that a player could commit a seventh foul, and that deleting a league with a played season took 28 seconds, past the API's 8 second limit, until the cascading foreign keys were indexed.
-
-Measured on a local database for one 30-team season (1,140 games): about 30 seconds to simulate and store (roughly 0.4 seconds a day, 7 days in about 6), 470,000 play rows and 22,000 box score lines, and about 105 MB (67 MB of rows, 38 MB of indexes). Plays are by far the largest table, so how long to keep them is the next storage decision.
+`pnpm --filter @fullcourt/worker smoke` checks the whole chain against a local Supabase (a league, a season, a week, the rest of the season, a stored recipe replayed as a viewer would, standings and scoring, then archiving the season into history, checking the history adds up to every point scored, and starting the next season). `SMOKE_KEEP=before-archive` stops before archiving so table sizes can be measured. It found that a player could commit a seventh foul, and that deleting a league with a season of one-row-per-play data took 28 seconds, past the API's 8 second limit.
 
 ### Open alpha: policies, support and analytics
 

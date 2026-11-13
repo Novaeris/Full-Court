@@ -104,6 +104,45 @@ export type Database = {
           },
         ]
       }
+      game_replays: {
+        Row: {
+          engine_version: number
+          game_id: string
+          league_id: string
+          rng_state: number[]
+          snapshot: Json
+        }
+        Insert: {
+          engine_version: number
+          game_id: string
+          league_id: string
+          rng_state: number[]
+          snapshot: Json
+        }
+        Update: {
+          engine_version?: number
+          game_id?: string
+          league_id?: string
+          rng_state?: number[]
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_replays_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_replays_league_id_game_id_fkey"
+            columns: ["league_id", "game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       games: {
         Row: {
           away_score: number | null
@@ -312,100 +351,106 @@ export type Database = {
           },
         ]
       }
-      play_events: {
+      player_season_stats: {
         Row: {
-          assist_player_id: string | null
-          at_x: number | null
-          at_y: number | null
-          away_score: number
-          block_player_id: string | null
-          clock: number
-          game_id: string
-          home_score: number
-          kind: string
+          assists: number
+          blocks: number
+          double_doubles: number
+          fga: number
+          fgm: number
+          fouls: number
+          fta: number
+          ftm: number
+          games_played: number
+          games_started: number
+          high_points: number
           league_id: string
-          made: boolean | null
-          offensive: boolean | null
-          out_player_id: string | null
-          period: number
-          player_id: string | null
+          minutes: number
+          player_id: string
           points: number
-          seq: number
-          shot_zone: string | null
-          steal_player_id: string | null
-          team_id: string | null
-          transition: boolean
+          rebounds: number
+          season_id: string
+          steals: number
+          team_id: string
+          tpa: number
+          tpm: number
+          triple_doubles: number
+          turnovers: number
         }
         Insert: {
-          assist_player_id?: string | null
-          at_x?: number | null
-          at_y?: number | null
-          away_score: number
-          block_player_id?: string | null
-          clock: number
-          game_id: string
-          home_score: number
-          kind: string
+          assists: number
+          blocks: number
+          double_doubles: number
+          fga: number
+          fgm: number
+          fouls: number
+          fta: number
+          ftm: number
+          games_played: number
+          games_started: number
+          high_points: number
           league_id: string
-          made?: boolean | null
-          offensive?: boolean | null
-          out_player_id?: string | null
-          period: number
-          player_id?: string | null
-          points?: number
-          seq: number
-          shot_zone?: string | null
-          steal_player_id?: string | null
-          team_id?: string | null
-          transition?: boolean
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          season_id: string
+          steals: number
+          team_id: string
+          tpa: number
+          tpm: number
+          triple_doubles: number
+          turnovers: number
         }
         Update: {
-          assist_player_id?: string | null
-          at_x?: number | null
-          at_y?: number | null
-          away_score?: number
-          block_player_id?: string | null
-          clock?: number
-          game_id?: string
-          home_score?: number
-          kind?: string
+          assists?: number
+          blocks?: number
+          double_doubles?: number
+          fga?: number
+          fgm?: number
+          fouls?: number
+          fta?: number
+          ftm?: number
+          games_played?: number
+          games_started?: number
+          high_points?: number
           league_id?: string
-          made?: boolean | null
-          offensive?: boolean | null
-          out_player_id?: string | null
-          period?: number
-          player_id?: string | null
+          minutes?: number
+          player_id?: string
           points?: number
-          seq?: number
-          shot_zone?: string | null
-          steal_player_id?: string | null
-          team_id?: string | null
-          transition?: boolean
+          rebounds?: number
+          season_id?: string
+          steals?: number
+          team_id?: string
+          tpa?: number
+          tpm?: number
+          triple_doubles?: number
+          turnovers?: number
         }
         Relationships: [
           {
-            foreignKeyName: "play_events_league_id_fkey"
+            foreignKeyName: "player_season_stats_league_id_fkey"
             columns: ["league_id"]
             isOneToOne: false
             referencedRelation: "leagues"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "play_events_league_id_game_id_fkey"
-            columns: ["league_id", "game_id"]
-            isOneToOne: false
-            referencedRelation: "games"
-            referencedColumns: ["league_id", "id"]
-          },
-          {
-            foreignKeyName: "play_events_league_id_player_id_fkey"
+            foreignKeyName: "player_season_stats_league_id_player_id_fkey"
             columns: ["league_id", "player_id"]
             isOneToOne: false
             referencedRelation: "players"
             referencedColumns: ["league_id", "id"]
           },
           {
-            foreignKeyName: "play_events_league_id_team_id_fkey"
+            foreignKeyName: "player_season_stats_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_season_stats_league_id_team_id_fkey"
             columns: ["league_id", "team_id"]
             isOneToOne: false
             referencedRelation: "teams"
@@ -545,8 +590,68 @@ export type Database = {
         }
         Relationships: []
       }
+      season_awards: {
+        Row: {
+          award: string
+          created_at: string
+          id: string
+          league_id: string
+          player_id: string | null
+          season_id: string
+          team_id: string | null
+        }
+        Insert: {
+          award: string
+          created_at?: string
+          id?: string
+          league_id: string
+          player_id?: string | null
+          season_id: string
+          team_id?: string | null
+        }
+        Update: {
+          award?: string
+          created_at?: string
+          id?: string
+          league_id?: string
+          player_id?: string | null
+          season_id?: string
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "season_awards_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "season_awards_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "season_awards_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "season_awards_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       seasons: {
         Row: {
+          archived_at: string | null
           created_at: string
           day: number
           id: string
@@ -558,6 +663,7 @@ export type Database = {
           year: number
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           day?: number
           id?: string
@@ -569,6 +675,7 @@ export type Database = {
           year: number
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           day?: number
           id?: string
@@ -648,6 +755,85 @@ export type Database = {
             columns: ["league_id", "season_id"]
             isOneToOne: false
             referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
+      team_season_stats: {
+        Row: {
+          conference_losses: number
+          conference_wins: number
+          division_losses: number
+          division_wins: number
+          home_losses: number
+          home_wins: number
+          league_id: string
+          losses: number
+          points_against: number
+          points_for: number
+          rank_conference: number
+          rank_division: number
+          rank_overall: number
+          season_id: string
+          team_id: string
+          wins: number
+        }
+        Insert: {
+          conference_losses: number
+          conference_wins: number
+          division_losses: number
+          division_wins: number
+          home_losses: number
+          home_wins: number
+          league_id: string
+          losses: number
+          points_against: number
+          points_for: number
+          rank_conference: number
+          rank_division: number
+          rank_overall: number
+          season_id: string
+          team_id: string
+          wins: number
+        }
+        Update: {
+          conference_losses?: number
+          conference_wins?: number
+          division_losses?: number
+          division_wins?: number
+          home_losses?: number
+          home_wins?: number
+          league_id?: string
+          losses?: number
+          points_against?: number
+          points_for?: number
+          rank_conference?: number
+          rank_division?: number
+          rank_overall?: number
+          season_id?: string
+          team_id?: string
+          wins?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_season_stats_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_season_stats_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "team_season_stats_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["league_id", "id"]
           },
         ]
@@ -751,6 +937,27 @@ export type Database = {
         Args: { acknowledged_version: number }
         Returns: undefined
       }
+      admin_archive_season: {
+        Args: { standings_order: string[]; target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          phase: string
+          schedule_preset: string
+          schedule_tiers: Json
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_claim_sim_job: {
         Args: { worker_name: string }
         Returns: {
@@ -779,7 +986,7 @@ export type Database = {
         Args: {
           day_games: Json
           day_lines: Json
-          day_plays: Json
+          day_replays: Json
           new_rng_state: number[]
           sim_day: number
           target_job: string
@@ -881,6 +1088,7 @@ export type Database = {
           tiers: Json
         }
         Returns: {
+          archived_at: string | null
           created_at: string
           day: number
           id: string
@@ -1023,6 +1231,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      season_limit: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never

@@ -1,4 +1,10 @@
-import { simulateDay } from "@fullcourt/game-engine";
+import {
+  replayGame,
+  simulateDay,
+  type ReplaySnapshot,
+  type SimulateDayResult,
+} from "@fullcourt/game-engine";
+import type { Game } from "@fullcourt/game-types";
 import {
   CommitRefused,
   CommitRejected,
@@ -7,7 +13,7 @@ import {
 } from "./db";
 import {
   toDbLine,
-  toDbPlay,
+  toDbReplay,
   toDbResult,
   toEngineGame,
   toRngState,
@@ -50,17 +56,19 @@ export async function runJob(
 
     let commit;
     try {
+      const games = rows.games.map(toEngineGame);
       const result = simulateDay({
-        games: rows.games.map(toEngineGame),
+        games,
         teams: toSimTeams(rows.games, rows.players),
         rngState: toRngState(rows.rngState),
       });
+      verifyReplays(games, result);
       commit = {
         jobId: current.id,
         day,
         rngState: [...result.rngState],
         games: result.games.map(toDbResult),
-        plays: result.plays.map(toDbPlay),
+        replays: result.replays.map(toDbReplay),
         lines: result.boxScores.flatMap((b) => b.lines.map(toDbLine)),
       };
     } catch (error) {
@@ -94,4 +102,37 @@ export async function runJob(
       `job ${current.id}: day ${day} committed (${current.days_done}/${current.days_requested})`,
     );
   }
+}
+
+/**
+ * Games are stored as replay recipes, not plays, so a recipe that doesn't
+ * reproduce its game would silently lose it. Replay every game of the day,
+ * through the same JSON round trip the database applies, and compare the plays
+ * and box score with the originals. A mismatch means the snapshot is missing
+ * something the engine reads: the job fails instead of storing a bad recipe.
+ * Replaying costs about a millisecond a game.
+ */
+function verifyReplays(
+  games: readonly Game[],
+  result: SimulateDayResult,
+): void {
+  result.replays.forEach((replay, i) => {
+    const game = games[i];
+    if (!game || game.id !== replay.gameId) {
+      throw new Error("Replays are out of step with the day's games.");
+    }
+    const stored = JSON.parse(JSON.stringify(replay)) as typeof replay;
+    const again = replayGame(
+      game,
+      stored.snapshot as ReplaySnapshot,
+      stored.rngState,
+    );
+    const plays = result.plays.filter((p) => p.gameId === game.id);
+    if (
+      JSON.stringify(again.plays) !== JSON.stringify(plays) ||
+      JSON.stringify(again.boxScore) !== JSON.stringify(result.boxScores[i])
+    ) {
+      throw new Error(`The replay of game ${game.id} does not reproduce it.`);
+    }
+  });
 }

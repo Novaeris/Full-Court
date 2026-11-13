@@ -47,3 +47,13 @@ export type {
   SimTeam,
   SimulatedGame,
 } from "./season/types";
+export {
+  ENGINE_VERSION,
+  replayGame,
+  restoreTeams,
+  snapshotTeams,
+  type GameReplay,
+  type ReplayPlayer,
+  type ReplaySnapshot,
+  type ReplayTeam,
+} from "./season/replay";
