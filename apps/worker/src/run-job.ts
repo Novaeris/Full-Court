@@ -5,6 +5,7 @@ import {
   type SimulateDayResult,
 } from "@fullcourt/game-engine";
 import type { Game } from "@fullcourt/game-types";
+import { isTradeDay, runTradeRound } from "./trade-round";
 import {
   CommitRefused,
   CommitRejected,
@@ -52,6 +53,25 @@ export async function runJob(
     }
 
     const day = season.day;
+    // Computer teams may trade before a day's games, until the deadline.
+    if (
+      db.loadTradeTeams &&
+      db.applyTrade &&
+      isTradeDay(day, season.last_day)
+    ) {
+      try {
+        const made = await runTradeRound(
+          { loadTradeTeams: db.loadTradeTeams, applyTrade: db.applyTrade },
+          season,
+        );
+        if (made > 0)
+          log(`job ${current.id}: ${made} trade(s) before day ${day}`);
+      } catch (error) {
+        log(
+          `job ${current.id}: trades skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
     const rows = await db.loadDay(season, day);
 
     let commit;

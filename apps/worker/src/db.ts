@@ -1,4 +1,5 @@
 import type { Database } from "@fullcourt/api-client";
+import type { TradeStore } from "./trade-round";
 
 export type SeasonRow = Database["public"]["Tables"]["seasons"]["Row"];
 export type SimJobRow = Database["public"]["Tables"]["sim_jobs"]["Row"];
@@ -74,7 +75,7 @@ export class CommitRejected extends Error {
 }
 
 /** Everything the worker does to the database, so the job logic can be tested without one. */
-export interface WorkerDb {
+export interface WorkerDb extends Partial<TradeStore> {
   claimJob(worker: string): Promise<SimJobRow | null>;
   requeueStale(maxAgeMs: number): Promise<number>;
   loadSeason(id: string): Promise<SeasonRow>;

@@ -1,7 +1,9 @@
 import type { Database } from "@fullcourt/api-client";
+import type { AiTrade } from "@fullcourt/game-engine";
 import { createClient } from "@supabase/supabase-js";
 import type { WorkerConfig } from "./config";
 import { describeError } from "./errors";
+import type { TradeTeam } from "./trade-round";
 import {
   CommitRefused,
   CommitRejected,
@@ -116,6 +118,74 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         throw error;
       }
       return data;
+    },
+
+    async loadTradeTeams(seasonId: string): Promise<TradeTeam[]> {
+      const season = await client
+        .from("seasons")
+        .select("league_id, year")
+        .eq("id", seasonId)
+        .single();
+      if (season.error) throw season.error;
+      const leagueId = season.data.league_id;
+      const [teams, players] = await Promise.all([
+        client
+          .from("teams")
+          .select("id, local_player_slot, ai_trades")
+          .eq("league_id", leagueId),
+        client
+          .from("players")
+          .select(
+            "id, team_id, position, age, overall, potential, salary, contract_expires",
+          )
+          .eq("league_id", leagueId)
+          .eq("status", "active")
+          .not("team_id", "is", null)
+          .limit(5000),
+      ]);
+      if (teams.error) throw teams.error;
+      if (players.error) throw players.error;
+      const acting = new Set(
+        teams.data
+          .filter((t) => t.local_player_slot === null || t.ai_trades)
+          .map((t) => t.id),
+      );
+      const byTeam = new Map<string, TradeTeam>();
+      for (const p of players.data) {
+        if (!p.team_id || !acting.has(p.team_id)) continue;
+        const team = byTeam.get(p.team_id) ?? {
+          id: p.team_id,
+          payroll: 0,
+          roster: [],
+        };
+        const salary = p.salary ?? 0;
+        team.payroll += salary;
+        team.roster.push({
+          id: p.id,
+          position: p.position,
+          age: p.age,
+          overall: p.overall,
+          potential: p.potential,
+          salary,
+          yearsLeft: Math.max(
+            1,
+            (p.contract_expires ?? season.data.year) - season.data.year + 1,
+          ),
+        });
+        byTeam.set(p.team_id, team);
+      }
+      return [...byTeam.values()].sort((a, b) => a.id.localeCompare(b.id));
+    },
+
+    async applyTrade(seasonId: string, trade: AiTrade): Promise<void> {
+      const { error } = await client.rpc("admin_apply_trade", {
+        target_season: seasonId,
+        trade_team_a: trade.teamA,
+        trade_team_b: trade.teamB,
+        from_a: trade.fromA,
+        from_b: trade.fromB,
+      });
+      if (error) throw error;
     },
 
     async failJob(jobId: string, message: string): Promise<void> {

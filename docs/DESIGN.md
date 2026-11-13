@@ -138,9 +138,9 @@ _Numbers are tunable._ This is the first slice of trading: the owner proposes, t
 ### Computer teams trade
 
 - **Who.** Every computer team, and an owner's team only when its AI Assist _trades_ switch is on. An owner's team with the switch off is never traded.
-- **When.** Every third day of free agency, while trades are open: up to two trades a round, each team and player used once.
+- **When.** Every third day of free agency, and before every fifth day of the regular season until the trade deadline: up to two trades a round, each team and player used once.
 - **What a deal is.** One player for one. Both teams must come out ahead by their own count (at least 2%), and the only difference between their counts is need: a position a team has fewer than two of is worth 10% more to it, unless it is sending a player at that position away. Each team keeps its two best players. The deal must be legal (rosters, hard ceiling, salary matching).
-- **Not yet.** Trades during the regular season, offers from computer teams to the owner, and draft picks as assets.
+- **Not yet.** Offers from computer teams to the owner, and draft picks as assets.
 
 ### AI Assist
 
