@@ -47,9 +47,22 @@ Before a league starts, its owner chooses:
 
 The rest of the league is generated around those choices, and the owner can preview it, shuffle the generated teams and rename conferences and divisions before creating it. Technical detail: [ARCHITECTURE.md](./ARCHITECTURE.md#owner-mode-league-setup-and-creation).
 
+## The season (Owner Mode)
+
+Design for the season core. Phase 10 fixes the types and rules (`@fullcourt/game-types` `season.ts`, `@fullcourt/game-rules` `season/`); later phases build on them. Defaults marked _tunable_ are expected to change after play-testing.
+
+- **Calendar.** A season has a `year`, a `phase` (`regular-season`, `playoffs`, `complete`) and a `day`, the next game day to simulate. Game time is data and never read from the clock.
+- **Schedule.** Each pair of teams meets a fixed number of times by relationship (division, same conference, other conference). The owner picks a preset or sets custom counts of 1 to 8 for each. The standard 30-team league plays 43 games on **short** (2/2/1), **76 on standard** (4/3/2, the default) and 86 on **long** (4/4/2); other structures get their own totals, and the setup screen shows the number before the league is created. Custom counts are allowed as long as every team plays the same number of games (`validateScheduleTiers`). An exact 82-game season can't be built from these tiers in the standard league; a "target length" option can be added later if players want one. Odd counts are allowed; the generator splits those pairs' home games so each team's home and away totals differ by at most one. Teams play at most one game per day. The chosen preset and tiers are stored with the league (`LeagueConfig`, added in Phase 12 with the season tables).
+- **Games, plays and box scores.** A game has a day, home and away team, a status (`scheduled` or `final`), scores and overtimes. Every game also keeps its **play-by-play**: an ordered list of events (shots with court position, assists, blocks, rebounds, turnovers and steals, fouls, free throws, substitutions, period starts and ends) with the running score. The box score (minutes, points, rebounds, assists, steals, blocks, turnovers, fouls and shooting splits per player) is derived from the plays, so it always matches what the viewer sees. Games always have a winner; ties go to 5-minute overtimes.
+- **Simulation fidelity.** Possession by possession. Four 12-minute periods. On each trip the offence may turn the ball over, draw a foul or take a shot; shooters, zones and passers are chosen from ratings, and the defence's ratings, fatigue and the coaching strategy shift the odds. Misses can be blocked or rebounded either way. Stamina drains on court and recovers on the bench, which drives substitutions. The same seed and decisions give identical plays.
+- **Watching a game.** The plays carry what a viewer needs to animate the game: who is on court (from the starting lineups and substitutions), which team has the ball, and where each shot was taken on a half-court (`CourtPoint`). The game page (Phase 14) renders a court with shot markers and a live play feed, with controls to play at speed, skip to the end or step play by play.
+- **Team strategy.** Three coaching choices feed the simulation: pace (slow, normal, fast), three-point focus (low, normal, high) and defence (balanced, perimeter, interior). AI-run franchises use the defaults.
+- **Standings.** Ranked by win percentage. Ties break by record among the tied teams, then division record (all tied teams in one division), then conference record (all in one conference), then point differential, then team id so the order is always determined. The ranking feeds playoff seeding directly (`rankStandings` returns what `seedPlayoffTeams` takes).
+- **Advancing time.** The player asks to simulate a day, a week or the rest of the season. A worker runs it in the background, one day at a time, and the page follows progress live. The worker is the only thing that writes results.
+
 ## Roadmap
 
-The phases below are Owner Mode's.
+The phases below are Owner Mode's product roadmap. Engineering work is numbered separately: branches `phase-1` to `phase-9` were the league setup, and the season core continues from `phase-10` (design and rules), `phase-11` (schedule and game engine), `phase-12` (season tables), `phase-13` (simulation worker) and `phase-14` (season pages). Together they deliver roadmap phases 5 and 6.
 
 | Phase | Scope                                                                                         |
 | ----- | --------------------------------------------------------------------------------------------- |

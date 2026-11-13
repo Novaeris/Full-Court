@@ -190,6 +190,15 @@ Owner Mode is how a league is set up before it starts: structure, region, playof
 - `scripts/check-boundaries.mjs` fails the build when the key is mentioned anywhere else, or when any `NEXT_PUBLIC_` variable looks like a secret.
 - The repository is **public**. `scripts/scan-secrets.mjs` runs in a pre-commit hook and in `pnpm verify`.
 
+### Season model (roadmap phases 5 and 6)
+
+Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces live:
+
+- `game-types/src/season.ts`: `SeasonState`, `ScheduleTiers`, `Game`, `PlayerGameLine`, `BoxScore`, `TeamStrategy` and their defaults.
+- `game-rules/src/season/schedule.ts`: matchup tiers, opponent counts, `seasonLength` and `validateScheduleTiers`.
+- `game-rules/src/season/standings.ts`: `rankStandings` (deterministic tiebreakers). Its rows extend `StandingEntry`, so they pass straight to `seedPlayoffTeams`.
+- Still to come: the schedule generator and `simulateDay` in `game-engine`, the season tables and `sim_jobs`, `apps/worker`, and the season pages.
+
 ### Simulation (Phase 6)
 
 1. Clients call `POST /api/v1/leagues/:id/sim`, which adds a row to a `sim_jobs` queue.
