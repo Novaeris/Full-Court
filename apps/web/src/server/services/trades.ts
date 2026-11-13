@@ -1,5 +1,10 @@
 import "server-only";
-import { shopPlayers } from "@fullcourt/game-engine";
+import {
+  createRng,
+  proposeAiTrades,
+  seedState,
+  shopPlayers,
+} from "@fullcourt/game-engine";
 import {
   answerTrade,
   dealWords,
@@ -478,4 +483,66 @@ export async function shopTradePlayers(
       deal: dealWords(o.receives, o.gives),
     })),
   };
+}
+
+/** The most trades the computer teams make in one round. */
+const AI_TRADES_PER_ROUND = 2;
+
+/**
+ * One round of trades between computer teams (and owner teams whose AI Assist
+ * _trades_ switch is on), in whatever window is open. The round is seeded from
+ * the league, the year, the stage and `round`, so it is the same however the
+ * days are batched. A trade the database refuses is skipped, never fatal.
+ */
+export async function runComputerTrades(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+  round: number,
+): Promise<number> {
+  const w = window(season);
+  if (!w.open) return 0;
+  const owned = await ownedTeams(ctx, leagueId);
+  const held = new Set(owned.filter((t) => !t.assist.trades).map((t) => t.id));
+  const rows = await rosterRows(ctx, leagueId);
+  const teamIds = [
+    ...new Set(rows.flatMap((r) => (r.team_id ? [r.team_id] : []))),
+  ]
+    .filter((id) => !held.has(id))
+    .sort();
+  const trades = proposeAiTrades(
+    createRng(
+      seedState(
+        `${leagueId}:ai-trades:${season.year}:${season.stage ?? season.phase}:${round}`,
+      ),
+    ),
+    {
+      teams: teamIds.map((id) => ({
+        id,
+        payroll: payrollOf(rows, id),
+        roster: rows
+          .filter((r) => r.team_id === id)
+          .map((r) => assetOf(r, season)),
+      })),
+      cap: season.salary_cap,
+      inSeason: w.inSeason,
+      most: AI_TRADES_PER_ROUND,
+    },
+  );
+  let made = 0;
+  for (const t of trades) {
+    try {
+      await applyTrade({
+        seasonId: season.id,
+        teamA: t.teamA,
+        teamB: t.teamB,
+        fromA: t.fromA,
+        fromB: t.fromB,
+      });
+      made++;
+    } catch {
+      // The database holds the limits; a refused trade just doesn't happen.
+    }
+  }
+  return made;
 }

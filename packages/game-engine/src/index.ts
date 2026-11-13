@@ -128,3 +128,9 @@ export {
   type FaTeam,
 } from "./offseason/freeagency";
 export { shopPlayers, type ShopOffer, type ShopTeam } from "./offseason/trades";
+export {
+  proposeAiTrades,
+  AI_TRADE_EDGE,
+  type AiTrade,
+  type AiTradeTeam,
+} from "./offseason/ai-trades";

@@ -135,6 +135,13 @@ _Numbers are tunable._ This is the first slice of trading: the owner proposes, t
 - **Shopping a player.** The owner can ask what the computer teams would give for one of their players: each team looks for a package from its roster that it would accept and that fits the cap, and the best few are shown. The owner can take one or use it as a starting point.
 - **What is kept.** Every trade is recorded (the teams, the players each side gave and the day), and each traded player gets a transaction.
 
+### Computer teams trade
+
+- **Who.** Every computer team, and an owner's team only when its AI Assist _trades_ switch is on. An owner's team with the switch off is never traded.
+- **When.** Every third day of free agency, while trades are open: up to two trades a round, each team and player used once.
+- **What a deal is.** One player for one. Both teams must come out ahead by their own count (at least 2%), and the only difference between their counts is need: a position a team has fewer than two of is worth 10% more to it, unless it is sending a player at that position away. Each team keeps its two best players. The deal must be legal (rosters, hard ceiling, salary matching).
+- **Not yet.** Trades during the regular season, offers from computer teams to the owner, and draft picks as assets.
+
 ### AI Assist
 
 AI Assist is for owners who want a less hands-on game, or who simulate through a stretch and don't want to do a job they find tedious. Each franchise the user runs has five switches. **On means the AI does that job for the franchise when the owner simulates or moves on, with the same rules as a computer team; off means the owner has to do it and the game waits. Either way the owner can always do the job themselves first: AI Assist only takes over what the owner leaves undone.** The switches can be changed at any time, from the Offseason page or from the league's settings.
@@ -145,7 +152,7 @@ AI Assist is for owners who want a less hands-on game, or who simulate through a
 | Scouting          | ranks the draft board for the franchise's needs and suggests the best pick                            | sees the scouted ratings and ranks the board themselves (a suggestion is still one click away)        |
 | Roster management | releases and signs players in free agency and the preseason, as a computer team does                  | releases and signs their own players                                                                  |
 | Roster coverage   | keeps the roster legal (12 to 15) and every position covered when the owner has left it short or long | has to make the roster legal before free agency or the preseason can end; the game says what is wrong |
-| Trades            | _not built yet_ (trades are a later phase)                                                            | _not built yet_                                                                                       |
+| Trades            | lets the franchise trade with other computer teams in free agency and the preseason                   | makes no trades unless the owner proposes them                                                        |
 
 Nothing the AI does is hidden: what it did shows in the offseason report. Simulating never blocks on a job that the AI is doing.
 
