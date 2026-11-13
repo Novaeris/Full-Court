@@ -131,12 +131,22 @@ test.describe("playoffs", () => {
     const { teams } = await api.leagues.teams(league.id);
     for (const t of teams) {
       const detail = await api.leagues.team(league.id, t.id);
-      expect(detail.players).toHaveLength(15);
+      expect(detail.players.length).toBeGreaterThanOrEqual(12);
+      expect(detail.players.length).toBeLessThanOrEqual(15);
     }
     await page.goto(`/leagues/${league.id}/offseason`);
     await expect(
       page.getByRole("heading", { name: `${report.year} draft` }),
     ).toBeVisible();
+    // The lottery covers the teams that missed the playoffs, odds adding to 100%.
+    await expect(
+      page.getByRole("heading", { name: "Draft lottery" }),
+    ).toBeVisible();
+    const odds = report.draft
+      .filter((d) => d.round === 1 && d.lotteryOdds !== null)
+      .map((d) => d.lotteryOdds as number);
+    expect(odds.length).toBeGreaterThan(0);
+    expect(odds.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
   });
 
   test("the playoff pages fit the screen, pass axe and have big enough targets", async ({

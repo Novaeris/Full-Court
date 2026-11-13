@@ -10,6 +10,25 @@ export const DRAFT_ROUNDS = 2;
 /** The worst teams that missed the playoffs draw for the first picks. */
 export const LOTTERY_PICKS = 4;
 
+/**
+ * The lottery's weight for each team that missed the playoffs, worst record
+ * first. The three worst teams share the best odds; each better team has
+ * fewer. `lotteryOdds` turns these into the chance of the first pick.
+ */
+export function lotteryWeights(teams: number): number[] {
+  return Array.from(
+    { length: teams },
+    (_, i) => (teams - Math.max(0, i - 2)) ** 2,
+  );
+}
+
+/** Each lottery team's chance of the first pick, worst record first. They sum to 1. */
+export function lotteryOdds(teams: number): number[] {
+  const weights = lotteryWeights(teams);
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  return weights.map((w) => w / total);
+}
+
 /** Extra prospects beyond the picks, who go undrafted into free agency. */
 export const UNDRAFTED_PROSPECTS = 8;
 
@@ -44,7 +63,8 @@ export function expectedChange(age: number): number {
 
 /**
  * The chance a player retires this offseason. Nobody retires young, the chance
- * climbs steeply after 33, and weak players who find no team go sooner.
+ * climbs steeply after 33, and a player who finds no team retires within a
+ * few years (sooner if he is older or weak). Free agency itself has no cap.
  */
 export function retirementChance(
   age: number,
@@ -56,7 +76,8 @@ export function retirementChance(
   if (age >= 34) chance = Math.min(1, 0.08 + (age - 34) * 0.15);
   else if (age >= 31 && overall < 48) chance = 0.1;
   if (overall < 50 && age >= 34) chance += 0.15;
-  if (!hasTeam && (age >= 28 || overall < 45)) chance += 0.25;
+  // A player without a team gives up in time, sooner if he is older or weak.
+  if (!hasTeam) chance += 0.2 + (age >= 28 || overall < 45 ? 0.25 : 0);
   return Math.min(1, chance);
 }
 

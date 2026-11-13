@@ -96,12 +96,20 @@ export async function archiveSeason(input: {
 export async function applyOffseason(input: {
   seasonId: string;
   changes: readonly Record<string, unknown>[];
+  /** One entry per team: how it finished and what the draft lottery did for it. */
+  lottery: readonly {
+    team_id: string;
+    finish_rank: number;
+    expected_pick: number;
+    odds: number | null;
+  }[];
 }): Promise<SeasonRow> {
   const { data, error } = await createAdminClient().rpc(
     "admin_apply_offseason",
     {
       target_season: input.seasonId,
       changes: input.changes as never,
+      lottery: input.lottery as never,
     },
   );
   if (error) throw error;

@@ -101,13 +101,22 @@ export async function runSeasonOffseason(
     ),
     ctx.supabase
       .from("playoff_series")
-      .select("team_a, team_b")
+      .select("round, team_a, team_b, winner_team_id")
       .eq("season_id", season.id),
   ]);
   if (series.error) throw series.error;
-  const playoffTeams = new Set(
-    series.data.flatMap((s) => [s.team_a, s.team_b]),
-  );
+  // How far each playoff team got: the rounds it played, plus one for the title.
+  const lastRound = Math.max(0, ...series.data.map((s) => s.round));
+  const playoffDepth = new Map<string, number>();
+  for (const s of series.data) {
+    for (const team of [s.team_a, s.team_b]) {
+      const won = s.round === lastRound && s.winner_team_id === team ? 1 : 0;
+      playoffDepth.set(
+        team,
+        Math.max(playoffDepth.get(team) ?? 0, s.round + won),
+      );
+    }
+  }
 
   const players: EnginePlayer[] = active.map((row) => {
     const ratings = {} as Ratings;
@@ -129,15 +138,21 @@ export async function runSeasonOffseason(
   });
 
   const rng = createRng(seedState(`${leagueId}:offseason:${season.year}`));
-  const { players: result } = runOffseason(rng, {
+  const { players: result, lottery } = runOffseason(rng, {
     standingsOrder,
-    playoffTeams,
+    playoffDepth,
     players,
     takenNames: new Set(names.map((n) => `${n.first_name} ${n.last_name}`)),
   });
 
   await applyOffseason({
     seasonId: season.id,
+    lottery: lottery.map((l) => ({
+      team_id: l.teamId,
+      finish_rank: l.finishRank,
+      expected_pick: l.expectedPick,
+      odds: l.odds,
+    })),
     changes: result.map((p) => {
       const ratings: Record<string, number> = {};
       for (const key of RATING_KEYS) {
@@ -215,7 +230,9 @@ export async function getOffseason(
   const [picks, retired, history] = await Promise.all([
     ctx.supabase
       .from("draft_picks")
-      .select("pick, round, team_id, player_id")
+      .select(
+        "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds",
+      )
       .eq("league_id", league.id)
       .eq("season_year", year)
       .order("pick"),
@@ -286,6 +303,9 @@ export async function getOffseason(
               pick: p.pick,
               round: p.round,
               teamId: p.team_id,
+              finishRank: p.finish_rank,
+              expectedPick: p.expected_pick,
+              lotteryOdds: p.lottery_odds,
               player: view(row),
             },
           ]

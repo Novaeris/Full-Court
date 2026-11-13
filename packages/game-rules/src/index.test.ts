@@ -3,7 +3,8 @@ import { isLegalRosterSize, missingPositions } from "./index";
 
 describe("game-rules", () => {
   it("checks roster size", () => {
-    expect(isLegalRosterSize(12)).toBe(false);
+    expect(isLegalRosterSize(11)).toBe(false);
+    expect(isLegalRosterSize(12)).toBe(true);
     expect(isLegalRosterSize(13)).toBe(true);
     expect(isLegalRosterSize(15)).toBe(true);
     expect(isLegalRosterSize(16)).toBe(false);

@@ -86,6 +86,7 @@ export {
   progress,
   draftOrder,
   generateDraftClass,
+  type LotteryEntry,
   type OffseasonInput,
   type OffseasonOutput,
   type OffseasonPlayer,

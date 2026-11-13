@@ -9,6 +9,13 @@ import { ResponsiveTable, type Column } from "@/components/ui/responsive-table";
 
 type Mover = OffseasonPlayer & { change: number };
 
+/** 1st, 2nd, 3rd, 4th, 11th, 21st. */
+function ordinal(n: number): string {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+}
+
 function PlayerLink({
   leagueId,
   player,
@@ -58,6 +65,65 @@ export function OffseasonReport({
   const team = (id: string | null) => (id ? teamById.get(id) : undefined);
 
   type DraftRow = OffseasonResponse["draft"][number];
+  const lotteryRows = report.draft
+    .filter((d) => d.round === 1 && d.lotteryOdds !== null)
+    .sort((a, b) => a.expectedPick - b.expectedPick);
+  const moved = (r: DraftRow) => r.expectedPick - r.pick;
+  const lotteryColumns: Column<DraftRow>[] = [
+    {
+      key: "team",
+      header: "Team",
+      cell: (r) => <TeamCell team={team(r.teamId)} />,
+    },
+    {
+      key: "finish",
+      header: "Finished",
+      priority: 2,
+      align: "end",
+      cell: (r) => (
+        <span className="tabular-nums">{ordinal(r.finishRank)}</span>
+      ),
+    },
+    {
+      key: "odds",
+      header: "Chance of No. 1",
+      abbr: "Odds",
+      align: "end",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {((r.lotteryOdds ?? 0) * 100).toFixed(1)}%
+        </span>
+      ),
+    },
+    {
+      key: "expected",
+      header: "Without the lottery",
+      abbr: "Was",
+      priority: 2,
+      align: "end",
+      cell: (r) => <span className="tabular-nums">{r.expectedPick}</span>,
+    },
+    {
+      key: "pick",
+      header: "Pick",
+      align: "end",
+      cell: (r) => <span className="font-semibold tabular-nums">{r.pick}</span>,
+    },
+    {
+      key: "moved",
+      header: "Moved",
+      align: "end",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {moved(r) > 0
+            ? `Up ${moved(r)}`
+            : moved(r) < 0
+              ? `Down ${-moved(r)}`
+              : "-"}
+        </span>
+      ),
+    },
+  ];
   const draftColumns: Column<DraftRow>[] = [
     {
       key: "pick",
@@ -169,6 +235,26 @@ export function OffseasonReport({
 
   return (
     <div className="flex flex-col gap-10">
+      {lotteryRows.length > 0 ? (
+        <section aria-labelledby="lottery-heading">
+          <h2 id="lottery-heading" className="mb-1 text-xl font-bold">
+            Draft lottery
+          </h2>
+          <p className="mb-3 text-text-muted">
+            Teams that missed the playoffs are in the lottery, with the best
+            odds for the worst records. The first four picks are drawn; the rest
+            follow the standings, and the playoff teams pick after, ordered by
+            how far they got.
+          </p>
+          <ResponsiveTable
+            caption={`The ${report.year} draft lottery`}
+            columns={lotteryColumns}
+            rows={lotteryRows}
+            rowKey={(r) => String(r.pick)}
+          />
+        </section>
+      ) : null}
+
       <section aria-labelledby="draft-heading">
         <h2 id="draft-heading" className="mb-3 text-xl font-bold">
           {report.year} draft

@@ -1,7 +1,7 @@
 import { POSITIONS, type Position } from "@fullcourt/game-types";
 
-/** Roster size limits. Placeholder values until the league rules are designed. */
-export const ROSTER_LIMITS = { min: 13, max: 15 } as const;
+/** Roster size limits: a team may carry anywhere from 12 to 15 players. */
+export const ROSTER_LIMITS = { min: 12, max: 15 } as const;
 
 export function isLegalRosterSize(size: number): boolean {
   return (

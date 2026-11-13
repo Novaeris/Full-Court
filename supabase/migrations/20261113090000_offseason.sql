@@ -39,6 +39,12 @@ create table public.draft_picks (
   round smallint not null check (round >= 1),
   team_id uuid not null,
   player_id uuid not null,
+  -- How the pick came about: where the picking team finished (1 = best), the
+  -- pick it would have had without the lottery, and its chance of the first
+  -- pick (null if it made the playoffs and was not in the lottery).
+  finish_rank smallint not null check (finish_rank >= 1),
+  expected_pick smallint not null check (expected_pick >= 1),
+  lottery_odds numeric(7, 6) check (lottery_odds between 0 and 1),
   primary key (league_id, season_year, pick),
   foreign key (league_id, team_id)
     references public.teams (league_id, id) on delete cascade,
@@ -93,11 +99,13 @@ create policy "player_ratings_history: league owner can read"
 --   team_id (null = free agent), retired, draft_round, draft_pick, draft_team_id,
 --   previous_overall (null for a rookie).
 -- Existing players (is_new false) are updated; new ones (the rookie class) are
--- inserted with the id the caller chose. All of it happens in one transaction,
--- or none does.
+-- inserted with the id the caller chose. `lottery` is one object per team:
+-- team_id, finish_rank, expected_pick, odds (null outside the lottery).
+-- All of it happens in one transaction, or none does.
 create function public.admin_apply_offseason(
   target_season uuid,
-  changes jsonb
+  changes jsonb,
+  lottery jsonb
 )
 returns public.seasons
 language plpgsql
@@ -110,6 +118,7 @@ declare
   existing_total integer;
   updated_total integer;
   bad_team uuid;
+  picks_total integer;
 begin
   select * into finished from public.seasons where id = target_season for update;
   if not found then
@@ -126,6 +135,9 @@ begin
     where league_id = finished.league_id and year > finished.year
   ) then
     raise exception 'season_not_latest' using errcode = 'P0001';
+  end if;
+  if lottery is null or jsonb_typeof(lottery) <> 'array' then
+    raise exception 'invalid_changes' using errcode = '22023';
   end if;
   if changes is null or jsonb_typeof(changes) <> 'array' then
     raise exception 'invalid_changes' using errcode = '22023';
@@ -191,10 +203,22 @@ begin
   from offseason_changes c
   where c.is_new and not c.retired;
 
-  insert into public.draft_picks (league_id, season_year, pick, round, team_id, player_id)
-  select finished.league_id, new_year, c.draft_pick, c.draft_round, c.draft_team_id, c.id
+  insert into public.draft_picks (
+    league_id, season_year, pick, round, team_id, player_id,
+    finish_rank, expected_pick, lottery_odds
+  )
+  select finished.league_id, new_year, c.draft_pick, c.draft_round, c.draft_team_id, c.id,
+         l.finish_rank, l.expected_pick, l.odds
   from offseason_changes c
+  join jsonb_to_recordset(lottery) as l(
+    team_id uuid, finish_rank smallint, expected_pick smallint, odds numeric
+  ) on l.team_id = c.draft_team_id
   where c.is_new and c.draft_pick is not null;
+  get diagnostics picks_total = row_count;
+  if picks_total <> (select count(*) from offseason_changes where is_new and draft_pick is not null) then
+    raise exception 'invalid_changes'
+      using errcode = '22023', detail = 'A pick has no lottery entry for its team.';
+  end if;
 
   insert into public.player_ratings_history (
     league_id, player_id, season_year, team_id, age, overall, potential, previous_overall
@@ -211,7 +235,7 @@ begin
     and (
       select count(*) from public.players p
       where p.team_id = t.id and p.status = 'active'
-    ) not between 13 and 15
+    ) not between 12 and 15
   limit 1;
   if bad_team is not null then
     raise exception 'invalid_rosters' using errcode = '22023';
@@ -226,6 +250,6 @@ $$;
 comment on function public.admin_apply_offseason is
   'Stores one offseason (progression, retirements, draft, roster moves) atomically. Service role only.';
 
-revoke execute on function public.admin_apply_offseason(uuid, jsonb)
+revoke execute on function public.admin_apply_offseason(uuid, jsonb, jsonb)
   from public, anon, authenticated;
-grant execute on function public.admin_apply_offseason(uuid, jsonb) to service_role;
+grant execute on function public.admin_apply_offseason(uuid, jsonb, jsonb) to service_role;

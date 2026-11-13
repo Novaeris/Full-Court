@@ -222,6 +222,12 @@ export const OffseasonResponseSchema = z.object({
       pick: z.number().int(),
       round: z.number().int(),
       teamId: z.uuid(),
+      /** Where the picking team finished, 1 = best. */
+      finishRank: z.number().int(),
+      /** The pick it would have had without the lottery. */
+      expectedPick: z.number().int(),
+      /** Its chance of the first pick; null if it made the playoffs. */
+      lotteryOdds: z.number().nullable(),
       player: OffseasonPlayerSchema,
     }),
   ),

@@ -14,6 +14,14 @@ import {
   type OffseasonResult,
 } from "./offseason";
 
+/** The playoff field: the best half of the league, the best team going furthest. */
+function depths(teams: readonly string[]): Map<string, number> {
+  const field = teams.slice(0, Math.ceil(teams.length / 2));
+  return new Map(
+    field.map((t, i) => [t, i === 0 ? 4 : i < 3 ? 3 : i < 5 ? 2 : 1]),
+  );
+}
+
 /** A real generated league, as the offseason sees it. */
 function league(size: "compact" | "standard" = "compact") {
   const world = generateWorld({ seed: "offseason-test", size });
@@ -46,7 +54,7 @@ function simulateYears(
   for (let y = 0; y < years; y++) {
     const out = runOffseason(rng, {
       standingsOrder: teams,
-      playoffTeams: new Set(teams.slice(0, Math.ceil(teams.length / 2))),
+      playoffDepth: depths(teams),
       players,
       takenNames: new Set(players.map((p) => `${p.firstName} ${p.lastName}`)),
     });
@@ -105,31 +113,74 @@ describe("progress", () => {
 
 describe("draftOrder", () => {
   const teams = Array.from({ length: 12 }, (_, i) => `T${i}`); // best first
-  const playoffs = new Set(teams.slice(0, 6));
+  // T0 won the title (depth 4), T1 lost the final (3), T2 and T3 lost in the
+  // semifinals (2), T4 and T5 in the first round (1). T6 to T11 are lottery teams.
+  const depth = new Map([
+    ["T0", 4],
+    ["T1", 3],
+    ["T2", 2],
+    ["T3", 2],
+    ["T4", 1],
+    ["T5", 1],
+  ]);
 
-  it("lists every team once, non-playoff teams before playoff teams", () => {
-    const order = draftOrder(createRng(seedState("d")), teams, playoffs);
+  it("lists every team once, lottery teams before playoff teams", () => {
+    const { order } = draftOrder(createRng(seedState("d")), teams, depth);
     expect([...order].sort()).toEqual([...teams].sort());
-    expect(order.slice(0, 6).every((t) => !playoffs.has(t))).toBe(true);
-    // After the lottery picks, the rest are worst-first.
+    expect(order.slice(0, 6).every((t) => !depth.has(t))).toBe(true);
+    // After the four lottery picks, the other lottery teams are worst-first.
     expect(order.slice(4, 6)).toEqual(
       order.slice(4, 6).sort((a, b) => teams.indexOf(b) - teams.indexOf(a)),
     );
+  });
+
+  it("orders playoff teams by how far they got, then by record", () => {
+    const { order } = draftOrder(createRng(seedState("d")), teams, depth);
+    // Round-one losers (worse record first), then the semifinalists, the
+    // finalist, and the champion last.
     expect(order.slice(6)).toEqual(["T5", "T4", "T3", "T2", "T1", "T0"]);
   });
 
-  it("gives the worst team the first pick more often than the best lottery team", () => {
+  it("gives the worst team better odds than the best lottery team, and the draw follows them", () => {
     const wins = { worst: 0, best: 0 };
-    for (let i = 0; i < 600; i++) {
-      const first = draftOrder(
-        createRng(seedState(`l${i}`)),
-        teams,
-        playoffs,
-      )[0];
-      if (first === "T11") wins.worst += 1;
-      if (first === "T6") wins.best += 1;
+    for (let i = 0; i < 800; i++) {
+      const { order } = draftOrder(createRng(seedState(`l${i}`)), teams, depth);
+      if (order[0] === "T11") wins.worst += 1;
+      if (order[0] === "T6") wins.best += 1;
     }
     expect(wins.worst).toBeGreaterThan(wins.best * 2);
+  });
+
+  it("reports each team's finish, odds and movement", () => {
+    const { entries, order } = draftOrder(
+      createRng(seedState("d")),
+      teams,
+      depth,
+    );
+    expect(entries).toHaveLength(12);
+    const worst = entries.find((e) => e.teamId === "T11");
+    expect(worst).toMatchObject({ finishRank: 12, expectedPick: 1 });
+    expect(entries.find((e) => e.teamId === "T0")).toMatchObject({
+      finishRank: 1,
+      expectedPick: 12,
+      odds: null,
+      pick: 12,
+    });
+    const odds = entries.flatMap((e) => (e.odds === null ? [] : [e.odds]));
+    expect(odds).toHaveLength(6);
+    expect(odds.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+    // The worst three share the best odds.
+    expect(entries[0]?.odds).toBe(entries[2]?.odds);
+    expect(entries[2]?.odds as number).toBeGreaterThan(
+      entries[3]?.odds as number,
+    );
+    // The pick each team got matches the order.
+    for (const e of entries) expect(order[e.pick - 1]).toBe(e.teamId);
+    // Nobody falls below the first four lottery picks' reach: only four teams
+    // can move up, and a lottery team can't drop more than four places.
+    for (const e of entries.filter((x) => x.odds !== null)) {
+      expect(e.pick).toBeLessThanOrEqual(e.expectedPick + 4);
+    }
   });
 });
 
@@ -139,7 +190,7 @@ describe("runOffseason", () => {
       const { teams, players } = league();
       return runOffseason(createRng(seedState("same")), {
         standingsOrder: teams,
-        playoffTeams: new Set(teams.slice(0, 6)),
+        playoffDepth: depths(teams),
         players,
         takenNames: new Set(),
       });
@@ -147,12 +198,14 @@ describe("runOffseason", () => {
     expect(run()).toEqual(run());
   });
 
-  it("fills every team to the roster limit, with the draft done", () => {
+  it("keeps every team within the roster limits, with the draft done", () => {
     const { teams, players, history } = simulateYears(1);
-    for (const team of teams) {
-      expect(players.filter((p) => p.teamId === team)).toHaveLength(
-        ROSTER_LIMITS.max,
-      );
+    const sizes = teams.map(
+      (team) => players.filter((p) => p.teamId === team).length,
+    );
+    for (const size of sizes) {
+      expect(size).toBeGreaterThanOrEqual(ROSTER_LIMITS.min);
+      expect(size).toBeLessThanOrEqual(ROSTER_LIMITS.max);
     }
     const drafted = (history[0] as OffseasonResult[]).filter((p) => p.draft);
     expect(drafted).toHaveLength(teams.length * DRAFT_ROUNDS);
@@ -195,17 +248,30 @@ describe("runOffseason", () => {
     const mean = rostered.reduce((s, p) => s + p.overall, 0) / rostered.length;
     expect(mean).toBeGreaterThan(50);
     expect(mean).toBeLessThan(68);
-    expect(rostered).toHaveLength(teams.length * ROSTER_LIMITS.max);
+    expect(rostered.length).toBeGreaterThanOrEqual(
+      teams.length * ROSTER_LIMITS.min,
+    );
+    expect(rostered.length).toBeLessThanOrEqual(
+      teams.length * ROSTER_LIMITS.max,
+    );
     const stars = rostered.filter((p) => p.overall >= 75).length;
     expect(stars).toBeGreaterThan(0);
   });
 
-  it("keeps the number of players in the pool bounded", () => {
-    const { players } = simulateYears(25);
-    // Rosters, the pool, and the picks released straight after a draft.
-    expect(players.length).toBeLessThanOrEqual(
-      12 * 15 + 12 * 2 + 12 * DRAFT_ROUNDS,
+  it("lets rosters differ from team to team, anywhere in the range", () => {
+    const { teams, players } = simulateYears(6);
+    const sizes = new Set(
+      teams.map((team) => players.filter((p) => p.teamId === team).length),
     );
+    expect(sizes.size).toBeGreaterThan(1);
+  });
+
+  it("does not cap free agency, and the pool still settles over 50 years", () => {
+    const { players, teams } = simulateYears(50);
+    const free = players.filter((p) => p.teamId === null);
+    // Nothing forces free agents out, only age and ability, so the pool is
+    // allowed to be large; it must not grow without bound.
+    expect(free.length).toBeLessThan(teams.length * 10);
   });
 
   it("keeps every draft pick on the books, every year", () => {

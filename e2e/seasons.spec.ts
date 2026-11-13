@@ -33,7 +33,8 @@ test.describe("several seasons", () => {
     const { teams } = await api.leagues.teams(league.id);
     for (const t of teams) {
       const detail = await api.leagues.team(league.id, t.id);
-      expect(detail.players).toHaveLength(15);
+      expect(detail.players.length).toBeGreaterThanOrEqual(12);
+      expect(detail.players.length).toBeLessThanOrEqual(15);
       const numbers = detail.players.map((p) => p.jersey);
       expect(new Set(numbers).size).toBe(numbers.length);
     }

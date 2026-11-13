@@ -106,7 +106,10 @@ export type Database = {
       }
       draft_picks: {
         Row: {
+          expected_pick: number
+          finish_rank: number
           league_id: string
+          lottery_odds: number | null
           pick: number
           player_id: string
           round: number
@@ -114,7 +117,10 @@ export type Database = {
           team_id: string
         }
         Insert: {
+          expected_pick: number
+          finish_rank: number
           league_id: string
+          lottery_odds?: number | null
           pick: number
           player_id: string
           round: number
@@ -122,7 +128,10 @@ export type Database = {
           team_id: string
         }
         Update: {
+          expected_pick?: number
+          finish_rank?: number
           league_id?: string
+          lottery_odds?: number | null
           pick?: number
           player_id?: string
           round?: number
@@ -1282,7 +1291,7 @@ export type Database = {
         Returns: undefined
       }
       admin_apply_offseason: {
-        Args: { changes: Json; target_season: string }
+        Args: { changes: Json; lottery: Json; target_season: string }
         Returns: {
           archived_at: string | null
           created_at: string

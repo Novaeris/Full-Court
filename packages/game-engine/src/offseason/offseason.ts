@@ -7,6 +7,7 @@ import {
 import {
   DRAFT_ROUNDS,
   LOTTERY_PICKS,
+  lotteryWeights,
   MAX_PLAYER_AGE,
   ROSTER_LIMITS,
   UNDRAFTED_PROSPECTS,
@@ -32,9 +33,6 @@ import {
  * database; the result is a list of what changed.
  */
 
-/** Free agents kept per team in the league; the rest retire. */
-export const FREE_AGENT_POOL_PER_TEAM = 2;
-
 export type OffseasonPlayer = {
   id: string;
   /** null for a free agent. */
@@ -52,8 +50,8 @@ export type OffseasonPlayer = {
 export type OffseasonInput = {
   /** Every team, best regular-season record first. */
   standingsOrder: readonly string[];
-  /** Teams that reached the playoffs. */
-  playoffTeams: ReadonlySet<string>;
+  /** 0 for a team that missed the playoffs; else rounds played, plus one for the title. */
+  playoffDepth: ReadonlyMap<string, number>;
   /** Every active player, on a team or free. */
   players: readonly OffseasonPlayer[];
   /** Every name already used in the league, including retired players. */
@@ -82,7 +80,14 @@ export type OffseasonResult = {
   draft: { round: number; pick: number; teamId: string } | null;
 };
 
-export type OffseasonOutput = { players: OffseasonResult[] };
+export type OffseasonOutput = {
+  players: OffseasonResult[];
+  /** How each team's draft position came about. */
+  lottery: LotteryEntry[];
+};
+
+/** A player below this value is not worth a roster place a team doesn't need. */
+const REPLACEMENT_LEVEL = 57;
 
 const ATHLETIC: readonly RatingKey[] = ["speed", "strength", "stamina"];
 const SKILL: readonly RatingKey[] = [
@@ -176,32 +181,77 @@ export function generateDraftClass(
   });
 }
 
+/** How a team's draft position came about. */
+export type LotteryEntry = {
+  teamId: string;
+  /** Where the team finished, 1 = best, out of every team. */
+  finishRank: number;
+  /** The pick it would have had without the lottery, 1 = first. */
+  expectedPick: number;
+  /** Its chance of the first pick; null for a team that made the playoffs. */
+  odds: number | null;
+  /** The pick it got. */
+  pick: number;
+};
+
 /**
- * The order of the picks in one round. Teams that missed the playoffs come
- * first, worst record first, except that the first LOTTERY_PICKS of them are
- * drawn by lottery with the worst teams weighted most. Playoff teams follow,
- * worst record first.
+ * The order of the picks in one round, from how every team finished.
+ *
+ * Teams that missed the playoffs are in the lottery, worst record first. The
+ * first LOTTERY_PICKS picks are drawn from them with the odds in
+ * `lotteryOdds` (the worst teams have the best chance, no team is sure of
+ * anything); the rest of the lottery teams follow in record order. Playoff
+ * teams pick after them, ordered by how far they got: teams knocked out
+ * earlier pick first, the finalist and the champion last, with the worse
+ * record first among teams that went equally far.
+ *
+ * `playoffDepth` is 0 for a team that missed the playoffs, then the number of
+ * rounds the team played, plus one for winning the title.
  */
 export function draftOrder(
   rng: Rng,
   standingsOrder: readonly string[],
-  playoffTeams: ReadonlySet<string>,
-): string[] {
+  playoffDepth: ReadonlyMap<string, number>,
+): { order: string[]; entries: LotteryEntry[] } {
   const worstFirst = [...standingsOrder].reverse();
-  const pool = worstFirst.filter((t) => !playoffTeams.has(t));
-  const rest = worstFirst.filter((t) => playoffTeams.has(t));
+  const depth = (team: string) => playoffDepth.get(team) ?? 0;
+  const lottery = worstFirst.filter((t) => depth(t) === 0);
+  const playoff = worstFirst
+    .filter((t) => depth(t) > 0)
+    .sort(
+      (a, b) =>
+        depth(a) - depth(b) || worstFirst.indexOf(a) - worstFirst.indexOf(b),
+    );
+  const expected = [...lottery, ...playoff];
+
+  const weights = lotteryWeights(lottery.length);
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  const pool = lottery.map((team, i) => ({
+    team,
+    weight: weights[i] as number,
+  }));
   const top: string[] = [];
   const draws = Math.min(LOTTERY_PICKS, pool.length);
   for (let i = 0; i < draws; i++) {
-    const size = pool.length;
     const winner = weighted(
       rng,
-      pool.map((team, idx) => [team, (size - idx) ** 2] as const),
+      pool.map((entry) => [entry.team, entry.weight] as const),
     );
     top.push(winner);
-    pool.splice(pool.indexOf(winner), 1);
+    pool.splice(
+      pool.findIndex((entry) => entry.team === winner),
+      1,
+    );
   }
-  return [...top, ...pool, ...rest];
+  const order = [...top, ...pool.map((entry) => entry.team), ...playoff];
+  const entries = expected.map((teamId, index) => ({
+    teamId,
+    finishRank: standingsOrder.indexOf(teamId) + 1,
+    expectedPick: index + 1,
+    odds: index < lottery.length ? (weights[index] as number) / total : null,
+    pick: order.indexOf(teamId) + 1,
+  }));
+  return { order, entries };
 }
 
 function freeJersey(rng: Rng, used: ReadonlySet<number>): number {
@@ -250,7 +300,11 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
   const picks = teams.length * DRAFT_ROUNDS;
   const prospects = generateDraftClass(rng, picks + UNDRAFTED_PROSPECTS, taken);
   const available = new Set(prospects.map((p) => p.key));
-  const order = draftOrder(rng, input.standingsOrder, input.playoffTeams);
+  const { order, entries: lottery } = draftOrder(
+    rng,
+    input.standingsOrder,
+    input.playoffDepth,
+  );
   let pickNumber = 0;
   for (let round = 1; round <= DRAFT_ROUNDS; round++) {
     for (const teamId of order) {
@@ -279,8 +333,10 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
     out.push(rookie);
   }
 
-  // 3. Rosters: release the weakest above the limit, then sign free agents,
-  // worst teams first, until every team is full.
+  // 3. Rosters. A team may carry from ROSTER_LIMITS.min to ROSTER_LIMITS.max
+  // players: it releases its weakest above the maximum, and signs free agents
+  // (worst team first) only up to the size its front office aims for, which
+  // differs from team to team but is never below the minimum.
   const byTeam = new Map<string, OffseasonResult[]>(teams.map((t) => [t, []]));
   for (const p of kept) {
     if (p.teamId) byTeam.get(p.teamId)?.push(p);
@@ -294,7 +350,16 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
   const pool = kept.filter((p) => p.teamId === null);
   for (const teamId of [...teams].reverse()) {
     const roster = byTeam.get(teamId) as OffseasonResult[];
-    while (roster.length < ROSTER_LIMITS.max && pool.length > 0) {
+    const target = rng.int(ROSTER_LIMITS.min, ROSTER_LIMITS.max);
+    // A team above its target lets go of players who are not worth a place.
+    while (roster.length > Math.max(target, ROSTER_LIMITS.min)) {
+      const weakest = roster[roster.length - 1] as OffseasonResult;
+      if (value(weakest) >= REPLACEMENT_LEVEL) break;
+      roster.pop();
+      weakest.teamId = null;
+      pool.push(weakest);
+    }
+    while (roster.length < target && pool.length > 0) {
       const counts = new Map<Position, number>();
       for (const p of roster) {
         counts.set(p.position, (counts.get(p.position) ?? 0) + 1);
@@ -315,15 +380,6 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
     }
   }
 
-  // The free-agent pool stays a sensible size: the weakest players beyond it
-  // retire, undrafted rookies and released players included. A player picked
-  // in this draft always stays on the books, even if he is released.
-  pool.sort((a, b) => value(b) - value(a));
-  const surplus = pool
-    .slice(teams.length * FREE_AGENT_POOL_PER_TEAM)
-    .filter((p) => p.draft === null);
-  for (const gone of surplus) gone.retired = true;
-
   // 4. Jersey numbers: players keep theirs unless a teammate already wears it
   // (veterans are placed first); new faces take a free one.
   for (const roster of byTeam.values()) {
@@ -340,6 +396,5 @@ export function runOffseason(rng: Rng, input: OffseasonInput): OffseasonOutput {
   for (const p of kept) {
     if (p.id === null && p.teamId === null) p.jersey = rng.int(0, 99);
   }
-  // An undrafted rookie who retires at once is never added to the league.
-  return { players: out.filter((p) => !(p.id === null && p.retired)) };
+  return { players: out, lottery };
 }
