@@ -18,17 +18,18 @@
 
 The repository is public. Secrets live only in the Render dashboard and in git-ignored local files (`apps/web/.env.local`).
 
-| Name                                   | Where                    | Notes                                                                                                                |
-| -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Render web, local        | Public                                                                                                               |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Render web, local        | Public by design; RLS protects data                                                                                  |
-| `SITE_URL`                             | Local only               | Origin for auth email links. On Render, `RENDER_EXTERNAL_URL` is used                                                |
-| `SUPABASE_SECRET_KEY`                  | Render web, local        | Bypasses RLS. Used only by `apps/web/src/server/admin` to write generated league worlds. Never `NEXT_PUBLIC_`        |
-| Supabase database password             | Your password manager    | Needed only for direct database connections                                                                          |
-| `RATE_LIMIT_SECRET`                    | Render web, local        | 32+ random characters. Keys the IP hashes and form stamps for the support form. Rotating it only resets the counters |
-| `RESEND_API_KEY`                       | Render web               | Optional. Support form notifications to the support inbox. Can be a separate Resend key from the SMTP one            |
-| `SUPPORT_EMAIL_FROM`                   | Render web               | Optional. Sender for support notifications, on a Resend-verified domain                                              |
-| `MAINTENANCE_MODE`                     | Render web (when needed) | Set to `on` to show the maintenance page; remove it to reopen. Not in `render.yaml`                                  |
+| Name                                   | Where                    | Notes                                                                                                                         |
+| -------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Render web, local        | Public                                                                                                                        |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Render web, local        | Public by design; RLS protects data                                                                                           |
+| `SITE_URL`                             | Local only               | Origin for auth email links. On Render, `RENDER_EXTERNAL_URL` is used                                                         |
+| `SUPABASE_SECRET_KEY`                  | Render web, local        | Bypasses RLS. Used only by `apps/web/src/server/admin` to write generated league worlds. Never `NEXT_PUBLIC_`                 |
+| `SUPABASE_SECRET_KEY` (worker)         | Render worker, local     | The simulation worker's own copy of the key, with `SUPABASE_URL`. Optional: `WORKER_ID`, `POLL_INTERVAL_MS`, `STALE_AFTER_MS` |
+| Supabase database password             | Your password manager    | Needed only for direct database connections                                                                                   |
+| `RATE_LIMIT_SECRET`                    | Render web, local        | 32+ random characters. Keys the IP hashes and form stamps for the support form. Rotating it only resets the counters          |
+| `RESEND_API_KEY`                       | Render web               | Optional. Support form notifications to the support inbox. Can be a separate Resend key from the SMTP one                     |
+| `SUPPORT_EMAIL_FROM`                   | Render web               | Optional. Sender for support notifications, on a Resend-verified domain                                                       |
+| `MAINTENANCE_MODE`                     | Render web (when needed) | Set to `on` to show the maintenance page; remove it to reopen. Not in `render.yaml`                                           |
 
 ## Auth configuration
 

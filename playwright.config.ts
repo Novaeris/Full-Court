@@ -7,6 +7,8 @@ if (existsSync("apps/web/.env.local")) {
 }
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
+const ENGINE_SPEC = /determinism\.spec\.ts/;
+const LONG_SPEC = /seasons\.spec\.ts/;
 
 /**
  * Web e2e. Every spec runs at phone, tablet and desktop sizes
@@ -29,12 +31,44 @@ export default defineConfig({
     {
       name: "phone",
       use: { ...devices["iPhone 13"], browserName: "chromium" },
+      testIgnore: [ENGINE_SPEC, LONG_SPEC],
     },
     {
       name: "tablet",
       use: { viewport: { width: 820, height: 1180 }, hasTouch: true },
+      testIgnore: [ENGINE_SPEC, LONG_SPEC],
     },
-    { name: "desktop", use: { viewport: { width: 1440, height: 900 } } },
+    {
+      name: "desktop",
+      use: { viewport: { width: 1440, height: 900 } },
+      testIgnore: LONG_SPEC,
+    },
+    // Plays several seasons with the worker, so it waits for everything else.
+    {
+      name: "long-runs",
+      use: { viewport: { width: 1440, height: 900 } },
+      testMatch: LONG_SPEC,
+      dependencies: ["phone", "tablet", "desktop"],
+    },
+    // The simulation must play identically in every JavaScript engine. Desktop
+    // (Chromium, V8) runs determinism.spec.ts too; these run it alone in the
+    // others: Firefox (SpiderMonkey) and WebKit (JavaScriptCore, which every
+    // iPhone browser uses, on a desktop and a phone profile).
+    {
+      name: "engine-firefox",
+      use: { ...devices["Desktop Firefox"] },
+      testMatch: ENGINE_SPEC,
+    },
+    {
+      name: "engine-safari",
+      use: { ...devices["Desktop Safari"] },
+      testMatch: ENGINE_SPEC,
+    },
+    {
+      name: "engine-iphone",
+      use: { ...devices["iPhone 13"] },
+      testMatch: ENGINE_SPEC,
+    },
   ],
   webServer: {
     // A production build, so tests see what users get (no dev overlay).

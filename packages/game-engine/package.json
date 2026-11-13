@@ -4,6 +4,7 @@
   "private": true,
   "description": "Seeded RNG, generators and simulation. Pure, deterministic, platform-free.",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
   },

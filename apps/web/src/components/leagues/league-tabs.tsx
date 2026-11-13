@@ -9,6 +9,9 @@ const TABS = [
   { segment: "teams", label: "Teams" },
   { segment: "schedule", label: "Schedule" },
   { segment: "standings", label: "Standings" },
+  { segment: "playoffs", label: "Playoffs" },
+  { segment: "moves", label: "Moves" },
+  { segment: "offseason", label: "Offseason" },
   { segment: "settings", label: "Settings" },
 ] as const;
 

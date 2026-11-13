@@ -118,7 +118,20 @@ function toTeam(
   };
 }
 
-function toPlayer(row: Omit<PlayerRow, "league_id">): Player {
+function toPlayer(
+  row: Omit<
+    PlayerRow,
+    | "league_id"
+    | "status"
+    | "retired_year"
+    | "draft_year"
+    | "draft_round"
+    | "draft_pick"
+    | "salary"
+    | "contract_expires"
+    | "rights_team_id"
+  >,
+): Player {
   return {
     id: row.id,
     teamId: row.team_id,
@@ -170,7 +183,8 @@ export async function listTeams(
     ctx.supabase
       .from("players")
       .select("team_id, overall")
-      .eq("league_id", league.id),
+      .eq("league_id", league.id)
+      .not("team_id", "is", null),
     loadStructure(ctx, league.id),
   ]);
   if (teams.error) throw teams.error;
@@ -251,6 +265,8 @@ export async function getPlayer(
     .select(PLAYER_COLUMNS)
     .eq("league_id", league.id)
     .eq("id", parsed.data)
+    // A prospect is only known through the draft board, which shows what the scouts see.
+    .neq("status", "prospect")
     .maybeSingle();
   if (error) throw error;
   if (!data) throw notFound();

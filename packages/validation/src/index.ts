@@ -21,3 +21,5 @@ export * from "./leagues";
 export * from "./world";
 export * from "./support";
 export * from "./owner-mode";
+export * from "./simulation";
+export * from "./season-views";

@@ -36,3 +36,19 @@
     }
   }
 }
+
+/* Popovers (the playoff series games) open in the centre of the screen and pop out. */
+@keyframes fc-pop-out {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fc-pop-out:popover-open {
+  animation: fc-pop-out 160ms ease-out;
+}
