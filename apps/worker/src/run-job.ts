@@ -45,8 +45,8 @@ export async function runJob(
     current.days_done < current.days_requested
   ) {
     const season = await db.loadSeason(current.season_id);
-    if (season.phase !== "regular-season") {
-      await db.failJob(current.id, "The regular season is over.");
+    if (season.phase === "complete") {
+      await db.failJob(current.id, "The season is over.");
       log(`job ${current.id}: season is over, stopped`);
       return;
     }

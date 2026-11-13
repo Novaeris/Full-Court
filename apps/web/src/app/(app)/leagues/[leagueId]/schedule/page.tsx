@@ -73,7 +73,14 @@ async function Schedule({
   const mine = teams.filter((t) => t.localPlayerSlot !== null);
   const view = query.view === "day" ? "day" : "team";
 
-  const panel = <SimPanel leagueId={league.id} initial={sim} />;
+  const champion = teamMap.get(sim.season?.championTeamId ?? "");
+  const panel = (
+    <SimPanel
+      leagueId={league.id}
+      initial={sim}
+      championName={champion ? teamName(champion) : null}
+    />
+  );
   if (!sim.season) {
     return (
       <div className="flex flex-col gap-6">

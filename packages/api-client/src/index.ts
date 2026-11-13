@@ -7,6 +7,8 @@ import {
   LeagueStructureSchema,
   GameDetailSchema,
   GamePlaysSchema,
+  PlayoffsResponseSchema,
+  SeasonSchema,
   ScheduleResponseSchema,
   SimJobSchema,
   StandingsResponseSchema,
@@ -16,6 +18,8 @@ import {
   type ChooseTeamRequest,
   type GameDetail,
   type GamePlays,
+  type PlayoffsResponse,
+  type Season,
   type ScheduleResponse,
   type SimJob,
   type StandingsResponse,
@@ -206,6 +210,19 @@ export function createApiClient(options: ApiClientOptions) {
           "GET",
           `/leagues/${encodeURIComponent(id)}/games/${encodeURIComponent(gameId)}`,
           (b) => GameDetailSchema.parse(b),
+        ),
+      /** The playoff bracket, series by series. */
+      playoffs: (id: string): Promise<PlayoffsResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/playoffs`, (b) =>
+          PlayoffsResponseSchema.parse(b),
+        ),
+      /** Archives the finished season into history and starts the next one. */
+      startNextSeason: (id: string): Promise<Season> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/next-season`,
+          (b) => SeasonSchema.parse(b),
+          {},
         ),
       /** The game's plays, replayed by the server. */
       gamePlays: (id: string, gameId: string): Promise<GamePlays> =>

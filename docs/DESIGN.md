@@ -62,6 +62,19 @@ Design for the season core. Phase 10 fixes the types and rules (`@fullcourt/game
 - **Standings.** Ranked by win percentage. Ties break by record among the tied teams, then division record (all tied teams in one division), then conference record (all in one conference), then point differential, then team id so the order is always determined. The ranking feeds playoff seeding directly (`rankStandings` returns what `seedPlayoffTeams` takes).
 - **Advancing time.** The player asks to simulate a day, a week or the rest of the season. A worker runs it in the background, one day at a time, and the page follows progress live. The worker is the only thing that writes results.
 
+## Playoffs (Owner Mode)
+
+The playoffs follow the league's setup choices (how many teams qualify, conference or league-wide seeding, division leaders, and best-of-3, 5 or 7 for each round). Seeding already exists (`seedPlayoffTeams`); this describes what happens next.
+
+- **Who is in.** When the last regular-season day is played, the standings (with the standings tiebreakers) decide the field and the seeds.
+- **The bracket.** A single-elimination bracket of series. In each pool the best seed plays the worst (1 v 8, 4 v 5, 3 v 6, 2 v 7 in a field of eight) so the top seeds can only meet late. With conference seeding each conference has its own bracket and the two conference winners meet in the final round; with league seeding there is one bracket.
+- **A series.** The first team to win a majority of its games advances (4 in a best-of-7). The team with the better regular-season record has home court, with the usual pattern: home, home, away, away, home, away, home in a best-of-7; home, home, away, away, home in a best-of-5; home, away, home in a best-of-3. A series stops when it is won, so games 6 and 7 are only played if needed.
+- **The calendar.** Every series plays one game a day. A round is over when all its series are, and the next round starts the following day. There is no play-in tournament.
+- **The end.** The team that wins the final series is the champion and the loser the finalist; both are recorded as the season's awards. The season is then complete.
+- **Simulating.** The simulation controls work through the playoffs the same way: a day, a week, or to the end of the playoffs. The playoff bracket page shows every series, its games and the score as it stands.
+- **Starting the next season.** From a completed season, one action archives it into history and creates the next season with a new schedule. Rosters carry over unchanged for now: ageing, the draft, free agency and contracts are later systems.
+- **History.** A season's history keeps playoff statistics apart from the regular season's, and records how far each team went.
+
 ## Saves and history (Owner Mode)
 
 - **Limits.** Each account has up to 5 saves (leagues), and each league can play up to 50 seasons.

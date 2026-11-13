@@ -54,9 +54,12 @@ const PHASE_TEXT = {
 export function SimPanel({
   leagueId,
   initial,
+  championName = null,
 }: {
   leagueId: string;
   initial: SimulationStatus;
+  /** The winning team's name, once the season is complete. */
+  championName?: string | null;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SimulationStatus>(initial);
@@ -71,7 +74,8 @@ export function SimPanel({
   const job = status.job;
   const active = job ? ACTIVE.has(job.status) : false;
   const season = status.season;
-  const running = !season || season.phase === "regular-season";
+  const running = !season || season.phase !== "complete";
+  const playoffs = season?.phase === "playoffs";
 
   /**
    * Takes a fresh status. When a job has just ended, it says how it went and
@@ -140,6 +144,35 @@ export function SimPanel({
     setBusy(false);
   }
 
+  /** Archives the finished season into history and starts the next one. */
+  async function startNext() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/leagues/${leagueId}/next-season`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const json: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(
+          (json as ErrorBody | null)?.error?.message ??
+            "Something went wrong. Please try again.",
+        );
+      } else {
+        const next = json as { year: number };
+        setMessage(`Started the ${next.year} season.`);
+        await refresh();
+        router.refresh();
+      }
+    } catch {
+      setError("Couldn't reach the server. Try again.");
+    }
+    setBusy(false);
+  }
+
   async function cancel() {
     setBusy(true);
     setError(null);
@@ -167,10 +200,12 @@ export function SimPanel({
           {season
             ? season.phase === "regular-season"
               ? `${PHASE_TEXT[season.phase]}: day ${day} of ${season.lastDay}`
-              : PHASE_TEXT[season.phase]
+              : season.phase === "complete" && championName
+                ? `Season complete. ${championName} won the championship.`
+                : PHASE_TEXT[season.phase]
             : "Not started yet. The first simulation creates the schedule."}
         </p>
-        {season ? (
+        {season && season.phase === "regular-season" ? (
           <progress
             className="mt-2 h-2 w-full overflow-hidden rounded-full accent-accent"
             value={Math.min(played, season.lastDay)}
@@ -201,7 +236,9 @@ export function SimPanel({
             disabled={busy || active}
             onClick={() => start("season")}
           >
-            Sim to end of season
+            {playoffs
+              ? "Sim to end of playoffs"
+              : "Sim to end of regular season"}
           </Button>
           {active ? (
             <Button variant="ghost" disabled={busy} onClick={cancel}>
@@ -210,9 +247,17 @@ export function SimPanel({
           ) : null}
         </div>
       ) : (
-        <p className="mt-4 text-text-muted">
-          The regular season is over. Playoffs are coming in a later update.
-        </p>
+        <div className="mt-4 flex flex-col gap-3">
+          <p className="text-text-muted">
+            The season is over. Starting the next one saves this season&apos;s
+            statistics and awards and creates a new schedule.
+          </p>
+          <div>
+            <Button variant="primary" disabled={busy} onClick={startNext}>
+              Start the {season ? season.year + 1 : ""} season
+            </Button>
+          </div>
+        </div>
       )}
 
       {job && active ? (
@@ -220,16 +265,20 @@ export function SimPanel({
           <p className="font-semibold">
             {job.status === "queued"
               ? "Queued"
-              : `Simulating: ${job.daysDone} of ${job.daysRequested} ${job.daysRequested === 1 ? "day" : "days"}`}
+              : playoffs && job.kind === "season"
+                ? `Simulating the playoffs: ${job.daysDone} ${job.daysDone === 1 ? "day" : "days"} played`
+                : `Simulating: ${job.daysDone} of ${job.daysRequested} ${job.daysRequested === 1 ? "day" : "days"}`}
           </p>
-          <progress
-            className="mt-1 h-2 w-full overflow-hidden rounded-full accent-accent"
-            value={job.daysDone}
-            max={job.daysRequested}
-            aria-label="Simulation progress"
-          />
+          {playoffs && job.kind === "season" ? null : (
+            <progress
+              className="mt-1 h-2 w-full overflow-hidden rounded-full accent-accent"
+              value={job.daysDone}
+              max={job.daysRequested}
+              aria-label="Simulation progress"
+            />
+          )}
           <p className="mt-1 text-sm text-text-muted">
-            {progress}% done
+            {playoffs && job.kind === "season" ? "" : `${progress}% done`}
             {job.status === "queued" && waited
               ? ". Waiting for the simulation worker to pick it up."
               : ""}

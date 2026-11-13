@@ -148,36 +148,45 @@ export type Database = {
           away_score: number | null
           away_team_id: string
           day: number
+          game_number: number | null
           home_score: number | null
           home_team_id: string
           id: string
           league_id: string
           overtimes: number
+          round: number | null
           season_id: string
+          series_id: string | null
           status: string
         }
         Insert: {
           away_score?: number | null
           away_team_id: string
           day: number
+          game_number?: number | null
           home_score?: number | null
           home_team_id: string
           id?: string
           league_id: string
           overtimes?: number
+          round?: number | null
           season_id: string
+          series_id?: string | null
           status?: string
         }
         Update: {
           away_score?: number | null
           away_team_id?: string
           day?: number
+          game_number?: number | null
           home_score?: number | null
           home_team_id?: string
           id?: string
           league_id?: string
           overtimes?: number
+          round?: number | null
           season_id?: string
+          series_id?: string | null
           status?: string
         }
         Relationships: [
@@ -207,6 +216,13 @@ export type Database = {
             columns: ["league_id", "season_id"]
             isOneToOne: false
             referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "games_league_id_series_id_fkey"
+            columns: ["league_id", "series_id"]
+            isOneToOne: false
+            referencedRelation: "playoff_series"
             referencedColumns: ["league_id", "id"]
           },
         ]
@@ -384,6 +400,7 @@ export type Database = {
           league_id: string
           minutes: number
           player_id: string
+          playoffs: boolean
           points: number
           rebounds: number
           season_id: string
@@ -426,6 +443,7 @@ export type Database = {
           league_id: string
           minutes: number
           player_id: string
+          playoffs?: boolean
           points: number
           rebounds: number
           season_id: string
@@ -468,6 +486,7 @@ export type Database = {
           league_id?: string
           minutes?: number
           player_id?: string
+          playoffs?: boolean
           points?: number
           rebounds?: number
           season_id?: string
@@ -608,6 +627,89 @@ export type Database = {
           },
         ]
       }
+      playoff_series: {
+        Row: {
+          best_of: number
+          id: string
+          league_id: string
+          rank_a: number
+          rank_b: number
+          round: number
+          season_id: string
+          seed_a: number
+          seed_b: number
+          slot: number
+          team_a: string
+          team_b: string
+          winner_team_id: string | null
+          wins_a: number
+          wins_b: number
+        }
+        Insert: {
+          best_of: number
+          id?: string
+          league_id: string
+          rank_a: number
+          rank_b: number
+          round: number
+          season_id: string
+          seed_a: number
+          seed_b: number
+          slot: number
+          team_a: string
+          team_b: string
+          winner_team_id?: string | null
+          wins_a?: number
+          wins_b?: number
+        }
+        Update: {
+          best_of?: number
+          id?: string
+          league_id?: string
+          rank_a?: number
+          rank_b?: number
+          round?: number
+          season_id?: string
+          seed_a?: number
+          seed_b?: number
+          slot?: number
+          team_a?: string
+          team_b?: string
+          winner_team_id?: string | null
+          wins_a?: number
+          wins_b?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playoff_series_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playoff_series_league_id_season_id_fkey"
+            columns: ["league_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "playoff_series_league_id_team_a_fkey"
+            columns: ["league_id", "team_a"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "playoff_series_league_id_team_b_fkey"
+            columns: ["league_id", "team_b"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           alpha_notice_acknowledged_at: string | null
@@ -709,6 +811,7 @@ export type Database = {
           last_day: number
           league_id: string
           phase: string
+          playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
           year: number
@@ -721,6 +824,7 @@ export type Database = {
           last_day: number
           league_id: string
           phase?: string
+          playoff_config?: Json | null
           schedule_preset?: string
           schedule_tiers: Json
           year: number
@@ -733,6 +837,7 @@ export type Database = {
           last_day?: number
           league_id?: string
           phase?: string
+          playoff_config?: Json | null
           schedule_preset?: string
           schedule_tiers?: Json
           year?: number
@@ -837,6 +942,8 @@ export type Database = {
           low_points_allowed_opponent_id: string | null
           low_points_day: number | null
           low_points_opponent_id: string | null
+          playoff_result: string | null
+          playoff_round: number | null
           points_against: number
           points_for: number
           rank_conference: number
@@ -875,6 +982,8 @@ export type Database = {
           low_points_allowed_opponent_id?: string | null
           low_points_day?: number | null
           low_points_opponent_id?: string | null
+          playoff_result?: string | null
+          playoff_round?: number | null
           points_against: number
           points_for: number
           rank_conference: number
@@ -913,6 +1022,8 @@ export type Database = {
           low_points_allowed_opponent_id?: string | null
           low_points_day?: number | null
           low_points_opponent_id?: string | null
+          playoff_result?: string | null
+          playoff_round?: number | null
           points_against?: number
           points_for?: number
           rank_conference?: number
@@ -1058,6 +1169,7 @@ export type Database = {
           last_day: number
           league_id: string
           phase: string
+          playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
           year: number
@@ -1190,6 +1302,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_create_playoffs: {
+        Args: { config: Json; series: Json; target_season: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          day: number
+          id: string
+          last_day: number
+          league_id: string
+          phase: string
+          playoff_config: Json | null
+          schedule_preset: string
+          schedule_tiers: Json
+          year: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seasons"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_create_season: {
         Args: {
           preset: string
@@ -1206,6 +1340,7 @@ export type Database = {
           last_day: number
           league_id: string
           phase: string
+          playoff_config: Json | null
           schedule_preset: string
           schedule_tiers: Json
           year: number

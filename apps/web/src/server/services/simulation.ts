@@ -1,19 +1,16 @@
 import "server-only";
 import type { Database } from "@fullcourt/api-client";
-import { createRng, generateSchedule, seedState } from "@fullcourt/game-engine";
-import { validateScheduleTiers } from "@fullcourt/game-rules";
-import { DEFAULT_SCHEDULE_TIERS } from "@fullcourt/game-types";
 import type {
-  Season,
   SimJob,
   SimulationStatus,
   StartSimulationRequest,
 } from "@fullcourt/validation";
-import { insertSeason } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
+import { ensurePlayoffs } from "./playoffs";
+import { ensureSeason } from "./season-create";
+import { latestSeason, seasonView } from "./season-shared";
 import type { UserContext } from "@/server/auth/session";
 import { parseLeagueId, getLeague } from "./leagues";
-import { getStructure } from "./world";
 
 /**
  * Simulation use-cases, shared by /api/v1/leagues/:id/sim and the season
@@ -22,19 +19,7 @@ import { getStructure } from "./world";
  * shown to own the league. The worker does the actual simulating.
  */
 
-type SeasonRow = Database["public"]["Tables"]["seasons"]["Row"];
 type JobRow = Database["public"]["Tables"]["sim_jobs"]["Row"];
-
-export function toSeason(row: SeasonRow): Season {
-  return {
-    id: row.id,
-    year: row.year,
-    phase: row.phase as Season["phase"],
-    day: row.day,
-    lastDay: row.last_day,
-    schedulePreset: row.schedule_preset as Season["schedulePreset"],
-  };
-}
 
 function toJob(row: JobRow): SimJob {
   return {
@@ -48,21 +33,6 @@ function toJob(row: JobRow): SimJob {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
   };
-}
-
-export async function latestSeason(
-  ctx: UserContext,
-  leagueId: string,
-): Promise<SeasonRow | null> {
-  const { data, error } = await ctx.supabase
-    .from("seasons")
-    .select("*")
-    .eq("league_id", leagueId)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
 }
 
 /** The league's current season and its latest simulation job. */
@@ -83,65 +53,9 @@ export async function getSimulation(
   ]);
   if (job.error) throw job.error;
   return {
-    season: season ? toSeason(season) : null,
+    season: season ? await seasonView(ctx, season) : null,
     job: job.data ? toJob(job.data) : null,
   };
-}
-
-/**
- * Creates the league's first season when it has none: the schedule for the
- * default preset, built from the league's own structure. The schedule's RNG
- * is seeded from the league id and year, so it never disturbs the league's
- * simulation RNG and the same league always gets the same schedule.
- */
-async function ensureSeason(
-  ctx: UserContext,
-  league: { id: string; createdAt: string },
-): Promise<void> {
-  if (await latestSeason(ctx, league.id)) return;
-
-  const tiers = DEFAULT_SCHEDULE_TIERS;
-  const structure = await getStructure(ctx, league.id);
-  const problems = validateScheduleTiers(structure, tiers);
-  if (problems.length > 0) {
-    throw new ApiError(
-      422,
-      "schedule_not_supported",
-      "This league's structure can't be given an even schedule.",
-    );
-  }
-  const { data: teams, error } = await ctx.supabase
-    .from("teams")
-    .select("id, conference_id, division_id")
-    .eq("league_id", league.id);
-  if (error) throw error;
-
-  const year = new Date(league.createdAt).getUTCFullYear();
-  const games = generateSchedule(
-    {
-      structure,
-      teams: teams.map((t) => ({
-        teamId: t.id,
-        conferenceId: t.conference_id,
-        divisionId: t.division_id,
-      })),
-      tiers,
-    },
-    createRng(seedState(`${league.id}:schedule:${year}`)),
-  );
-
-  try {
-    await insertSeason({
-      leagueId: league.id,
-      year,
-      preset: "standard",
-      tiers,
-      games,
-    });
-  } catch (e) {
-    // Two requests can race to create the first season: the loser is fine.
-    if ((e as { code?: string }).code !== "23505") throw e;
-  }
 }
 
 /** Queues a simulation of a day, a week or the rest of the regular season. */
@@ -159,6 +73,7 @@ export async function startSimulation(
     );
   }
   await ensureSeason(ctx, league);
+  await ensurePlayoffs(ctx, league.id);
 
   const { data, error } = await ctx.supabase.rpc("enqueue_sim_job", {
     target_league: league.id,
@@ -188,7 +103,13 @@ export async function startSimulation(
         throw new ApiError(
           409,
           "season_not_running",
-          "The regular season is over.",
+          "The season is over. Start the next one.",
+        );
+      case "playoffs_not_started":
+        throw new ApiError(
+          409,
+          "playoffs_not_started",
+          "The playoffs haven't been set up yet.",
         );
       case "job_already_running":
         throw new ApiError(

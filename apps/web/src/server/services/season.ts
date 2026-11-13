@@ -18,7 +18,7 @@ import {
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { getLeague, parseLeagueId } from "./leagues";
-import { latestSeason, toSeason } from "./simulation";
+import { latestSeason, seasonView } from "./season-shared";
 
 /**
  * What the season pages read: the schedule, the standings and a single game.
@@ -37,6 +37,8 @@ const toGame = (row: GameRow): GameSummary => ({
   homeScore: row.home_score,
   awayScore: row.away_score,
   overtimes: row.overtimes,
+  round: row.round,
+  gameNumber: row.game_number,
 });
 
 const invalid = (message: string) =>
@@ -83,7 +85,7 @@ export async function listSchedule(
   }
   const { data, error } = await query.limit(PAGE);
   if (error) throw error;
-  return { season: toSeason(season), games: data.map(toGame) };
+  return { season: await seasonView(ctx, season), games: data.map(toGame) };
 }
 
 /** Every team's record this season, best first, by the standings rules. */
@@ -131,7 +133,7 @@ export async function getStandings(
       streak: "",
       lastTen: "",
     }));
-    return { season: toSeason(season), rows };
+    return { season: await seasonView(ctx, season), rows };
   }
 
   const results: DatedResult[] = [];
@@ -141,6 +143,7 @@ export async function getStandings(
       .select("day, home_team_id, away_team_id, home_score, away_score")
       .eq("season_id", season.id)
       .eq("status", "final")
+      .is("round", null)
       .order("day")
       .order("id")
       .range(from, from + PAGE - 1);
@@ -186,7 +189,7 @@ export async function getStandings(
     streak: r.streak,
     lastTen: r.lastTen,
   }));
-  return { season: toSeason(season), rows };
+  return { season: await seasonView(ctx, season), rows };
 }
 
 async function loadGame(

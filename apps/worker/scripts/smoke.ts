@@ -18,7 +18,13 @@ import {
   seedState,
   type ReplaySnapshot,
 } from "@fullcourt/game-engine";
-import { rankStandings, validateScheduleTiers } from "@fullcourt/game-rules";
+import {
+  buildFirstRound,
+  defaultPlayoffConfig,
+  rankStandings,
+  seedPlayoffTeams,
+  validateScheduleTiers,
+} from "@fullcourt/game-rules";
 import { DEFAULT_SCHEDULE_TIERS } from "@fullcourt/game-types";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
@@ -397,6 +403,124 @@ async function main(): Promise<void> {
     );
     console.log(`     the season's detail: ${detailRows.join(", ")}`);
 
+    // The playoffs: seeded from the standings, then played to a champion.
+    const entries = standings.map((s) => ({
+      teamId: s.teamId,
+      conferenceId: s.conferenceId,
+      divisionId: s.divisionId,
+    }));
+    const playoffConfig = defaultPlayoffConfig(structure);
+    const pools = seedPlayoffTeams(structure, playoffConfig, entries);
+    const firstRound = buildFirstRound(
+      pools,
+      entries.map((e) => e.teamId),
+      playoffConfig,
+    );
+    check(
+      firstRound.length === playoffConfig.teams / 2,
+      `the bracket has ${playoffConfig.teams} teams and ${firstRound.length} first-round series`,
+    );
+    must(
+      await admin.rpc("admin_create_playoffs", {
+        target_season: season.id,
+        config: { ...playoffConfig },
+        series: firstRound.map((s) => ({
+          slot: s.slot,
+          best_of: s.bestOf,
+          team_a: s.a.teamId,
+          seed_a: s.a.seed,
+          rank_a: s.a.rank,
+          team_b: s.b.teamId,
+          seed_b: s.b.seed,
+          rank_b: s.b.rank,
+        })),
+      }),
+    );
+    must(
+      await owner.rpc("enqueue_sim_job", {
+        target_league: leagueId,
+        sim_kind: "season",
+      }),
+    );
+    const t3 = Date.now();
+    await run();
+    console.log(`     the playoffs took ${Date.now() - t3} ms`);
+
+    const ended = must(
+      await owner.from("seasons").select("*").eq("id", season.id).single(),
+    );
+    check(
+      ended.phase === "complete",
+      "the season is complete once the final is won",
+    );
+    const rounds = Math.log2(playoffConfig.teams);
+    const series = must(
+      await owner.from("playoff_series").select("*").eq("season_id", season.id),
+    );
+    check(
+      series.length === playoffConfig.teams - 1,
+      `${series.length} series were played, one for every team but the champion`,
+    );
+    check(
+      series.every(
+        (s) =>
+          s.winner_team_id !== null &&
+          Math.max(s.wins_a, s.wins_b) === (s.best_of + 1) / 2 &&
+          Math.min(s.wins_a, s.wins_b) < (s.best_of + 1) / 2,
+      ),
+      "every series ended as soon as a team had a majority of its games",
+    );
+    const playoffGames = must(
+      await admin
+        .from("games")
+        .select(
+          "id, status, series_id, home_team_id, away_team_id, game_number, round",
+        )
+        .eq("season_id", season.id)
+        .not("round", "is", null)
+        .range(0, 999),
+    );
+    check(
+      playoffGames.every((g) => g.status === "final") &&
+        playoffGames.length ===
+          series.reduce((n, s) => n + s.wins_a + s.wins_b, 0),
+      `${playoffGames.length} playoff games, one for every win in a series`,
+    );
+    const finalSeries = series.find((s) => s.round === rounds);
+    const awards = must(
+      await owner
+        .from("season_awards")
+        .select("award, team_id")
+        .eq("season_id", season.id),
+    );
+    const championId = awards.find((a) => a.award === "champion")?.team_id;
+    check(
+      championId === finalSeries?.winner_team_id &&
+        awards.some(
+          (a) =>
+            a.award === "finalist" &&
+            a.team_id ===
+              (finalSeries?.winner_team_id === finalSeries?.team_a
+                ? finalSeries?.team_b
+                : finalSeries?.team_a),
+        ),
+      "the champion and the finalist are the two teams in the final",
+    );
+    const champion = teams.find((t) => t.id === championId);
+    const champRank = standings.findIndex((s) => s.teamId === championId) + 1;
+    console.log(
+      `     champion: the team that finished ${champRank} in the standings (${champion?.id.slice(0, 8)})`,
+    );
+    // Home court: in every series the better regular-season record hosts game one.
+    const gameOneHosts = series.every((s) => {
+      const first = playoffGames.find(
+        (g) => g.series_id === s.id && g.game_number === 1,
+      );
+      const better = s.rank_a < s.rank_b ? s.team_a : s.team_b;
+      return first?.home_team_id === better;
+    });
+    check(gameOneHosts, "the better record hosts game one of every series");
+
     if (process.env.SMOKE_KEEP === "before-archive") {
       console.log(
         `     SMOKE_KEEP: stopped before archiving; league ${leagueId} kept`,
@@ -404,8 +528,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Archive the finished season into history. Playoffs aren't built yet, so
-    // the season is marked complete by hand.
+    // Archive the finished season into history.
     // The real extremes, read before the box scores are deleted.
     const bestLine = must(
       await admin
@@ -424,13 +547,6 @@ async function main(): Promise<void> {
       (s, g) => s + (g.home_score as number) + (g.away_score as number),
       0,
     );
-    must(
-      await admin
-        .from("seasons")
-        .update({ phase: "complete" })
-        .eq("id", season.id)
-        .select(),
-    );
     const archived = must(
       await admin.rpc("admin_archive_season", {
         target_season: season.id,
@@ -443,7 +559,7 @@ async function main(): Promise<void> {
       await owner
         .from("team_season_stats")
         .select(
-          "team_id, wins, losses, points_for, rank_overall, biggest_win, worst_loss, low_points, high_points, longest_win_streak",
+          "team_id, wins, losses, points_for, rank_overall, biggest_win, worst_loss, low_points, high_points, longest_win_streak, playoff_round, playoff_result",
         )
         .eq("season_id", season.id),
     );
@@ -458,19 +574,29 @@ async function main(): Promise<void> {
         standings[0]?.teamId,
       "the best team in the standings ranks first",
     );
+    check(
+      teamStats.filter((t) => t.playoff_result === "champion").length === 1 &&
+        teamStats.find((t) => t.playoff_result === "champion")?.team_id ===
+          championId &&
+        teamStats.filter((t) => t.playoff_result === "finalist").length === 1 &&
+        teamStats.filter((t) => t.playoff_round !== null).length ===
+          playoffConfig.teams,
+      "the history records the champion, the finalist and every team that made the playoffs",
+    );
     const playerStats = must(
       await owner
         .from("player_season_stats")
         .select(
-          "player_id, games_played, points, high_points, high_rebounds, high_assists, high_threes",
+          "player_id, playoffs, games_played, points, high_points, high_rebounds, high_assists, high_threes",
         )
         .eq("season_id", season.id),
     );
+    const regularStats = playerStats.filter((p) => !p.playoffs);
     check(
-      playerStats.reduce((s, p) => s + p.points, 0) === pointsInGames,
-      `${playerStats.length} players' season points add up to every point scored`,
+      regularStats.reduce((s, p) => s + p.points, 0) === pointsInGames,
+      `${regularStats.length} players' regular-season points add up to every point scored; ${playerStats.length - regularStats.length} more have playoff rows`,
     );
-    const top = [...playerStats].sort((a, b) => b.points - a.points)[0];
+    const top = [...regularStats].sort((a, b) => b.points - a.points)[0];
     console.log(
       `     top scorer: ${((top?.points ?? 0) / (top?.games_played ?? 1)).toFixed(1)} per game, best game ${top?.high_points}`,
     );

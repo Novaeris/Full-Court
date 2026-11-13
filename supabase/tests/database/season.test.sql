@@ -6,97 +6,7 @@ begin;
 select plan(90);
 
 -- Fixtures ---------------------------------------------------------------------------------------
-
--- Teams 1-4 of a league (by abbreviation) play three days: 1v2 and 3v4, 1v3
--- and 2v4, then 2v1 and 4v3.
-create function pg_temp.tiny_schedule(league uuid) returns jsonb language sql as $$
-  with t as (
-    select id, row_number() over (order by abbreviation) as n
-    from public.teams where league_id = league
-  )
-  select jsonb_agg(jsonb_build_object(
-    'day', g.day, 'home_team_id', h.id, 'away_team_id', a.id
-  ) order by g.day, g.h)
-  from (values (1, 1, 2), (1, 3, 4), (2, 1, 3), (2, 2, 4), (3, 2, 1), (3, 4, 3))
-    as g(day, h, a)
-  join t h on h.n = g.h
-  join t a on a.n = g.a;
-$$;
-
--- Team 1 plays twice on day 1.
-create function pg_temp.double_booked(league uuid) returns jsonb language sql as $$
-  with t as (
-    select id, row_number() over (order by abbreviation) as n
-    from public.teams where league_id = league
-  )
-  select jsonb_agg(jsonb_build_object('day', 1, 'home_team_id', h.id, 'away_team_id', a.id))
-  from (values (1, 2), (1, 3)) as g(h, a)
-  join t h on h.n = g.h
-  join t a on a.n = g.a;
-$$;
-
-create function pg_temp.league_id(league_name text) returns uuid language sql security definer as $$
-  select id from public.leagues where name = league_name;
-$$;
-create function pg_temp.season_id(league_name text) returns uuid language sql security definer as $$
-  select id from public.seasons where league_id = pg_temp.league_id(league_name);
-$$;
-create function pg_temp.job_id(league_name text) returns uuid language sql security definer as $$
-  select id from public.sim_jobs
-  where league_id = pg_temp.league_id(league_name)
-    and status in ('queued', 'running')
-  limit 1;
-$$;
-
--- The results of a day: every game 100-90 unless `home` says otherwise.
-create function pg_temp.day_games(season uuid, d integer, home integer default 100)
-returns jsonb language sql as $$
-  select coalesce(jsonb_agg(jsonb_build_object(
-    'id', id, 'home_score', home, 'away_score', 90, 'overtimes', 0
-  )), '[]'::jsonb)
-  from public.games where season_id = season and day = d;
-$$;
-
--- One replay recipe per game of the day. The snapshot is a stand-in: the
--- database stores it without looking inside.
-create function pg_temp.day_replays(season uuid, d integer) returns jsonb language sql as $$
-  select coalesce(jsonb_agg(jsonb_build_object(
-    'game_id', g.id, 'engine_version', 1,
-    'rng_state', jsonb_build_array(1, 2, 3, 4),
-    'snapshot', jsonb_build_object('home', jsonb_build_object(), 'away', jsonb_build_object())
-  )), '[]'::jsonb)
-  from public.games g
-  where g.season_id = season and g.day = d;
-$$;
-
--- One line per team: the home team scores 100, the away team 90. The other
--- numbers grow with the day so each single-game high has a known day: rebounds
--- 7, 10, 13; assists 2, 4, 6; steals 1, 2, 3; threes 1, 2, 3; blocks stay at 2
--- (a tie, which goes to the earliest day). Points stay 100 and 90 whatever the
--- day, because a three-pointer replaces a free throw and a two.
-create function pg_temp.day_lines(season uuid, d integer) returns jsonb language sql as $$
-  select coalesce(jsonb_agg(jsonb_build_object(
-    'game_id', g.id,
-    'player_id', (select p.id from public.players p where p.team_id = s.team_id
-                  order by p.jersey, p.id limit 1),
-    'team_id', s.team_id, 'started', true, 'minutes', 48,
-    'points', s.pts, 'rebounds', 4 + 3 * d, 'assists', 2 * d, 'steals', d,
-    'blocks', 2, 'turnovers', 0, 'fouls', 0, 'fgm', s.fgm, 'fga', 80,
-    'tpm', d, 'tpa', 10, 'ftm', 20 - d, 'fta', 25
-  )), '[]'::jsonb)
-  from public.games g
-  cross join lateral (values
-    (g.home_team_id, 100, 40),
-    (g.away_team_id, 90, 35)
-  ) as s(team_id, pts, fgm)
-  where g.season_id = season and g.day = d;
-$$;
-
-grant execute on function
-  pg_temp.tiny_schedule(uuid), pg_temp.double_booked(uuid), pg_temp.league_id(text),
-  pg_temp.season_id(text), pg_temp.job_id(text), pg_temp.day_games(uuid, integer, integer),
-  pg_temp.day_replays(uuid, integer), pg_temp.day_lines(uuid, integer)
-to service_role, authenticated;
+\ir season_helpers.psql
 
 insert into auth.users (id, aud, role, email)
 values
@@ -407,8 +317,8 @@ select is(
 );
 select throws_ok(
   $$select enqueue_sim_job(pg_temp.league_id('Season'), 'day')$$,
-  'P0001', 'season_not_running',
-  'a finished regular season cannot be simulated further'
+  'P0001', 'playoffs_not_started',
+  'the playoffs need their bracket before they can be simulated'
 );
 select pg_temp.act_as('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 select is(

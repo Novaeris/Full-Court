@@ -44,6 +44,8 @@ export const SeasonSchema = z.object({
   /** The last regular-season game day. */
   lastDay: z.number().int().min(1),
   schedulePreset: z.enum(SCHEDULE_PRESETS),
+  /** The playoff winner, once the final is decided. */
+  championTeamId: z.uuid().nullable(),
 });
 export type Season = z.infer<typeof SeasonSchema>;
 

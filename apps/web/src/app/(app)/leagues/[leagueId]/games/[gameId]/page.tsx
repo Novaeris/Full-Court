@@ -87,6 +87,9 @@ async function Game({
           {teamName(away)} at {teamName(home)}
         </h2>
         <p className="text-text-muted">
+          {game.round
+            ? `Playoffs · Round ${game.round} · Game ${game.gameNumber} · `
+            : ""}
           Day {game.day} · {final ? `Final${overtime}` : "Not played yet"}
         </p>
         {final ? (

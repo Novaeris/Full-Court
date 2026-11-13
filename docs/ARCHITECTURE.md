@@ -207,7 +207,7 @@ Product design: [DESIGN.md](./DESIGN.md#the-season-owner-mode). Where the pieces
   - A possession starts from an `Origin` (steal, defensive rebound or other). `transitionChance` turns that, the teams' speed ratings and pace into the chance of a fast break; breaks use a shorter clock, a rim-heavy shot mix and a make-chance bonus. Substitutions only happen on dead balls.
   - The tuning constants sit at the top of `game.ts`. `game.test.ts` keeps league-wide averages (scoring, shooting splits, threes, free throws, fouls, steals, blocks, assists, turnovers, rebounds, fast-break share, starter minutes, home edge) inside NBA 2010 to 2020 bounds, so a change that wrecks the balance fails a test.
 - Player fatigue lives inside a game only. Between-game state (injuries, season-long fatigue) and `playerUpdates` come with the owner loop.
-- Still to come: playoffs and the offseason.
+- Still to come: the offseason (ageing, draft, free agency, contracts, trades, finances).
 
 ### Season tables, replays and history (Phase 12 and 13)
 
@@ -230,6 +230,7 @@ Migration `20261112150000_season_core.sql`. Every table hangs off `league_id` wi
 | `player_season_stats` | A player's season totals per team: games, starts, minutes, points, rebounds, assists, steals, blocks, turnovers, fouls, shooting splits, plus single-game highs in points, rebounds, assists, steals, blocks and threes (each with its day and opponent), `double_doubles` and `triple_doubles`. Per-game averages are totals divided by games |
 | `team_season_stats`   | A team's record (overall, home, division, conference), points for and against, where it finished (overall, conference, division), its single-game highs and lows (most and fewest points scored and allowed, biggest win and worst loss, each with day and opponent) and its longest win and loss streaks                                      |
 | `season_awards`       | Award winners per season (`award` is free text such as `champion`, with a team and/or player). Empty until playoffs and awards exist                                                                                                                                                                                                           |
+| `playoff_series`      | The playoff bracket: one row per series, kept for every season (see [Playoffs](#playoffs-and-the-next-season-phase-15))                                                                                                                                                                                                                        |
 | `sim_jobs`            | The queue: `kind` (`day`, `week`, `season`), `status`, `days_requested`, `days_done`, `error`, `worker` and a heartbeat. One active job per league                                                                                                                                                                                             |
 
 **Plays are replayed, not stored.** The engine is deterministic, so a game's recipe gives back the exact plays, score and box score (`replayGame` in `@fullcourt/game-engine`, about 1.3 ms a game, on a server, in a browser or on a phone). Storing 416 plays a game as rows cost 105 MB a season; the recipe costs about 3 MB.
@@ -333,6 +334,29 @@ Pages (`apps/web/src/app/(app)/leagues/[leagueId]/`): **Schedule** (your team's 
 - Tests check, over whole simulated games, that every play is revealed in order, players stay on the court, shooters stand where the engine says the shot was taken, the ball stays with its holder, nobody exceeds the speed limit or moves abruptly, defenders don't stack on attackers, and a steal leads to its stealer running the break.
 
 `describePlay` (`view/describe.ts`) words a play for the feed ("C. Vance makes a driving layup (assist: A. Holloway)"). The pure game packages are marked `"sideEffects": false` so the browser bundle includes only the engine code the viewer uses.
+
+### Playoffs and the next season (Phase 15)
+
+Product design: [DESIGN.md](./DESIGN.md#playoffs-owner-mode).
+
+**The bracket is a binary tree of series.** `playoff_series` holds one row per best-of series: its `round`, its `slot` in the round, the two teams (each with its seed in its conference or the league and its `rank` in the regular-season standings, which decides home court), the games each has won and the winner. The winners of slots 2k and 2k + 1 meet in slot k of the next round. With conference seeding the conferences fill neighbouring slots, so they meet only in the final round. Series rows are kept for every season as the record of who beat whom; their games are deleted when the season is archived.
+
+**Who does what.**
+
+| Step                     | Where                                                                                                                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Who qualifies, the seeds | `seedPlayoffTeams` (`game-rules`), from the regular-season standings and the league's `PlayoffConfig`                                                                                                                                                        |
+| The first round          | `buildFirstRound` and `bracketOrder` (`game-rules`): 1 v 8, 4 v 5, 2 v 7, 3 v 6 in a pool of eight. Built by `ensurePlayoffs` in `apps/web/src/server/services/playoffs.ts` the first time the playoffs are simulated, and stored by `admin_create_playoffs` |
+| Home court               | `homeGamePattern` (`game-rules`) and `app_private.playoff_home_game` (database), pinned to the same sequences in both test suites: 2-2-1-1-1, 2-2-1 and 1-1-1                                                                                                |
+| Every later step         | The database, inside `admin_commit_sim_day`, so a day and everything it causes commit together: `app_private.advance_playoffs` and `app_private.schedule_playoff_games`                                                                                      |
+
+**What a playoff day does.** The worker simulates the day's games exactly as in the regular season (`games` rows with a `round`, `series_id` and `game_number`). Committing the day then counts each series' wins, ends the series that have a majority, creates the next round when every series of a round is over, and, if the final is decided, records the `champion` and `finalist` in `season_awards` and sets the season to `complete`. It then schedules the next day's game for every series still being played. Every series plays one game a day, so a team never plays twice in a day. A job ends when the season's phase changes or its days are used up: a playoff `season` job asks for one day per game of the longest possible series and stops when the season completes.
+
+**Simulation rules.** `enqueue_sim_job` accepts a season in the regular season or the playoffs. In the playoffs it needs the bracket (`playoffs_not_started` otherwise), which `startSimulation` builds before queueing. A complete season can't be simulated further (`season_not_running`).
+
+**The next season.** `POST /api/v1/leagues/:leagueId/next-season` (`startNextSeason`) needs a complete season. It archives the season (`admin_archive_season`, which now ignores playoff games for the regular-season record and keeps playoff statistics in their own rows, `player_season_stats.playoffs`, plus each team's `playoff_round` and `playoff_result`) and creates the next one with a new schedule (`createSeason`, seeded from the league id and the new year). It is safe to retry: a season already archived only needs its successor. A league can play 50 seasons. Rosters carry over unchanged until the offseason systems exist.
+
+**API and pages.** `GET /playoffs` returns the rounds (with names such as "Conference finals") and every series with its teams, score and games (`playoff-bracket.tsx`). The **Playoffs** tab shows the bracket, the champion and the simulation panel, which offers "Sim to end of playoffs" during the playoffs and "Start the next season" once the season is complete. Schedule, game and bracket pages label playoff games with their round and game number. Standings count the regular season only.
 
 ### Open alpha: policies, support and analytics
 

@@ -17,6 +17,9 @@ export const GameSummarySchema = z.object({
   homeScore: count.nullable(),
   awayScore: count.nullable(),
   overtimes: count,
+  /** For a playoff game: its round and which game of the series it is. */
+  round: z.number().int().min(1).nullable(),
+  gameNumber: z.number().int().min(1).nullable(),
 });
 export type GameSummary = z.infer<typeof GameSummarySchema>;
 
@@ -158,3 +161,39 @@ export const GamePlaysSchema = z.object({
   }),
 });
 export type GamePlays = z.infer<typeof GamePlaysSchema>;
+
+export const PlayoffTeamSchema = z.object({
+  teamId: z.uuid(),
+  /** Seed in its conference (or the league), 1 is best. */
+  seed: z.number().int().min(1),
+  /** Place in the regular-season standings; the better one has home court. */
+  rank: z.number().int().min(1),
+  /** Games won in the series. */
+  wins: count,
+});
+
+export const PlayoffSeriesSchema = z.object({
+  id: z.uuid(),
+  round: z.number().int().min(1),
+  /** Position in the round; the winners of slots 2k and 2k + 1 meet in slot k of the next. */
+  slot: z.number().int().min(0),
+  bestOf: z.number().int(),
+  a: PlayoffTeamSchema,
+  b: PlayoffTeamSchema,
+  winnerTeamId: z.uuid().nullable(),
+  /** The series' games in order. Empty once its season is archived. */
+  games: z.array(GameSummarySchema),
+});
+export type PlayoffSeries = z.infer<typeof PlayoffSeriesSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/playoffs: the bracket. `rounds` is empty (and
+ * `series` too) until the bracket has been built, which happens when the
+ * playoffs are first simulated.
+ */
+export const PlayoffsResponseSchema = z.object({
+  season: SeasonSchema.nullable(),
+  rounds: z.array(z.object({ round: z.number().int(), label: z.string() })),
+  series: z.array(PlayoffSeriesSchema),
+});
+export type PlayoffsResponse = z.infer<typeof PlayoffsResponseSchema>;

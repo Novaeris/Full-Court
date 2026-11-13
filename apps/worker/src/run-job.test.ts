@@ -105,7 +105,7 @@ describe("runJob", () => {
   });
 
   it("fails rather than simulate a season that is already over", async () => {
-    const fake = fakeDb({ seasonPhase: "playoffs" });
+    const fake = fakeDb({ seasonPhase: "complete" });
     await runJob(fake.db, fake.job);
     expect(fake.commits).toEqual([]);
     expect(fake.failures[0]?.message).toMatch(/season is over/);

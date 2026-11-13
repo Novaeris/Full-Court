@@ -93,7 +93,21 @@ async function Overview({
           luck!
         </p>
       ) : null}
-      {sim ? <SimPanel leagueId={league.id} initial={sim} /> : null}
+      {sim ? (
+        <SimPanel
+          leagueId={league.id}
+          initial={sim}
+          championName={
+            teams.find((t) => t.id === sim.season?.championTeamId)
+              ? teamName(
+                  teams.find(
+                    (t) => t.id === sim.season?.championTeamId,
+                  ) as Team,
+                )
+              : null
+          }
+        />
+      ) : null}
       {myTeams.length === 1 && first ? (
         <section
           aria-label="Your team"

@@ -1,7 +1,9 @@
 import "server-only";
 import type { Database } from "@fullcourt/api-client";
+import type { BracketSeries } from "@fullcourt/game-rules";
 import type {
   Game,
+  PlayoffConfig,
   SchedulePreset,
   ScheduleTiers,
 } from "@fullcourt/game-types";
@@ -33,6 +35,56 @@ export async function insertSeason(input: {
       away_team_id: g.awayTeamId,
     })),
   });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Stores the playoff bracket (the league's rules and the first round, seeded
+ * by the caller) and schedules its first games, through
+ * public.admin_create_playoffs(), which only the service role may call.
+ */
+export async function insertPlayoffs(input: {
+  seasonId: string;
+  config: PlayoffConfig;
+  firstRound: readonly BracketSeries[];
+}): Promise<SeasonRow> {
+  const { data, error } = await createAdminClient().rpc(
+    "admin_create_playoffs",
+    {
+      target_season: input.seasonId,
+      config: { ...input.config },
+      series: input.firstRound.map((s) => ({
+        slot: s.slot,
+        best_of: s.bestOf,
+        team_a: s.a.teamId,
+        seed_a: s.a.seed,
+        rank_a: s.a.rank,
+        team_b: s.b.teamId,
+        seed_b: s.b.seed,
+        rank_b: s.b.rank,
+      })),
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Summarises a complete season into history and deletes its detail, through
+ * public.admin_archive_season(). `standingsOrder` is every team, best first.
+ */
+export async function archiveSeason(input: {
+  seasonId: string;
+  standingsOrder: readonly string[];
+}): Promise<SeasonRow> {
+  const { data, error } = await createAdminClient().rpc(
+    "admin_archive_season",
+    {
+      target_season: input.seasonId,
+      standings_order: [...input.standingsOrder],
+    },
+  );
   if (error) throw error;
   return data;
 }

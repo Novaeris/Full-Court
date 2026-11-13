@@ -24,7 +24,16 @@ export function TeamSchedule({
     {
       key: "day",
       header: "Day",
-      cell: (g) => <span className="font-semibold">Day {g.day}</span>,
+      cell: (g) => (
+        <span className="font-semibold">
+          Day {g.day}
+          {g.round ? (
+            <span className="ml-2 text-xs font-bold text-text-muted">
+              R{g.round} G{g.gameNumber}
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     {
       key: "opponent",
@@ -126,6 +135,7 @@ export function DaySchedule({
               />
             </span>
             <span className="shrink-0 text-sm font-semibold text-text-muted">
+              {g.round ? `R${g.round} G${g.gameNumber} · ` : ""}
               {final ? `Final${overtime(g)}` : "Scheduled"}
             </span>
           </>

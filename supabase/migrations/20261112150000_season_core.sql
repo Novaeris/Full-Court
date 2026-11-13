@@ -74,11 +74,54 @@ create table public.seasons (
   created_at timestamptz not null default now(),
   -- Set when the season's detail was summarised into history and deleted.
   archived_at timestamptz,
+  -- The league's playoff rules (PlayoffConfig), saved when the bracket is built.
+  playoff_config jsonb check (jsonb_typeof(playoff_config) = 'object'),
   unique (league_id, year),
   unique (league_id, id),
   -- The regular season runs until its last day has been simulated.
   check ((phase = 'regular-season') = (day <= last_day))
 );
+
+-- Playoff series ------------------------------------------------------------------------------------
+
+-- One best-of series of the playoff bracket. Series sit in a binary tree: the
+-- winners of slots 2k and 2k + 1 of a round meet in slot k of the next
+-- (PlayoffBracket rules in @fullcourt/game-rules). Kept for every season as the
+-- record of who beat whom; the games themselves are deleted when the season is
+-- archived. `rank_*` is a team's place in the regular-season standings, which
+-- decides home court; `seed_*` its seed in its conference or the league.
+create table public.playoff_series (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  season_id uuid not null,
+  round smallint not null check (round >= 1),
+  slot smallint not null check (slot >= 0),
+  best_of smallint not null check (best_of in (3, 5, 7)),
+  team_a uuid not null,
+  seed_a smallint not null check (seed_a >= 1),
+  rank_a smallint not null check (rank_a >= 1),
+  team_b uuid not null,
+  seed_b smallint not null check (seed_b >= 1),
+  rank_b smallint not null check (rank_b >= 1),
+  wins_a smallint not null default 0,
+  wins_b smallint not null default 0,
+  winner_team_id uuid,
+  foreign key (league_id, season_id)
+    references public.seasons (league_id, id) on delete cascade,
+  foreign key (league_id, team_a)
+    references public.teams (league_id, id) on delete cascade,
+  foreign key (league_id, team_b)
+    references public.teams (league_id, id) on delete cascade,
+  unique (season_id, round, slot),
+  unique (league_id, id),
+  check (team_a <> team_b and rank_a <> rank_b),
+  check (wins_a between 0 and (best_of + 1) / 2 and wins_b between 0 and (best_of + 1) / 2),
+  check (winner_team_id is null or winner_team_id in (team_a, team_b))
+);
+
+create index playoff_series_season_idx on public.playoff_series (season_id, round);
+create index playoff_series_team_a_idx on public.playoff_series (league_id, team_a);
+create index playoff_series_team_b_idx on public.playoff_series (league_id, team_b);
 
 -- Games --------------------------------------------------------------------------------------
 
@@ -95,6 +138,10 @@ create table public.games (
   home_score smallint check (home_score between 0 and 400),
   away_score smallint check (away_score between 0 and 400),
   overtimes smallint not null default 0 check (overtimes between 0 and 20),
+  -- Playoff games belong to a series: its round and which game of it this is.
+  round smallint check (round >= 1),
+  series_id uuid,
+  game_number smallint check (game_number >= 1),
   foreign key (league_id, season_id)
     references public.seasons (league_id, id) on delete cascade,
   foreign key (league_id, home_team_id)
@@ -108,12 +155,16 @@ create table public.games (
   check ((home_score is null) = (away_score is null)),
   check ((status = 'final') = (home_score is not null and away_score is not null)),
   check (status = 'scheduled' or home_score <> away_score),
-  check (status = 'final' or overtimes = 0)
+  check (status = 'final' or overtimes = 0),
+  check ((round is null) = (series_id is null) and (round is null) = (game_number is null)),
+  foreign key (league_id, series_id)
+    references public.playoff_series (league_id, id) on delete cascade
 );
 
 create index games_season_day_idx on public.games (season_id, day);
 create index games_home_team_idx on public.games (season_id, home_team_id);
 create index games_away_team_idx on public.games (season_id, away_team_id);
+create index games_series_idx on public.games (league_id, series_id);
 
 -- Game replays ----------------------------------------------------------------------------------
 
@@ -192,6 +243,8 @@ create table public.player_season_stats (
   season_id uuid not null,
   player_id uuid not null,
   team_id uuid not null,
+  -- True for the playoff row of a player who played in the playoffs.
+  playoffs boolean not null default false,
   games_played smallint not null check (games_played >= 1),
   games_started smallint not null check (games_started between 0 and games_played),
   minutes integer not null check (minutes >= 0),
@@ -229,7 +282,7 @@ create table public.player_season_stats (
   high_threes_opponent_id uuid not null,
   double_doubles smallint not null check (double_doubles between 0 and games_played),
   triple_doubles smallint not null check (triple_doubles between 0 and double_doubles),
-  primary key (season_id, player_id, team_id),
+  primary key (season_id, player_id, team_id, playoffs),
   foreign key (league_id, season_id)
     references public.seasons (league_id, id) on delete cascade,
   foreign key (league_id, player_id)
@@ -285,6 +338,10 @@ create table public.team_season_stats (
   worst_loss_opponent_id uuid,
   longest_win_streak smallint not null default 0 check (longest_win_streak >= 0),
   longest_loss_streak smallint not null default 0 check (longest_loss_streak >= 0),
+  -- How far the team went: the last round it played (null if it missed the
+  -- playoffs) and how it ended: champion, finalist or eliminated.
+  playoff_round smallint check (playoff_round >= 1),
+  playoff_result text check (playoff_result in ('champion', 'finalist', 'eliminated')),
   primary key (season_id, team_id),
   foreign key (league_id, season_id)
     references public.seasons (league_id, id) on delete cascade,
@@ -305,7 +362,8 @@ create table public.team_season_stats (
   check ((biggest_win is null) = (biggest_win_day is null)
      and (biggest_win is null) = (biggest_win_opponent_id is null)),
   check ((worst_loss is null) = (worst_loss_day is null)
-     and (worst_loss is null) = (worst_loss_opponent_id is null))
+     and (worst_loss is null) = (worst_loss_opponent_id is null)),
+  check ((playoff_round is null) = (playoff_result is null))
 );
 
 create index team_season_stats_team_idx
@@ -375,11 +433,12 @@ alter table public.team_season_stats enable row level security;
 alter table public.season_awards enable row level security;
 alter table public.box_score_lines enable row level security;
 alter table public.sim_jobs enable row level security;
+alter table public.playoff_series enable row level security;
 
 grant select on
   public.seasons, public.games, public.game_replays, public.box_score_lines,
   public.player_season_stats, public.team_season_stats, public.season_awards,
-  public.sim_jobs
+  public.sim_jobs, public.playoff_series
 to authenticated;
 
 create policy "seasons: league owner can read"
@@ -402,6 +461,9 @@ create policy "season_awards: league owner can read"
   using (app_private.owns_league(league_id));
 create policy "box_score_lines: league owner can read"
   on public.box_score_lines for select to authenticated
+  using (app_private.owns_league(league_id));
+create policy "playoff_series: league owner can read"
+  on public.playoff_series for select to authenticated
   using (app_private.owns_league(league_id));
 create policy "sim_jobs: league owner can read"
   on public.sim_jobs for select to authenticated
@@ -455,11 +517,22 @@ begin
   if not found then
     raise exception 'season_not_found' using errcode = 'P0002';
   end if;
-  if current_season.phase <> 'regular-season' then
+  if current_season.phase = 'complete' then
     raise exception 'season_not_running' using errcode = 'P0001';
   end if;
+  -- The playoffs need their bracket first (the server builds it, then queues).
+  if current_season.phase = 'playoffs' and not exists (
+    select 1 from public.playoff_series where season_id = current_season.id
+  ) then
+    raise exception 'playoffs_not_started' using errcode = 'P0001';
+  end if;
 
-  remaining := current_season.last_day - current_season.day + 1;
+  -- The rest of the regular season, or at most one day for every game of the
+  -- longest possible playoffs (the job ends when the season does).
+  remaining := case current_season.phase
+    when 'regular-season' then current_season.last_day - current_season.day + 1
+    else 7 * log(2, (current_season.playoff_config ->> 'teams')::numeric)::integer
+  end;
   requested := case sim_kind
     when 'day' then 1
     when 'week' then least(7, remaining)
@@ -665,6 +738,8 @@ declare
   scheduled integer;
   finished integer;
   inserted integer;
+  champion_decided boolean := false;
+  started_phase text;
 begin
   select * into job from public.sim_jobs where id = target_job for update;
   if not found or job.status <> 'running' then
@@ -672,10 +747,12 @@ begin
   end if;
 
   select * into current_season from public.seasons where id = job.season_id for update;
-  if current_season.phase <> 'regular-season' or current_season.day <> sim_day then
+  if current_season.phase not in ('regular-season', 'playoffs')
+     or current_season.day <> sim_day then
     raise exception 'stale_day' using errcode = 'P0001',
       detail = format('The season is at day %s, not %s.', current_season.day, sim_day);
   end if;
+  started_phase := current_season.phase;
   if cardinality(new_rng_state) <> 4 then
     raise exception 'invalid_rng_state' using errcode = '22023';
   end if;
@@ -755,22 +832,36 @@ begin
     raise exception 'inconsistent_box_score' using errcode = '22023';
   end if;
 
+  -- Playoff games count toward their series; a finished round starts the next
+  -- and the final decides the champion.
+  if started_phase = 'playoffs' then
+    champion_decided := app_private.advance_playoffs(current_season.id, sim_day);
+  end if;
+
   update public.leagues set rng_state = new_rng_state where id = current_season.league_id;
 
   update public.seasons
   set day = sim_day + 1,
-      phase = case when sim_day + 1 > last_day then 'playoffs' else phase end
+      phase = case
+        when champion_decided then 'complete'
+        when phase = 'regular-season' and sim_day + 1 > last_day then 'playoffs'
+        else phase end
   where id = current_season.id
   returning * into current_season;
+
+  -- The next day's playoff games, for every series still being played.
+  if started_phase = 'playoffs' and current_season.phase = 'playoffs' then
+    perform app_private.schedule_playoff_games(current_season.id);
+  end if;
 
   update public.sim_jobs
   set days_done = days_done + 1,
       heartbeat_at = now(),
       status = case
-        when days_done + 1 >= days_requested or current_season.phase <> 'regular-season'
+        when days_done + 1 >= days_requested or current_season.phase <> started_phase
           then 'done' else status end,
       finished_at = case
-        when days_done + 1 >= days_requested or current_season.phase <> 'regular-season'
+        when days_done + 1 >= days_requested or current_season.phase <> started_phase
           then now() else finished_at end
   where id = job.id
   returning * into job;
@@ -893,18 +984,19 @@ begin
     low_points_allowed, low_points_allowed_day, low_points_allowed_opponent_id,
     biggest_win, biggest_win_day, biggest_win_opponent_id,
     worst_loss, worst_loss_day, worst_loss_opponent_id,
-    longest_win_streak, longest_loss_streak
+    longest_win_streak, longest_loss_streak,
+    playoff_round, playoff_result
   )
   with results as (
     select g.id as game_id, g.day, g.home_team_id as team_id,
            g.away_team_id as opponent_id, true as at_home,
            g.home_score as scored, g.away_score as allowed,
            g.home_score > g.away_score as won
-    from public.games g where g.season_id = target_season
+    from public.games g where g.season_id = target_season and g.round is null
     union all
     select g.id, g.day, g.away_team_id, g.home_team_id, false,
            g.away_score, g.home_score, g.away_score > g.home_score
-    from public.games g where g.season_id = target_season
+    from public.games g where g.season_id = target_season and g.round is null
   ),
   totals as (
     select r.team_id,
@@ -964,6 +1056,21 @@ begin
     from runs
     group by team_id
   ),
+  playoff as (
+    select t.team_id,
+           max(ps.round) as last_round,
+           bool_or(ps.round = fin.rounds and ps.winner_team_id = t.team_id) as champion,
+           bool_or(ps.round = fin.rounds and ps.winner_team_id is not null
+                   and ps.winner_team_id <> t.team_id) as finalist
+    from public.playoff_series ps
+    cross join lateral (values (ps.team_a), (ps.team_b)) as t(team_id)
+    cross join lateral (
+      select max(round) as rounds from public.playoff_series
+      where season_id = target_season
+    ) fin
+    where ps.season_id = target_season
+    group by t.team_id
+  ),
   ordered as (
     select u.team_id, u.place::integer as rank_overall
     from unnest(standings_order) with ordinality as u(team_id, place)
@@ -983,16 +1090,22 @@ begin
          a.low_points_allowed, a.low_points_allowed_day, a.low_points_allowed_opponent_id,
          a.biggest_win, a.biggest_win_day, a.biggest_win_opponent_id,
          a.worst_loss, a.worst_loss_day, a.worst_loss_opponent_id,
-         coalesce(s.longest_win_streak, 0), coalesce(s.longest_loss_streak, 0)
+         coalesce(s.longest_win_streak, 0), coalesce(s.longest_loss_streak, 0),
+         po.last_round,
+         case when po.team_id is null then null
+              when po.champion then 'champion'
+              when po.finalist then 'finalist'
+              else 'eliminated' end
   from public.teams t
   join ordered o on o.team_id = t.id
   left join totals a on a.team_id = t.id
   left join streaks s on s.team_id = t.id
+  left join playoff po on po.team_id = t.id
   where t.league_id = archived.league_id;
 
   -- Player totals and single-game highs, plus what totals can't give back later.
   insert into public.player_season_stats (
-    league_id, season_id, player_id, team_id, games_played, games_started,
+    league_id, season_id, player_id, team_id, playoffs, games_played, games_started,
     minutes, points, rebounds, assists, steals, blocks, turnovers, fouls,
     fgm, fga, tpm, tpa, ftm, fta,
     high_points, high_points_day, high_points_opponent_id,
@@ -1004,6 +1117,7 @@ begin
     double_doubles, triple_doubles
   )
   select archived.league_id, target_season, l.player_id, l.team_id,
+         (g.round is not null),
          count(*), count(*) filter (where l.started),
          sum(l.minutes), sum(l.points), sum(l.rebounds), sum(l.assists),
          sum(l.steals), sum(l.blocks), sum(l.turnovers), sum(l.fouls),
@@ -1038,7 +1152,7 @@ begin
                 else g.home_team_id end as opponent_id
   ) cats
   where g.season_id = target_season
-  group by l.player_id, l.team_id;
+  group by l.player_id, l.team_id, (g.round is not null);
 
   -- Nothing is deleted unless the summaries agree with each other.
   if exists (
@@ -1047,6 +1161,7 @@ begin
       and t.points_for <> coalesce((
         select sum(p.points) from public.player_season_stats p
         where p.season_id = target_season and p.team_id = t.team_id
+          and not p.playoffs
       ), 0)
   ) or (
     select coalesce(sum(wins), 0) <> coalesce(sum(losses), 0)
@@ -1071,3 +1186,232 @@ comment on function public.admin_archive_season is
 revoke execute on function public.admin_archive_season(uuid, uuid[])
   from public, anon, authenticated;
 grant execute on function public.admin_archive_season(uuid, uuid[]) to service_role;
+
+-- Playoffs (server only) -----------------------------------------------------------------------------------
+
+-- Who hosts game `game_number` of a series: true for the team with the better
+-- regular-season record. Best of 7 is 2-2-1-1-1, best of 5 is 2-2-1 and best of
+-- 3 is 1-1-1. Mirrors homeGamePattern in @fullcourt/game-rules.
+create function app_private.playoff_home_game(best_of integer, game_number integer)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select case when best_of = 3
+    then (array[true, false, true])[game_number]
+    else (array[true, true, false, false, true, false, true])[game_number]
+  end
+$$;
+
+grant execute on function app_private.playoff_home_game(integer, integer) to service_role;
+
+-- Schedules today's game (the season's current day) for every series still
+-- being played that has none waiting. Returns how many it made.
+create function app_private.schedule_playoff_games(target_season uuid)
+returns integer
+language plpgsql
+set search_path = ''
+as $$
+declare
+  today integer;
+  made integer;
+begin
+  select day into today from public.seasons where id = target_season;
+  insert into public.games (
+    league_id, season_id, day, home_team_id, away_team_id, round, series_id, game_number
+  )
+  select ps.league_id, ps.season_id, today,
+         case when app_private.playoff_home_game(ps.best_of, ps.wins_a + ps.wins_b + 1)
+                   = (ps.rank_a < ps.rank_b) then ps.team_a else ps.team_b end,
+         case when app_private.playoff_home_game(ps.best_of, ps.wins_a + ps.wins_b + 1)
+                   = (ps.rank_a < ps.rank_b) then ps.team_b else ps.team_a end,
+         ps.round, ps.id, ps.wins_a + ps.wins_b + 1
+  from public.playoff_series ps
+  where ps.season_id = target_season
+    and ps.winner_team_id is null
+    and not exists (
+      select 1 from public.games g where g.series_id = ps.id and g.status = 'scheduled'
+    );
+  get diagnostics made = row_count;
+  return made;
+end;
+$$;
+
+grant execute on function app_private.schedule_playoff_games(uuid) to service_role;
+
+-- Counts the wins of the games played on `finished_day`, ends series that have
+-- a winner, starts the next round when a round is over, and, when the final is
+-- decided, records the champion and the finalist. Returns true once the season's
+-- champion is decided.
+create function app_private.advance_playoffs(target_season uuid, finished_day integer)
+returns boolean
+language plpgsql
+set search_path = ''
+as $$
+declare
+  s public.seasons;
+  total_rounds integer;
+  r integer;
+  lengths jsonb;
+  decided boolean := false;
+begin
+  select * into s from public.seasons where id = target_season;
+  total_rounds := log(2, (s.playoff_config ->> 'teams')::numeric)::integer;
+  lengths := s.playoff_config -> 'roundSeriesLengths';
+
+  -- The day's results.
+  update public.playoff_series ps
+  set wins_a = ps.wins_a + w.a_wins,
+      wins_b = ps.wins_b + w.b_wins
+  from (
+    select g.series_id,
+           count(*) filter (where (g.home_score > g.away_score and g.home_team_id = p.team_a)
+                               or (g.away_score > g.home_score and g.away_team_id = p.team_a)) as a_wins,
+           count(*) filter (where (g.home_score > g.away_score and g.home_team_id = p.team_b)
+                               or (g.away_score > g.home_score and g.away_team_id = p.team_b)) as b_wins
+    from public.games g
+    join public.playoff_series p on p.id = g.series_id
+    where g.season_id = target_season and g.day = finished_day and g.series_id is not null
+    group by g.series_id
+  ) w
+  where ps.id = w.series_id;
+
+  -- A series is won by the first team to a majority of its games.
+  update public.playoff_series ps
+  set winner_team_id = case when ps.wins_a >= (ps.best_of + 1) / 2 then ps.team_a else ps.team_b end
+  where ps.season_id = target_season
+    and ps.winner_team_id is null
+    and (ps.wins_a >= (ps.best_of + 1) / 2 or ps.wins_b >= (ps.best_of + 1) / 2);
+
+  -- When every series of a round is won, the winners of neighbouring slots meet.
+  for r in 1 .. total_rounds - 1 loop
+    if exists (select 1 from public.playoff_series where season_id = target_season and round = r)
+       and not exists (
+         select 1 from public.playoff_series
+         where season_id = target_season and round = r and winner_team_id is null
+       )
+       and not exists (
+         select 1 from public.playoff_series where season_id = target_season and round = r + 1
+       ) then
+      insert into public.playoff_series (
+        league_id, season_id, round, slot, best_of,
+        team_a, seed_a, rank_a, team_b, seed_b, rank_b
+      )
+      select s.league_id, target_season, r + 1, lo.slot / 2,
+             coalesce((lengths ->> r)::integer, (lengths ->> (jsonb_array_length(lengths) - 1))::integer),
+             lo.winner_team_id,
+             case when lo.winner_team_id = lo.team_a then lo.seed_a else lo.seed_b end,
+             case when lo.winner_team_id = lo.team_a then lo.rank_a else lo.rank_b end,
+             hi.winner_team_id,
+             case when hi.winner_team_id = hi.team_a then hi.seed_a else hi.seed_b end,
+             case when hi.winner_team_id = hi.team_a then hi.rank_a else hi.rank_b end
+      from public.playoff_series lo
+      join public.playoff_series hi
+        on hi.season_id = lo.season_id and hi.round = lo.round and hi.slot = lo.slot + 1
+      where lo.season_id = target_season and lo.round = r and lo.slot % 2 = 0;
+    end if;
+  end loop;
+
+  -- The final decides the champion.
+  if exists (
+    select 1 from public.playoff_series
+    where season_id = target_season and round = total_rounds and winner_team_id is not null
+  ) then
+    decided := true;
+    insert into public.season_awards (league_id, season_id, award, team_id)
+    select s.league_id, target_season, 'champion', ps.winner_team_id
+    from public.playoff_series ps
+    where ps.season_id = target_season and ps.round = total_rounds
+    union all
+    select s.league_id, target_season, 'finalist',
+           case when ps.winner_team_id = ps.team_a then ps.team_b else ps.team_a end
+    from public.playoff_series ps
+    where ps.season_id = target_season and ps.round = total_rounds;
+  end if;
+  return decided;
+end;
+$$;
+
+grant execute on function app_private.advance_playoffs(uuid, integer) to service_role;
+
+-- Builds the bracket when the regular season is over. `config` is the league's
+-- PlayoffConfig and `series` the first round, as buildFirstRound makes it:
+-- [{slot, best_of, team_a, seed_a, rank_a, team_b, seed_b, rank_b}]. The server
+-- seeds the field from the standings (so the tiebreakers stay in one place);
+-- this stores it and schedules the first games on the season's current day.
+create function public.admin_create_playoffs(
+  target_season uuid,
+  config jsonb,
+  series jsonb
+)
+returns public.seasons
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  s public.seasons;
+  field integer;
+  made integer;
+begin
+  select * into s from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if s.phase <> 'playoffs' then
+    raise exception 'season_not_in_playoffs' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.playoff_series where season_id = target_season) then
+    raise exception 'playoffs_already_started' using errcode = 'P0001';
+  end if;
+  if jsonb_typeof(config) is distinct from 'object'
+     or jsonb_typeof(series) is distinct from 'array' then
+    raise exception 'invalid_playoffs' using errcode = '22023';
+  end if;
+  field := (config ->> 'teams')::integer;
+  if field is null or field < 2 or (field & (field - 1)) <> 0
+     or jsonb_typeof(config -> 'roundSeriesLengths') is distinct from 'array'
+     or jsonb_array_length(series) <> field / 2 then
+    raise exception 'invalid_playoffs' using errcode = '22023',
+      detail = 'The field must be a power of two with half as many first-round series.';
+  end if;
+
+  update public.seasons set playoff_config = config where id = target_season;
+
+  insert into public.playoff_series (
+    league_id, season_id, round, slot, best_of,
+    team_a, seed_a, rank_a, team_b, seed_b, rank_b
+  )
+  select s.league_id, target_season, 1, x.slot, x.best_of,
+         x.team_a, x.seed_a, x.rank_a, x.team_b, x.seed_b, x.rank_b
+  from jsonb_to_recordset(series) as x(
+    slot integer, best_of integer, team_a uuid, seed_a integer, rank_a integer,
+    team_b uuid, seed_b integer, rank_b integer
+  );
+  get diagnostics made = row_count;
+
+  -- Every team is in the field once.
+  if made <> field / 2 or (
+    select count(distinct t) from (
+      select team_a as t from public.playoff_series where season_id = target_season
+      union all
+      select team_b from public.playoff_series where season_id = target_season
+    ) teams_in
+  ) <> field then
+    raise exception 'invalid_playoffs' using errcode = '22023',
+      detail = 'A team appears in the bracket twice.';
+  end if;
+
+  perform app_private.schedule_playoff_games(target_season);
+  select * into s from public.seasons where id = target_season;
+  return s;
+end;
+$$;
+
+comment on function public.admin_create_playoffs is
+  'Stores the playoff bracket (first round and rules) and schedules its first games. Service role only.';
+
+revoke execute on function public.admin_create_playoffs(uuid, jsonb, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.admin_create_playoffs(uuid, jsonb, jsonb) to service_role;
