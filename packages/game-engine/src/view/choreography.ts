@@ -346,18 +346,22 @@ export function buildTimeline(
         const slot = slotOfId(play.outPlayerId);
         if (slot >= 0 && play.playerId) {
           // Swap at once: the new player waits at the bench, then jogs on.
-          snap(t0 + 0.001, ballNow().ball, ballNow().holder);
+          const { ball, holder } = ballNow();
+          snap(t0 + 0.001, ball, holder);
           ids[slot] = play.playerId;
-          const bout = bench(slot);
-          cur[slot] = bout;
-          snap(t0 + 0.002, ballNow().ball, ballNow().holder);
+          cur[slot] = bench(slot);
+          // If the player leaving had the ball, it is loose until the next play.
+          snap(t0 + 0.002, ball, holder === slot ? -1 : holder);
           const mate = possession ?? 0;
           const target = formation(mate, play.period, "set", -1)[slot] as Pt;
           const next = cur.map((p) => ({ ...p }));
           next[slot] = target;
           cur = next;
         }
-        snap(tEv, ballNow().ball, ballNow().holder);
+        {
+          const { ball, holder } = ballNow();
+          snap(tEv, ball, holder);
+        }
         break;
       }
 

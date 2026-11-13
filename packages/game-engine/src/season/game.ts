@@ -12,7 +12,8 @@ import {
   type ShotZone,
 } from "@fullcourt/game-types";
 import { invariant } from "@fullcourt/shared";
-import { normal, pick, weighted } from "../rng/helpers";
+import { cos, pow15, sin } from "../rng/dmath";
+import { normalSum, pick, weighted } from "../rng/helpers";
 import type { Rng } from "../rng/rng";
 import { buildBoxScore } from "./boxscore";
 import type { Lineups, SimPlayer, SimTeam, SimulatedGame } from "./types";
@@ -281,7 +282,7 @@ export function simulateGame(
     const player = weighted(
       rng,
       side.onCourt.map(
-        (p) => [p, weight(effective(side, p, key)) ** 1.5] as const,
+        (p) => [p, pow15(weight(effective(side, p, key)))] as const,
       ),
     );
     const spot = {
@@ -326,7 +327,7 @@ export function simulateGame(
         ? 6
         : TRIP_SECONDS[offense.team.strategy.pace];
     const seconds = clamp(
-      Math.round(normal(rng, mean, continuation ? 3 : fb ? 2 : 3.5)),
+      Math.round(normalSum(rng, mean, continuation ? 3 : fb ? 2 : 3.5)),
       continuation ? 2 : fb ? 3 : 4,
       continuation ? 14 : fb ? 11 : 24,
     );
@@ -461,7 +462,7 @@ export function simulateGame(
         : flip(false, { kind: "rebound", player: board.player });
     }
 
-    const blockChance = BLOCKED[zone] * (avg(defense, "interiorD") / 60) ** 1.5;
+    const blockChance = BLOCKED[zone] * pow15(avg(defense, "interiorD") / 60);
     const blocker =
       rng.next() < blockChance
         ? weighted(
@@ -702,8 +703,8 @@ function shotPoint(rng: Rng, zone: ShotZone): CourtPoint {
       : zone === "mid-range"
         ? 9 + rng.next() * 12
         : 23.75 + rng.next() * 3.5;
-  let x = radius * Math.cos(theta);
-  let y = BASKET_LOCAL_Y + radius * Math.sin(theta);
+  let x = radius * cos(theta);
+  let y = BASKET_LOCAL_Y + radius * sin(theta);
   if (zone === "three" && Math.abs(x) > 22) {
     // Corner three: a straight 22-foot line.
     x = x < 0 ? -22 : 22;

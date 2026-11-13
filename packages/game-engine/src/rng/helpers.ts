@@ -39,3 +39,16 @@ export function weighted<T>(
   }
   return (options[options.length - 1] as readonly [T, number])[0];
 }
+
+/**
+ * Approximately normal: twelve uniform numbers summed, centred and scaled. It
+ * uses only addition, so every JavaScript engine gives the same value, unlike
+ * `normal`, whose `log` and `cos` can differ in the last digit between engines.
+ * The simulation uses this one. It always draws exactly twelve numbers and is
+ * bounded to six standard deviations either side of the mean.
+ */
+export function normalSum(rng: Rng, mean: number, sd: number): number {
+  let total = 0;
+  for (let i = 0; i < 12; i++) total += rng.next();
+  return mean + (total - 6) * sd;
+}

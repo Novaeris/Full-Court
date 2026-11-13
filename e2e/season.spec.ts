@@ -115,6 +115,9 @@ test.describe("simulation and season pages", () => {
     const detail = await api.leagues.game(league.id, gameId);
 
     // Watch it. Starts paused; nothing moves until asked.
+    // The replay ran on this device and agreed with the stored score, so the
+    // server's replay wasn't needed.
+    await expect(page.locator("[data-replay-source='device']")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Play", exact: true }),
     ).toBeVisible();

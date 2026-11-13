@@ -24,7 +24,7 @@ import type { SimPlayer, SimTeam, SimulatedGame } from "./types";
  * their scores and box scores but can no longer be replayed exactly.
  * `replay.test.ts` fails when the output changes without a bump.
  */
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 
 /** One player: id, position, overall, then the ratings in `RATING_KEYS` order. */
 export type ReplayPlayer = (string | number)[];

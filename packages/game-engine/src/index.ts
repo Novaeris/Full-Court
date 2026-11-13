@@ -75,3 +75,9 @@ export {
   periodLabel,
   type NameOf,
 } from "./view/describe";
+export {
+  cos as exactCos,
+  pow15 as exactPow15,
+  sin as exactSin,
+} from "./rng/dmath";
+export { normalSum } from "./rng/helpers";

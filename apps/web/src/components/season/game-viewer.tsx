@@ -152,7 +152,11 @@ export function GameViewer({
     );
   }
   return (
-    <Player prepared={prepared} home={home} away={away} players={players} />
+    // Where the plays came from: this device's own replay, or the server's
+    // when the device's didn't end on the stored score. Tests read it.
+    <div data-replay-source={local ? "device" : "server"}>
+      <Player prepared={prepared} home={home} away={away} players={players} />
+    </div>
   );
 }
 
