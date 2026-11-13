@@ -74,3 +74,67 @@ export async function touchTargets(page: Page) {
   );
   expect(small).toEqual([]);
 }
+
+type DraftApi = {
+  leagues: {
+    simDraft: (
+      id: string,
+      input?: { autoMine: boolean },
+    ) => Promise<{
+      onTheClock: { yourPick: boolean } | null;
+      suggestion: string | null;
+    }>;
+    draftPick: (
+      id: string,
+      input: { prospectId: string },
+    ) => Promise<{
+      onTheClock: { yourPick: boolean } | null;
+      suggestion: string | null;
+    }>;
+    roster: (id: string) => Promise<{
+      players: { id: string; overall: number }[];
+      freeAgents: { id: string; overall: number }[];
+      min: number;
+      max: number;
+    }>;
+    releasePlayer: (
+      id: string,
+      input: { playerId: string },
+    ) => Promise<unknown>;
+    signPlayer: (id: string, input: { playerId: string }) => Promise<unknown>;
+  };
+};
+
+/**
+ * Plays the draft as an owner who picks by hand: the lottery, the computer
+ * teams until the owner is on the clock, the owner taking the scouts'
+ * suggestion, and so on to the last pick.
+ */
+export async function playDraft(api: DraftApi, leagueId: string) {
+  let draft = await api.leagues.simDraft(leagueId, { autoMine: false });
+  for (let i = 0; i < 10 && draft.onTheClock; i++) {
+    draft =
+      draft.onTheClock.yourPick && draft.suggestion
+        ? await api.leagues.draftPick(leagueId, {
+            prospectId: draft.suggestion,
+          })
+        : await api.leagues.simDraft(leagueId, { autoMine: false });
+  }
+}
+
+/** Releases the weakest or signs the best free agents until the roster is legal. */
+export async function makeRosterLegal(api: DraftApi, leagueId: string) {
+  let roster = await api.leagues.roster(leagueId);
+  while (roster.players.length > roster.max) {
+    const weakest = [...roster.players].sort(
+      (a, b) => a.overall - b.overall,
+    )[0]!;
+    await api.leagues.releasePlayer(leagueId, { playerId: weakest.id });
+    roster = await api.leagues.roster(leagueId);
+  }
+  while (roster.players.length < roster.min) {
+    const best = roster.freeAgents[0]!;
+    await api.leagues.signPlayer(leagueId, { playerId: best.id });
+    roster = await api.leagues.roster(leagueId);
+  }
+}

@@ -18,7 +18,7 @@ import {
   retirementChance,
 } from "@fullcourt/game-rules";
 import { normalSum, weighted } from "../rng/helpers";
-import type { Rng } from "../rng/rng";
+import { createRng, seedState, type Rng } from "../rng/rng";
 import {
   generateBody,
   generatePotential,
@@ -263,6 +263,149 @@ export function draftOrder(
   return { order, entries };
 }
 
+/** One pick of the draft, once the lottery has set the order. */
+export type DraftSlot = {
+  pick: number;
+  round: number;
+  teamId: string;
+  finishRank: number;
+  expectedPick: number;
+  odds: number | null;
+};
+
+/** The whole draft order: every round, with how each team's place came about. */
+export function drawLottery(
+  rng: Rng,
+  standingsOrder: readonly string[],
+  playoffDepth: ReadonlyMap<string, number>,
+): DraftSlot[] {
+  const { order, entries } = draftOrder(rng, standingsOrder, playoffDepth);
+  const byTeam = new Map(entries.map((e) => [e.teamId, e]));
+  const slots: DraftSlot[] = [];
+  for (let round = 1; round <= DRAFT_ROUNDS; round++) {
+    for (const teamId of order) {
+      const entry = byTeam.get(teamId) as LotteryEntry;
+      slots.push({
+        pick: slots.length + 1,
+        round,
+        teamId,
+        finishRank: entry.finishRank,
+        expectedPick: entry.expectedPick,
+        odds: entry.odds,
+      });
+    }
+  }
+  return slots;
+}
+
+/** How many prospects a class holds: every pick, and a few undrafted. */
+export function classSize(teams: number): number {
+  return teams * DRAFT_ROUNDS + UNDRAFTED_PROSPECTS;
+}
+
+export type ProspectView = {
+  id: string;
+  position: Position;
+  age: number;
+  overall: number;
+  potential: number;
+};
+
+/**
+ * What a team's scouts think of a prospect: the true overall and potential seen
+ * through noise that a better scout reduces (`draftNoise`). The noise is fixed
+ * for each prospect and team, so looking again never changes what is seen.
+ */
+export function scoutedView(
+  prospect: ProspectView,
+  teamId: string,
+  scout: number | null,
+): { overall: number; potential: number } {
+  const rng = createRng(seedState(`scout:${prospect.id}:${teamId}`));
+  const noise = draftNoise(scout);
+  const overall = clampRating(prospect.overall + normalSum(rng, 0, noise));
+  const potential = Math.max(
+    overall,
+    clampRating(prospect.potential + normalSum(rng, 0, noise * 1.5)),
+  );
+  return { overall: Math.round(overall), potential: Math.round(potential) };
+}
+
+const NEED_PENALTY = 2;
+
+/**
+ * Takes the best prospect for a team: overall and potential (leaning on
+ * potential for the young), less a penalty for each player the team already
+ * has at his position. `view` is how the team sees each prospect.
+ */
+function bestFit(
+  prospects: readonly ProspectView[],
+  view: (p: ProspectView) => { overall: number; potential: number },
+  rosterPositions: readonly Position[],
+): string {
+  const have = (position: Position) =>
+    rosterPositions.filter((p) => p === position).length;
+  let best = prospects[0] as ProspectView;
+  let bestScore = -Infinity;
+  for (const p of prospects) {
+    const v = view(p);
+    const score =
+      playerValue(v.overall, v.potential, p.age) -
+      have(p.position) * NEED_PENALTY;
+    if (score > bestScore || (score === bestScore && p.id < best.id)) {
+      bestScore = score;
+      best = p;
+    }
+  }
+  return best.id;
+}
+
+/**
+ * A computer team's pick: the best fit on its own board, seen through the noise
+ * its scout leaves, with a little extra luck so teams don't all agree.
+ */
+export function chooseProspect(
+  rng: Rng,
+  input: {
+    prospects: readonly ProspectView[];
+    rosterPositions: readonly Position[];
+    scout: number | null;
+  },
+): string {
+  const noise = draftNoise(input.scout);
+  const seen = new Map(
+    input.prospects.map((p) => [
+      p.id,
+      {
+        overall: p.overall + normalSum(rng, 0, noise),
+        potential: p.potential + normalSum(rng, 0, noise),
+      },
+    ]),
+  );
+  return bestFit(
+    input.prospects,
+    (p) => seen.get(p.id) as { overall: number; potential: number },
+    input.rosterPositions,
+  );
+}
+
+/**
+ * The best pick for a team on what its scouts can see: no dice, so it is the
+ * same suggestion every time. This is what the owner's team is told.
+ */
+export function suggestProspect(input: {
+  prospects: readonly ProspectView[];
+  teamId: string;
+  rosterPositions: readonly Position[];
+  scout: number | null;
+}): string {
+  return bestFit(
+    input.prospects,
+    (p) => scoutedView(p, input.teamId, input.scout),
+    input.rosterPositions,
+  );
+}
+
 export type DraftInput = {
   /** Every team, best regular-season record first. */
   standingsOrder: readonly string[];
@@ -275,10 +418,9 @@ export type DraftInput = {
 };
 
 /**
- * Step 2: the lottery and the draft. Every team takes the best prospect on its
- * board, a blend of overall and potential that leans on potential for the
- * young, seen through the noise its scout leaves. Prospects not taken stay
- * undrafted (no team).
+ * The whole draft at once, with every team picking for itself: a class is made,
+ * the lottery drawn and the picks made. The server does the same in steps so
+ * the owner can pick; this is the same rules end to end.
  */
 export function holdDraft(
   rng: Rng,
@@ -287,37 +429,35 @@ export function holdDraft(
   const teams = input.standingsOrder;
   const prospects = generateDraftClass(
     rng,
-    teams.length * DRAFT_ROUNDS + UNDRAFTED_PROSPECTS,
+    classSize(teams.length),
     new Set(input.takenNames),
   );
-  const available = new Set(prospects.map((p) => p.key));
-  const { order, entries } = draftOrder(
-    rng,
-    input.standingsOrder,
-    input.playoffDepth,
+  const slots = drawLottery(rng, input.standingsOrder, input.playoffDepth);
+  const available = new Map(prospects.map((p) => [String(p.key), p]));
+  const rosterPositions = new Map<string, Position[]>(
+    teams.map((t) => [t, []]),
   );
-  let pickNumber = 0;
-  for (let round = 1; round <= DRAFT_ROUNDS; round++) {
-    for (const teamId of order) {
-      pickNumber += 1;
-      const noise = draftNoise(input.scouts.get(teamId) ?? null);
-      let best: Rookie | null = null;
-      let bestScore = -Infinity;
-      for (const prospect of prospects) {
-        if (!available.has(prospect.key)) continue;
-        const score =
-          playerValue(prospect.overall, prospect.potential, prospect.age) +
-          normalSum(rng, 0, noise);
-        if (score > bestScore) {
-          bestScore = score;
-          best = prospect;
-        }
-      }
-      if (!best) break;
-      available.delete(best.key);
-      best.teamId = teamId;
-      best.draft = { round, pick: pickNumber, teamId };
-    }
+  for (const slot of slots) {
+    if (available.size === 0) break;
+    const id = chooseProspect(rng, {
+      prospects: [...available.values()].map((p) => ({
+        id: String(p.key),
+        position: p.position,
+        age: p.age,
+        overall: p.overall,
+        potential: p.potential,
+      })),
+      rosterPositions: rosterPositions.get(slot.teamId) ?? [],
+      scout: input.scouts.get(slot.teamId) ?? null,
+    });
+    const taken = available.get(id) as Rookie;
+    available.delete(id);
+    taken.teamId = slot.teamId;
+    taken.draft = { round: slot.round, pick: slot.pick, teamId: slot.teamId };
+    rosterPositions.get(slot.teamId)?.push(taken.position);
   }
-  return { rookies: prospects, lottery: entries };
+  const lottery = slots
+    .filter((s) => s.round === 1)
+    .map(({ round: _round, ...entry }) => entry);
+  return { rookies: prospects, lottery };
 }

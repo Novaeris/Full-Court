@@ -1,4 +1,4 @@
-import type { Position } from "@fullcourt/game-types";
+import { POSITIONS, type Position } from "@fullcourt/game-types";
 import { ROSTER_LIMITS, playerValue } from "@fullcourt/game-rules";
 import { shuffle } from "../rng/helpers";
 import type { Rng } from "../rng/rng";
@@ -41,6 +41,11 @@ export function fillRosters(
   input: {
     teams: readonly string[];
     players: readonly OffseasonPlayer[];
+    /**
+     * The teams whose front office acts. Others (an owner's, who is making
+     * their own moves) are left as they are. Everyone when not given.
+     */
+    acting?: ReadonlySet<string>;
   },
 ): RosterMove[] {
   const teams = [...input.teams];
@@ -61,7 +66,10 @@ export function fillRosters(
     .filter((p) => p.teamId === null)
     .map((p) => p.id);
 
-  for (const roster of rosters.values()) {
+  const acts = (teamId: string) =>
+    input.acting === undefined || input.acting.has(teamId);
+  for (const [teamId, roster] of rosters) {
+    if (!acts(teamId)) continue;
     roster.sort((a, b) => value(b) - value(a));
     for (const cut of roster.splice(ROSTER_LIMITS.max)) {
       team.set(cut, null);
@@ -70,6 +78,7 @@ export function fillRosters(
   }
 
   for (const teamId of [...teams].reverse()) {
+    if (!acts(teamId)) continue;
     const roster = rosters.get(teamId) as string[];
     const target = rng.int(ROSTER_LIMITS.min, ROSTER_LIMITS.max);
     while (roster.length > Math.max(target, ROSTER_LIMITS.min)) {
@@ -130,4 +139,61 @@ export function fillRosters(
       ? [{ id: p.id, teamId, jersey: number }]
       : [];
   });
+}
+
+/**
+ * Roster coverage for a team the owner runs: leaves their choices alone but
+ * makes the roster legal and every position covered. Too many players: the
+ * weakest go, from positions with the most players first. Too few, or a
+ * position nobody plays: the best free agent signs, uncovered positions first.
+ */
+export function coverRoster(input: {
+  roster: readonly OffseasonPlayer[];
+  pool: readonly OffseasonPlayer[];
+}): { release: string[]; sign: string[] } {
+  const roster = [...input.roster];
+  const pool = [...input.pool];
+  const release: string[] = [];
+  const sign: string[] = [];
+  const value = (p: OffseasonPlayer) =>
+    playerValue(p.overall, p.potential, p.age);
+  const count = (position: Position) =>
+    roster.filter((p) => p.position === position).length;
+
+  while (roster.length > ROSTER_LIMITS.max) {
+    const candidates = roster.filter((p) => count(p.position) > 1);
+    const from = candidates.length > 0 ? candidates : roster;
+    const cut = from.reduce((a, b) => {
+      const crowd = count(b.position) - count(a.position);
+      if (crowd !== 0) return crowd > 0 ? b : a;
+      return value(b) < value(a) ? b : a;
+    });
+    roster.splice(roster.indexOf(cut), 1);
+    release.push(cut.id);
+  }
+
+  const missing = () => POSITIONS.filter((position) => count(position) === 0);
+  while (
+    pool.length > 0 &&
+    roster.length < ROSTER_LIMITS.max &&
+    (roster.length < ROSTER_LIMITS.min || missing().length > 0)
+  ) {
+    const uncovered = new Set(missing());
+    let best = 0;
+    let bestScore = -Infinity;
+    pool.forEach((p, i) => {
+      const score =
+        value(p) +
+        (uncovered.has(p.position) ? 100 : 0) -
+        count(p.position) * 4;
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    });
+    const [signed] = pool.splice(best, 1) as [OffseasonPlayer];
+    roster.push(signed);
+    sign.push(signed.id);
+  }
+  return { release, sign };
 }

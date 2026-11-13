@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { startedLeague } from "./support/season";
+import { makeRosterLegal, playDraft, startedLeague } from "./support/season";
 import { finishJob } from "./support/worker";
 
 type Api = Awaited<ReturnType<typeof startedLeague>>["api"];
@@ -9,14 +9,11 @@ type Api = Awaited<ReturnType<typeof startedLeague>>["api"];
  * budget, and what the stages refuse. It leaves the league in the preseason.
  */
 async function firstOffseason(api: Api, leagueId: string) {
-  // Staff: four roles on the team, a market, a budget.
+  // Staff: at most one person in each role (a contract may just have ended),
+  // a market for every role, and a budget.
   const staff = await api.leagues.staff(leagueId);
-  expect(staff.team.map((s) => s.role).sort()).toEqual([
-    "conditioning-coach",
-    "development-coach",
-    "head-coach",
-    "scout",
-  ]);
+  const roles = staff.team.map((s) => s.role);
+  expect(new Set(roles).size).toBe(roles.length);
   expect(staff.payroll).toBeLessThanOrEqual(staff.budget);
   for (const role of [
     "head-coach",
@@ -29,18 +26,17 @@ async function firstOffseason(api: Api, leagueId: string) {
     ).toBeGreaterThanOrEqual(4);
   }
 
-  // Let the scout go and hire the best scout on the market that fits the budget.
-  const scout = staff.team.find((s) => s.role === "scout")!;
-  const released = await api.leagues.releaseStaff(leagueId, {
-    staffId: scout.id,
-  });
-  expect(released.team.some((s) => s.role === "scout")).toBe(false);
-  expect(released.market.some((m) => m.id === scout.id)).toBe(true);
-  const best = released.market
-    .filter(
-      (m) =>
-        m.role === "scout" && released.payroll + m.salary <= released.budget,
-    )
+  // Let the scout go (if there is one) and hire the best scout on the market
+  // that fits the budget.
+  let now = staff;
+  const scout = staff.team.find((s) => s.role === "scout");
+  if (scout) {
+    now = await api.leagues.releaseStaff(leagueId, { staffId: scout.id });
+    expect(now.team.some((s) => s.role === "scout")).toBe(false);
+    expect(now.market.some((m) => m.id === scout.id)).toBe(true);
+  }
+  const best = now.market
+    .filter((m) => m.role === "scout" && now.payroll + m.salary <= now.budget)
     .sort((a, b) => b.rating - a.rating)[0]!;
   const hired = await api.leagues.hireStaff(leagueId, {
     staffId: best.id,
@@ -58,7 +54,8 @@ async function firstOffseason(api: Api, leagueId: string) {
     api.leagues.setCamp(leagueId, { assignments: [] }),
   ).rejects.toMatchObject({ status: 409, code: "wrong_stage" });
 
-  await api.leagues.advanceOffseason(leagueId); // the draft
+  await playDraft(api, leagueId);
+  await makeRosterLegal(api, leagueId);
   await api.leagues.advanceOffseason(leagueId); // free agency
   const camp = await api.leagues.camp(leagueId);
   expect(camp.open).toBe(true);
@@ -117,9 +114,35 @@ test.describe("several seasons", () => {
       await finishJob(api, league.id);
       await api.leagues.startNextSeason(league.id);
       if (i === 0) await firstOffseason(api, league.id);
-      // The remaining stages, ending with the season's opening.
-      for (let stage = 0; stage < (i === 0 ? 1 : 4); stage++) {
+      if (i === 0) {
+        // Opened by hand above: only the season's opening is left.
         await api.leagues.advanceOffseason(league.id);
+      } else if (i === 1) {
+        // With AI Assist doing the drafting and keeping the roster legal, the
+        // owner only presses the buttons.
+        await api.leagues.setAiAssist(league.id, {
+          aiAssist: { drafting: true, rosterCoverage: true },
+        });
+        await api.leagues.advanceOffseason(league.id); // the lottery
+        await api.leagues.advanceOffseason(league.id); // every pick, the owner's too
+        expect((await api.leagues.offseason(league.id)).stage).toBe(
+          "free-agency",
+        );
+        for (let stage = 0; stage < 3; stage++) {
+          await api.leagues.advanceOffseason(league.id);
+        }
+        const roster = await api.leagues.roster(league.id);
+        expect(roster.players.length).toBeGreaterThanOrEqual(roster.min);
+        expect(roster.players.length).toBeLessThanOrEqual(roster.max);
+        await api.leagues.setAiAssist(league.id, {
+          aiAssist: { drafting: false, rosterCoverage: false },
+        });
+      } else {
+        await playDraft(api, league.id);
+        await makeRosterLegal(api, league.id);
+        for (let stage = 0; stage < 3; stage++) {
+          await api.leagues.advanceOffseason(league.id);
+        }
       }
       const report = await api.leagues.offseason(league.id);
       expect(report.year).toBe(first + i + 1);

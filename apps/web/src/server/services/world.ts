@@ -262,6 +262,8 @@ export async function getPlayer(
     .select(PLAYER_COLUMNS)
     .eq("league_id", league.id)
     .eq("id", parsed.data)
+    // A prospect is only known through the draft board, which shows what the scouts see.
+    .neq("status", "prospect")
     .maybeSingle();
   if (error) throw error;
   if (!data) throw notFound();

@@ -242,3 +242,40 @@ export async function previousFinish(
     playoffDepth,
   };
 }
+
+export type OwnedTeam = {
+  id: string;
+  assist: {
+    trades: boolean;
+    rosterCoverage: boolean;
+    rosterManagement: boolean;
+    scouting: boolean;
+    drafting: boolean;
+  };
+};
+
+/** The teams the user runs, in slot order, with their AI Assist switches. */
+export async function ownedTeams(
+  ctx: UserContext,
+  leagueId: string,
+): Promise<OwnedTeam[]> {
+  const { data, error } = await ctx.supabase
+    .from("teams")
+    .select(
+      "id, local_player_slot, ai_trades, ai_roster_coverage, ai_roster_management, ai_scouting, ai_drafting",
+    )
+    .eq("league_id", leagueId)
+    .not("local_player_slot", "is", null)
+    .order("local_player_slot");
+  if (error) throw error;
+  return data.map((t) => ({
+    id: t.id,
+    assist: {
+      trades: t.ai_trades,
+      rosterCoverage: t.ai_roster_coverage,
+      rosterManagement: t.ai_roster_management,
+      scouting: t.ai_scouting,
+      drafting: t.ai_drafting,
+    },
+  }));
+}

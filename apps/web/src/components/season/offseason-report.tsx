@@ -142,7 +142,14 @@ export function OffseasonReport({
     {
       key: "player",
       header: "Player",
-      cell: (r) => <PlayerLink leagueId={leagueId} player={r.player} />,
+      cell: (r) =>
+        r.player ? (
+          <PlayerLink leagueId={leagueId} player={r.player} />
+        ) : (
+          <span className="inline-flex min-h-touch items-center text-text-muted">
+            Not picked yet
+          </span>
+        ),
     },
     {
       key: "team",
@@ -154,21 +161,23 @@ export function OffseasonReport({
       header: "Position",
       abbr: "POS",
       priority: 2,
-      cell: (r) => r.player.position,
+      cell: (r) => r.player?.position ?? "",
     },
     {
       key: "age",
       header: "Age",
       priority: 2,
       align: "end",
-      cell: (r) => r.player.age,
+      cell: (r) => r.player?.age ?? "",
     },
     {
       key: "ovr",
       header: "Overall",
       abbr: "OVR",
       align: "end",
-      cell: (r) => <span className="tabular-nums">{r.player.overall}</span>,
+      cell: (r) => (
+        <span className="tabular-nums">{r.player?.overall ?? ""}</span>
+      ),
     },
     {
       key: "pot",
@@ -176,7 +185,9 @@ export function OffseasonReport({
       abbr: "POT",
       priority: 2,
       align: "end",
-      cell: (r) => <span className="tabular-nums">{r.player.potential}</span>,
+      cell: (r) => (
+        <span className="tabular-nums">{r.player?.potential ?? ""}</span>
+      ),
     },
   ];
 

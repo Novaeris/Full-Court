@@ -14,6 +14,7 @@ import type {
 import { archiveSeason, insertPlayoffs } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
+import { ensureProspects } from "./draft";
 import { beginOffseason } from "./offseason";
 import { getLeague, getSettings, parseLeagueId } from "./leagues";
 import { createSeason } from "./season-create";
@@ -200,5 +201,7 @@ export async function startNextSeason(
   }
   const next = await latestSeason(ctx, league.id);
   if (!next) throw new Error("The next season was not created.");
+  // The draft class exists from the start of the offseason, so there is a board to scout.
+  await ensureProspects(ctx, league.id, next);
   return seasonView(ctx, next);
 }

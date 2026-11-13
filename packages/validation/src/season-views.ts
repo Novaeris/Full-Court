@@ -238,7 +238,17 @@ export const CampReportRowSchema = z.object({
 });
 export type CampReportRow = z.infer<typeof CampReportRowSchema>;
 
+/** How far the current draft has got. */
+export const DraftStatusSchema = z.object({
+  lotteryHeld: z.boolean(),
+  made: z.number().int(),
+  total: z.number().int(),
+});
+export type DraftStatus = z.infer<typeof DraftStatusSchema>;
+
 export const OffseasonResponseSchema = z.object({
+  /** The current offseason's draft, once its stage has been reached; else null. */
+  draftStatus: DraftStatusSchema.nullable(),
   year: z.number().int().nullable(),
   /** The current offseason's stage, or null when no offseason is under way. */
   stage: z.enum(OFFSEASON_STAGES).nullable(),
@@ -257,7 +267,8 @@ export const OffseasonResponseSchema = z.object({
       expectedPick: z.number().int(),
       /** Its chance of the first pick; null if it made the playoffs. */
       lotteryOdds: z.number().nullable(),
-      player: OffseasonPlayerSchema,
+      /** Null for a pick not yet made. */
+      player: OffseasonPlayerSchema.nullable(),
     }),
   ),
   retired: z.array(OffseasonPlayerSchema),
@@ -339,3 +350,122 @@ export const SetCampRequestSchema = z.object({
     .max(8),
 });
 export type SetCampRequest = z.infer<typeof SetCampRequestSchema>;
+
+/** A prospect as one team's scouts see him. */
+export const ProspectSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  position: z.enum(["PG", "SG", "SF", "PF", "C"]),
+  age: z.number().int(),
+  heightInches: z.number().int(),
+  weightPounds: z.number().int(),
+  /** The overall rating the scouts see; the true one is hidden. */
+  overall: z.number().int(),
+  potential: z.number().int(),
+});
+export type Prospect = z.infer<typeof ProspectSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/draft?team=: the draft as one of your teams
+ * sees it. `board` is the prospects still available, with the scouts' view of
+ * them; `order` is every pick so far, the lottery's result. `onTheClock` is
+ * the next pick to be made, and `suggestion` the prospect the team's scouts
+ * would take.
+ */
+export const DraftResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  /** True during the draft stage of an offseason. */
+  open: z.boolean(),
+  lotteryHeld: z.boolean(),
+  year: z.number().int().nullable(),
+  onTheClock: z
+    .object({
+      pick: z.number().int(),
+      round: z.number().int(),
+      teamId: z.uuid(),
+      /** The team is yours and its drafting is not on AI Assist. */
+      yourPick: z.boolean(),
+    })
+    .nullable(),
+  suggestion: z.uuid().nullable(),
+  order: z.array(
+    z.object({
+      pick: z.number().int(),
+      round: z.number().int(),
+      teamId: z.uuid(),
+      finishRank: z.number().int(),
+      expectedPick: z.number().int(),
+      lotteryOdds: z.number().nullable(),
+      player: OffseasonPlayerSchema.nullable(),
+    }),
+  ),
+  board: z.array(ProspectSchema),
+});
+export type DraftResponse = z.infer<typeof DraftResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/draft/pick: make your team's pick. */
+export const DraftPickRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  prospectId: z.uuid(),
+});
+export type DraftPickRequest = z.infer<typeof DraftPickRequestSchema>;
+
+/**
+ * POST /api/v1/leagues/:leagueId/draft/sim: the computer teams make their
+ * picks until one of yours is on the clock. With `autoMine` your teams' picks
+ * are made for you too, to the end of the draft.
+ */
+export const DraftSimRequestSchema = z.object({
+  autoMine: z.boolean().default(false),
+});
+export type DraftSimRequest = z.infer<typeof DraftSimRequestSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/roster?team=: one of your rosters and the best
+ * free agents. `open` is true from free agency to the end of the preseason,
+ * when players can be signed and released.
+ */
+export const RosterResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  open: z.boolean(),
+  min: z.number().int(),
+  max: z.number().int(),
+  players: z.array(OffseasonPlayerSchema),
+  freeAgents: z.array(OffseasonPlayerSchema),
+  freeAgentTotal: z.number().int(),
+});
+export type RosterResponse = z.infer<typeof RosterResponseSchema>;
+
+/** POST or DELETE /api/v1/leagues/:leagueId/roster: sign a free agent, or release a player. */
+export const RosterMoveRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerId: z.uuid(),
+});
+export type RosterMoveRequest = z.infer<typeof RosterMoveRequestSchema>;
+
+/** PATCH /api/v1/leagues/:leagueId/ai-assist: switch AI Assist on or off for a franchise you run. */
+export const UpdateAiAssistRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  aiAssist: z
+    .object({
+      trades: z.boolean(),
+      rosterCoverage: z.boolean(),
+      rosterManagement: z.boolean(),
+      scouting: z.boolean(),
+      drafting: z.boolean(),
+    })
+    .partial(),
+});
+export type UpdateAiAssistRequest = z.infer<typeof UpdateAiAssistRequestSchema>;
+
+export const AiAssistResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  aiAssist: z.object({
+    trades: z.boolean(),
+    rosterCoverage: z.boolean(),
+    rosterManagement: z.boolean(),
+    scouting: z.boolean(),
+    drafting: z.boolean(),
+  }),
+});
+export type AiAssistResponse = z.infer<typeof AiAssistResponseSchema>;

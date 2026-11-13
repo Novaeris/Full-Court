@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 import { signInThroughUi } from "./support/auth";
 import {
   expectAccessible,
+  makeRosterLegal,
   noOverflow,
+  playDraft,
   startedLeague,
   touchTargets,
 } from "./support/season";
@@ -142,18 +144,48 @@ test.describe("playoffs", () => {
     const staff = await api.leagues.staff(league.id);
     expect(staff.open).toBe(true);
     expect(staff.payroll).toBeLessThanOrEqual(staff.budget);
-    await page.getByRole("button", { name: "Hold the draft" }).click();
+    // Before the lottery there is already a board to scout, with scouted numbers.
+    const before = await api.leagues.draft(league.id);
+    expect(before.lotteryHeld).toBe(false);
+    expect(before.board.length).toBeGreaterThanOrEqual(24);
+    expect(before.order).toEqual([]);
+    await page.getByRole("button", { name: "Hold the lottery" }).click();
+    await expect(
+      page.getByRole("heading", { name: "The draft" }),
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Draft lottery" }),
     ).toBeVisible();
+    // Simulate to the owner's pick, then make it from the page.
+    await page.getByRole("button", { name: "Sim the draft" }).click();
+    await expect(page.getByText("is on the clock: your pick.")).toBeVisible();
+    const clock = await api.leagues.draft(league.id);
+    expect(clock.onTheClock?.yourPick).toBe(true);
+    const firstName = clock.board[0]!.name;
+    await page.getByRole("button", { name: `Draft ${firstName}` }).click();
+    await expect
+      .poll(
+        async () =>
+          (await api.leagues.draft(league.id)).order.filter((o) => o.player)
+            .length,
+      )
+      .toBeGreaterThan(clock.onTheClock!.pick - 1);
+    // Out of turn, or twice, is refused.
     await expect(
-      page.getByRole("button", { name: "End free agency" }),
-    ).toBeVisible();
+      api.leagues.draftPick(league.id, { prospectId: clock.board[1]!.id }),
+    ).rejects.toMatchObject({ status: 409 });
+    await playDraft(api, league.id);
 
     const report = await api.leagues.offseason(league.id);
     expect(report.year).toBe(next.season?.year);
     expect(report.stage).toBe("free-agency");
+    expect(report.draftStatus).toMatchObject({
+      lotteryHeld: true,
+      made: 24,
+      total: 24,
+    });
     expect(report.draft).toHaveLength(24);
+    expect(report.draft.every((d) => d.player !== null)).toBe(true);
     expect(report.draft.map((d) => d.pick)).toEqual(
       Array.from({ length: 24 }, (_, i) => i + 1),
     );
@@ -163,6 +195,22 @@ test.describe("playoffs", () => {
       .map((d) => d.lotteryOdds as number);
     expect(odds.length).toBeGreaterThan(0);
     expect(odds.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
+
+    // Roster moves: the owner's roster has the rookies, and has to be legal
+    // before free agency can end.
+    await page.reload();
+    const roster = await api.leagues.roster(league.id);
+    expect(roster.open).toBe(true);
+    if (roster.players.length > roster.max) {
+      await expect(
+        api.leagues.advanceOffseason(league.id),
+      ).rejects.toMatchObject({ status: 409, code: "roster_not_legal" });
+    }
+    await makeRosterLegal(api, league.id);
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Roster moves" }),
+    ).toBeVisible();
 
     // Free agency, then training camp where the owner chooses who goes.
     await page.getByRole("button", { name: "End free agency" }).click();
@@ -266,7 +314,11 @@ test.describe("playoffs", () => {
     // draft, with the staff market, and at training camp.
     await api.leagues.startNextSeason(league.id);
     await check(`${base}/offseason`);
-    await api.leagues.advanceOffseason(league.id);
+    await api.leagues.holdLottery(league.id);
+    await check(`${base}/offseason`);
+    await playDraft(api, league.id);
+    await makeRosterLegal(api, league.id);
+    await check(`${base}/offseason`);
     await api.leagues.advanceOffseason(league.id);
     await check(`${base}/offseason`);
   });

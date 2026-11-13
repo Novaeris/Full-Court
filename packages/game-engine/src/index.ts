@@ -83,17 +83,24 @@ export {
 export { normalSum } from "./rng/helpers";
 export {
   ageAndRetire,
+  chooseProspect,
+  classSize,
+  drawLottery,
   draftOrder,
   generateDraftClass,
   holdDraft,
   progress,
+  scoutedView,
+  suggestProspect,
   type DraftInput,
+  type DraftSlot,
   type LotteryEntry,
   type OffseasonPlayer,
+  type ProspectView,
   type Progressed,
   type Rookie,
 } from "./offseason/offseason";
-export { fillRosters, type RosterMove } from "./offseason/rosters";
+export { coverRoster, fillRosters, type RosterMove } from "./offseason/rosters";
 export {
   chooseCamp,
   runCamp,

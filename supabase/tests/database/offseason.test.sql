@@ -4,7 +4,7 @@ begin;
 \ir helpers.psql
 \ir season_helpers.psql
 
-select plan(46);
+select plan(62);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -168,81 +168,125 @@ select throws_ok(
 
 -- The draft -------------------------------------------------------------------------------------------------------------
 
--- Two rookies for T01 (picks 1 and 2) and one undrafted.
-create function pg_temp.rookies() returns jsonb language sql as $$
+-- Four prospects, three picks: T01 has picks 1 and 3, T02 pick 2.
+create function pg_temp.prospects() returns jsonb language sql as $$
   select jsonb_agg(jsonb_build_object(
     'id', gen_random_uuid(), 'first_name', 'Rookie', 'last_name', 'Number ' || n,
     'position', 'PG', 'age', 20, 'height_inches', 76, 'weight_pounds', 200,
-    'jersey', 90 + n, 'overall', 50, 'potential', 70,
+    'overall', 50, 'potential', 70,
     'inside', 50, 'mid_range', 50, 'three_point', 50, 'free_throw', 50,
     'passing', 50, 'ball_handling', 50, 'off_rebound', 50, 'def_rebound', 50,
-    'perimeter_d', 50, 'interior_d', 50, 'speed', 50, 'strength', 50, 'stamina', 50,
-    'team_id', case when n <= 2 then pg_temp.team('T01') end,
-    'draft_round', case when n <= 2 then 1 end,
-    'draft_pick', case when n <= 2 then n end,
-    'draft_team_id', case when n <= 2 then pg_temp.team('T01') end
+    'perimeter_d', 50, 'interior_d', 50, 'speed', 50, 'strength', 50, 'stamina', 50
   ) order by n)
-  from generate_series(1, 3) as n;
+  from generate_series(1, 4) as n;
 $$;
--- A lottery entry for every team: T01 finished last (rank 12 of 12), so it was
--- expected to pick first, with 25% odds.
-create function pg_temp.lottery() returns jsonb language sql as $$
-  select jsonb_agg(jsonb_build_object(
-    'team_id', t.id, 'finish_rank', 13 - t.n, 'expected_pick', t.n,
-    'odds', case when t.n <= 4 then 0.25 end
-  ) order by t.n)
-  from (
-    select id, row_number() over (order by abbreviation) as n
-    from public.teams where league_id = pg_temp.league_id('Offseason')
-  ) t;
+-- T01 finished last (12 of 12) and was expected to pick first with 25% odds;
+-- T02 finished 11th.
+create function pg_temp.slots() returns jsonb language sql as $$
+  select jsonb_build_array(
+    jsonb_build_object('pick', 1, 'round', 1, 'team_id', pg_temp.team('T01'),
+                       'finish_rank', 12, 'expected_pick', 1, 'odds', 0.25),
+    jsonb_build_object('pick', 2, 'round', 1, 'team_id', pg_temp.team('T02'),
+                       'finish_rank', 11, 'expected_pick', 2, 'odds', 0.25),
+    jsonb_build_object('pick', 3, 'round', 2, 'team_id', pg_temp.team('T01'),
+                       'finish_rank', 12, 'expected_pick', 1, 'odds', 0.25));
 $$;
-grant execute on function pg_temp.rookies(), pg_temp.lottery() to service_role;
+create function pg_temp.prospect(n integer) returns uuid language sql as $$
+  select id from public.players
+  where league_id = pg_temp.league_id('Offseason') and last_name = 'Number ' || n;
+$$;
+create function pg_temp.pick(pick_no integer, n integer) returns jsonb language sql as $$
+  select jsonb_build_array(jsonb_build_object('pick', pick_no, 'player_id', pg_temp.prospect(n)));
+$$;
+grant execute on function pg_temp.prospects(), pg_temp.slots(), pg_temp.prospect(integer),
+  pg_temp.pick(integer, integer) to service_role;
 
 select throws_ok(
-  $$select admin_apply_draft(pg_temp.new_season(), pg_temp.rookies(), '[]')$$,
-  '22023', 'invalid_changes', 'a pick with no lottery entry refuses the draft'
+  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T01'), gen_random_uuid())$$,
+  'P0001', 'wrong_stage', 'players can not be signed during the draft'
 );
 select is(
-  (select count(*)::int from players where league_id = pg_temp.league_id('Offseason') and draft_year is not null)
-  || ':' || (select count(*)::int from draft_picks where league_id = pg_temp.league_id('Offseason')),
-  '0:0', 'a refused draft writes nothing'
+  (select admin_create_prospects(pg_temp.new_season(), pg_temp.prospects())),
+  4, 'the draft class is created as prospects'
 );
-select lives_ok(
-  $$select admin_apply_draft(pg_temp.new_season(), pg_temp.rookies(), pg_temp.lottery())$$,
-  'the draft is held'
+select throws_ok(
+  $$select admin_create_prospects(pg_temp.new_season(), pg_temp.prospects())$$,
+  'P0001', 'prospects_already_exist', 'the class is created once'
 );
 select is(
-  (select stage from seasons where id = pg_temp.new_season()),
-  'free-agency', 'the offseason moves on to free agency'
+  (select count(*)::int from players
+   where league_id = pg_temp.league_id('Offseason') and status = 'prospect' and team_id is null and draft_year = 2027),
+  4, 'prospects have no team and are not on any roster'
+);
+select throws_ok(
+  $$select admin_make_picks(pg_temp.new_season(), pg_temp.pick(1, 1))$$,
+  'P0001', 'lottery_not_held', 'nobody can be picked before the lottery'
+);
+select is(
+  (select admin_hold_lottery(pg_temp.new_season(), pg_temp.slots())),
+  3, 'the lottery is held and the order stored'
+);
+select throws_ok(
+  $$select admin_hold_lottery(pg_temp.new_season(), pg_temp.slots())$$,
+  'P0001', 'lottery_already_held', 'the lottery is held once'
+);
+select throws_ok(
+  $$select admin_make_picks(pg_temp.new_season(), pg_temp.pick(2, 1))$$,
+  'P0001', 'pick_out_of_order', 'picks are made in order'
+);
+select throws_ok(
+  $$select admin_make_picks(pg_temp.new_season(),
+      jsonb_build_array(jsonb_build_object('pick', 1,
+        'player_id', (select id from players where team_id = pg_temp.team('T03') limit 1))))$$,
+  'P0001', 'prospect_not_available', 'only a prospect can be picked'
+);
+select is(
+  (select stage from seasons where id = pg_temp.new_season()) || ':' ||
+  (select count(*)::int from draft_picks where league_id = pg_temp.league_id('Offseason') and player_id is not null),
+  'draft:0', 'a refused pick changes nothing'
+);
+select is(
+  (select (admin_make_picks(pg_temp.new_season(), pg_temp.pick(1, 1))).stage),
+  'draft', 'the first pick is made and the draft goes on'
+);
+select is(
+  (select p.status || ':' || p.draft_pick || ':' || (p.team_id = pg_temp.team('T01'))
+   from players p where p.id = pg_temp.prospect(1)),
+  'active:1:true', 'a picked prospect joins the picking team as a player who knows his pick'
+);
+select is(
+  (select (admin_make_picks(pg_temp.new_season(),
+      jsonb_build_array(
+        jsonb_build_object('pick', 2, 'player_id', pg_temp.prospect(2)),
+        jsonb_build_object('pick', 3, 'player_id', pg_temp.prospect(3)))
+    )).stage),
+  'free-agency', 'after the last pick the offseason moves on to free agency'
 );
 select is(
   (select string_agg(d.pick || ':' || d.round || ':' || d.finish_rank || ':' || d.expected_pick || ':' || d.lottery_odds,
                      ' ' order by d.pick)
    from draft_picks d where d.league_id = pg_temp.league_id('Offseason') and d.season_year = 2027),
-  '1:1:12:1:0.250000 2:1:12:1:0.250000',
+  '1:1:12:1:0.250000 2:1:11:2:0.250000 3:2:12:1:0.250000',
   'each pick keeps how its team finished, the pick it would have had and its lottery odds'
 );
 select is(
-  (select count(*)::int from players
-   where league_id = pg_temp.league_id('Offseason') and draft_year = 2027 and draft_pick is not null)
-  || ':' || (select count(*)::int from players
-             where league_id = pg_temp.league_id('Offseason') and last_name = 'Number 3' and team_id is null),
-  '2:1', 'drafted players know when and where they were picked; the undrafted one has no team'
+  (select status || ':' || (team_id is null) from players where id = pg_temp.prospect(4)),
+  'active:true', 'the prospect nobody took is an undrafted free agent'
 );
 select is(
   (select count(*)::int from player_ratings_history
    where league_id = pg_temp.league_id('Offseason') and season_year = 2027),
-  3,
-  'the rookies get a ratings history row for the new year'
+  4,
+  'the rookies and the undrafted prospect get a ratings history row for the new year'
 );
 select throws_ok(
-  $$select admin_apply_draft(pg_temp.new_season(), '[]', '[]')$$,
-  'P0001', 'wrong_stage', 'the draft is held once'
+  $$select admin_make_picks(pg_temp.new_season(), pg_temp.pick(4, 4))$$,
+  'P0001', 'wrong_stage', 'the draft is over'
 );
 
 -- Free agency: rosters and staff -----------------------------------------------------------------------------------
 
--- T01 has 15 - 4 retired + 2 drafted = 13 players.
+-- T01 has 15 - 4 retired + 2 drafted (picks 1 and 3) = 13 players.
 select is(
   (select count(*)::int from players where team_id = pg_temp.team('T01') and status = 'active'),
   13, 'T01 has 13 players after retirements and the draft'
@@ -288,11 +332,49 @@ select is(
   true, 'a staff member can be let go'
 );
 
+-- Roster moves by the owner.
+select throws_ok(
+  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T02'), pg_temp.prospect(4))$$,
+  'P0001', 'roster_full', 'a team with 15 players cannot sign another'
+);
+select is(
+  (select admin_release_player(pg_temp.new_season(), pg_temp.team('T02'),
+     (select id from players where team_id = pg_temp.team('T02') and status = 'active' and jersey <> 0 order by overall, id limit 1))),
+  15, 'a release leaves the roster at 15 (T02 had the drafted pick 2 as its 16th)'
+);
+select throws_ok(
+  $$select admin_release_player(pg_temp.new_season(), pg_temp.team('T03'),
+      (select id from players where team_id = pg_temp.team('T04') limit 1))$$,
+  'P0002', 'player_not_found', 'a team can only release its own player'
+);
+select throws_ok(
+  $$select admin_sign_player(pg_temp.new_season(), pg_temp.team('T01'),
+      (select id from players where team_id = pg_temp.team('T05') limit 1))$$,
+  'P0001', 'player_not_available', 'only a free agent can be signed'
+);
+
+-- AI Assist: only a franchise the user runs can have a switch on.
+select throws_ok(
+  $$select admin_set_ai_assist(pg_temp.team('T02'), '{"drafting": true}')$$,
+  '23514', null, 'a computer team cannot be given AI Assist'
+);
+insert into league_local_players (league_id, slot) values (pg_temp.league_id('Offseason'), 1)
+  on conflict do nothing;
+update teams set local_player_slot = 1 where id = pg_temp.team('T01');
+select is(
+  (select (admin_set_ai_assist(pg_temp.team('T01'), '{"drafting": true, "rosterCoverage": true}')).ai_drafting),
+  true, 'a switch is set'
+);
+select is(
+  (select ai_roster_coverage::text || ':' || ai_scouting::text from teams where id = pg_temp.team('T01')),
+  'true:false', 'the ones asked for are on and the ones not mentioned stay as they were'
+);
+
 -- Moves: T01 signs the undrafted rookie to reach 14.
 select lives_ok(
   $$select admin_apply_rosters(pg_temp.new_season(),
       jsonb_build_array(jsonb_build_object(
-        'id', (select id from players where last_name = 'Number 3'),
+        'id', (select id from players where last_name = 'Number 4'),
         'team_id', pg_temp.team('T01'), 'jersey', 77)), '[]')$$,
   'free agency is applied'
 );
@@ -371,7 +453,7 @@ select pg_temp.act_as('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 select is(
   (select count(*)::int from draft_picks where season_year = 2027)
   || ':' || (select count(*)::int from camp_results)
-  || ':' || (select count(*)::int from staff_members), '2:2:7',
+  || ':' || (select count(*)::int from staff_members), '3:2:7',
   'the owner reads the league''s draft, camp report and staff'
 );
 select pg_temp.act_as('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');

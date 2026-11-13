@@ -7,7 +7,10 @@ import {
   LeagueStructureSchema,
   GameDetailSchema,
   GamePlaysSchema,
+  AiAssistResponseSchema,
   CampResponseSchema,
+  DraftResponseSchema,
+  RosterResponseSchema,
   OffseasonResponseSchema,
   StaffResponseSchema,
   PlayoffsResponseSchema,
@@ -21,7 +24,14 @@ import {
   type ChooseTeamRequest,
   type GameDetail,
   type GamePlays,
+  type AiAssistResponse,
   type CampResponse,
+  type DraftPickRequest,
+  type DraftResponse,
+  type DraftSimRequest,
+  type RosterMoveRequest,
+  type RosterResponse,
+  type UpdateAiAssistRequest,
   type HireStaffRequest,
   type OffseasonResponse,
   type ReleaseStaffRequest,
@@ -273,6 +283,83 @@ export function createApiClient(options: ApiClientOptions) {
           "DELETE",
           `/leagues/${encodeURIComponent(id)}/staff`,
           (b) => StaffResponseSchema.parse(b),
+          input,
+        ),
+      /** The draft as one of your teams sees it: the board, the order and who is on the clock. */
+      draft: (id: string, teamId?: string): Promise<DraftResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/draft${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
+          (b) => DraftResponseSchema.parse(b),
+        ),
+      /** Holds the draft lottery and sets the order. */
+      holdLottery: (id: string): Promise<DraftResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/draft/lottery`,
+          (b) => DraftResponseSchema.parse(b),
+          {},
+        ),
+      /** Makes your team pick. */
+      draftPick: (
+        id: string,
+        input: DraftPickRequest,
+      ): Promise<DraftResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/draft/pick`,
+          (b) => DraftResponseSchema.parse(b),
+          input,
+        ),
+      /** The computer teams pick until one of yours is on the clock. */
+      simDraft: (
+        id: string,
+        input: DraftSimRequest = { autoMine: false },
+      ): Promise<DraftResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/draft/sim`,
+          (b) => DraftResponseSchema.parse(b),
+          input,
+        ),
+      /** One of your rosters and the best free agents. */
+      roster: (id: string, teamId?: string): Promise<RosterResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/roster${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
+          (b) => RosterResponseSchema.parse(b),
+        ),
+      /** Signs a free agent onto your roster. */
+      signPlayer: (
+        id: string,
+        input: RosterMoveRequest,
+      ): Promise<RosterResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/roster`,
+          (b) => RosterResponseSchema.parse(b),
+          input,
+        ),
+      /** Releases a player from your roster. */
+      releasePlayer: (
+        id: string,
+        input: RosterMoveRequest,
+      ): Promise<RosterResponse> =>
+        request(
+          "DELETE",
+          `/leagues/${encodeURIComponent(id)}/roster`,
+          (b) => RosterResponseSchema.parse(b),
+          input,
+        ),
+      /** Switches AI Assist on or off for a franchise you run. */
+      setAiAssist: (
+        id: string,
+        input: UpdateAiAssistRequest,
+      ): Promise<AiAssistResponse> =>
+        request(
+          "PATCH",
+          `/leagues/${encodeURIComponent(id)}/ai-assist`,
+          (b) => AiAssistResponseSchema.parse(b),
           input,
         ),
       /** Who can go to training camp and who is going. */

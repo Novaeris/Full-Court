@@ -7,11 +7,12 @@ import {
   fillRosters,
   generateStaff,
   hireStaff,
-  holdDraft,
+  coverRoster,
   replenishMarket,
   runCamp,
   seedState,
   type CampAssignment,
+  type OffseasonPlayer as EnginePlayer,
   type NewStaff,
   type StaffMember as EngineStaff,
 } from "@fullcourt/game-engine";
@@ -22,7 +23,12 @@ import {
   type Position,
   type StaffRole,
 } from "@fullcourt/game-types";
-import { STAGE_LABELS, campPlaces, stageDates } from "@fullcourt/game-rules";
+import {
+  ROSTER_LIMITS,
+  STAGE_LABELS,
+  campPlaces,
+  stageDates,
+} from "@fullcourt/game-rules";
 import type {
   CampReportRow,
   OffseasonPlayer,
@@ -32,10 +38,11 @@ import type {
 import {
   addStaff,
   applyCamp,
-  applyDraft,
   applyProgression,
   applyRosters,
   createStaff,
+  releasePlayer,
+  signPlayer,
   startSeason,
   type StaffInsert,
 } from "@/server/admin/offseason";
@@ -47,12 +54,13 @@ import {
   RATING_COLUMNS,
   allTeamIds,
   loadActivePlayers,
-  loadPlayerNames,
   loadStaff,
-  ownedTeamIds,
+  ownedTeams,
   previousFinish,
   toCampPlayer,
+  type OwnedTeam,
 } from "./offseason-data";
+import { ensureProspects, holdLotteryStep, simulatePicks } from "./draft";
 import { latestSeason, seasonView, type SeasonRow } from "./season-shared";
 
 /**
@@ -213,9 +221,23 @@ export async function advanceOffseason(
 
   try {
     switch (season.stage) {
-      case "draft":
-        await runDraft(ctx, league.id, season, seed("draft"));
+      case "draft": {
+        // The lottery, then the computer teams pick until one of the owner's
+        // teams is on the clock (the owner finishes it from the draft panel).
+        await ensureProspects(ctx, league.id, season);
+        const held = await ctx.supabase
+          .from("draft_picks")
+          .select("pick", { count: "exact", head: true })
+          .eq("league_id", league.id)
+          .eq("season_year", season.year);
+        if (held.error) throw held.error;
+        if ((held.count ?? 0) === 0) {
+          await holdLotteryStep(ctx, league.id, season);
+        } else {
+          await simulatePicks(ctx, league.id, season, false);
+        }
         break;
+      }
       case "free-agency":
         await runFreeAgency(ctx, league.id, season, seed("free-agency"));
         break;
@@ -223,7 +245,7 @@ export async function advanceOffseason(
         await runTrainingCamp(ctx, league.id, season, seed("camp"));
         break;
       case "preseason":
-        await startSeason(season.id);
+        await openSeason(ctx, league.id, season);
         break;
     }
   } catch (error) {
@@ -249,55 +271,66 @@ export async function advanceOffseason(
   return seasonView(ctx, next);
 }
 
-async function runDraft(
-  ctx: UserContext,
-  leagueId: string,
-  season: SeasonRow,
-  rng: Rng,
-): Promise<void> {
-  const [finish, names, staff] = await Promise.all([
-    previousFinish(ctx, leagueId, season),
-    loadPlayerNames(ctx, leagueId),
-    loadStaff(ctx, leagueId),
-  ]);
-  const { rookies, lottery } = holdDraft(rng, {
-    standingsOrder: finish.standingsOrder,
-    playoffDepth: finish.playoffDepth,
-    takenNames: names,
-    scouts: ratingOf(staff, "scout"),
+/** A player's new team and jersey after some moves, compared with where they were. */
+function applyChanges(
+  players: readonly EnginePlayer[],
+  moves: readonly { id: string; teamId: string | null; jersey: number }[],
+): EnginePlayer[] {
+  const by = new Map(moves.map((m) => [m.id, m]));
+  return players.map((p) => {
+    const m = by.get(p.id);
+    return m ? { ...p, teamId: m.teamId, jersey: m.jersey } : p;
   });
-  await applyDraft({
-    seasonId: season.id,
-    changes: rookies.map((r) => {
-      const ratings: Record<string, number> = {};
-      for (const key of RATING_KEYS) {
-        ratings[RATING_COLUMNS[key]] = r.ratings[key];
-      }
-      return {
-        id: crypto.randomUUID(),
-        first_name: r.firstName,
-        last_name: r.lastName,
-        position: r.position,
-        age: r.age,
-        height_inches: r.heightInches,
-        weight_pounds: r.weightPounds,
-        jersey: r.jersey,
-        overall: r.overall,
-        potential: r.potential,
-        ...ratings,
-        team_id: r.teamId,
-        draft_round: r.draft?.round ?? null,
-        draft_pick: r.draft?.pick ?? null,
-        draft_team_id: r.draft?.teamId ?? null,
-      };
-    }),
-    lottery: lottery.map((l) => ({
-      team_id: l.teamId,
-      finish_rank: l.finishRank,
-      expected_pick: l.expectedPick,
-      odds: l.odds,
-    })),
-  });
+}
+
+/** The lowest jersey number the team's players don't wear. */
+function freeNumber(players: readonly EnginePlayer[], teamId: string): number {
+  const used = new Set(
+    players.filter((p) => p.teamId === teamId).map((p) => p.jersey),
+  );
+  for (let n = 0; n < 100; n++) if (!used.has(n)) return n;
+  return 0;
+}
+
+/** Applies coverRoster's releases and signings for one team to a working copy. */
+function withCoverage(
+  players: readonly EnginePlayer[],
+  teamId: string,
+): EnginePlayer[] {
+  const roster = players.filter((p) => p.teamId === teamId);
+  const pool = players.filter((p) => p.teamId === null);
+  const { release, sign } = coverRoster({ roster, pool });
+  let next = players.map((p) =>
+    release.includes(p.id) ? { ...p, teamId: null } : p,
+  );
+  for (const id of sign) {
+    const number = freeNumber(next, teamId);
+    next = next.map((p) =>
+      p.id === id ? { ...p, teamId, jersey: number } : p,
+    );
+  }
+  return next;
+}
+
+/**
+ * Makes sure each of the owner's teams has a legal roster before a stage can
+ * end. A team on AI Assist (roster management or coverage) is fixed; any other
+ * must already be legal, and if not the stage can't end.
+ */
+function checkOwnedRosters(
+  players: readonly EnginePlayer[],
+  owned: readonly OwnedTeam[],
+): void {
+  for (const team of owned) {
+    const size = players.filter((p) => p.teamId === team.id).length;
+    if (size < ROSTER_LIMITS.min || size > ROSTER_LIMITS.max) {
+      throw new ApiError(
+        409,
+        "roster_not_legal",
+        `Your roster has ${size} players and needs ${ROSTER_LIMITS.min} to ${ROSTER_LIMITS.max}. Sign or release players, or switch on Roster coverage in AI Assist.`,
+      );
+    }
+  }
 }
 
 async function runFreeAgency(
@@ -310,20 +343,50 @@ async function runFreeAgency(
     previousFinish(ctx, leagueId, season),
     loadActivePlayers(ctx, leagueId),
     loadStaff(ctx, leagueId),
-    ownedTeamIds(ctx, leagueId),
+    ownedTeams(ctx, leagueId),
   ]);
-  const moves = fillRosters(rng, { teams: finish.standingsOrder, players });
+  const ownedIds = new Set(owned.map((t) => t.id));
+  // The computer teams act, and so do the owner's teams whose roster
+  // management is on AI Assist. Teams on roster coverage only are made legal
+  // after the owner's own moves; any other of the owner's teams is untouched.
+  const acting = new Set(
+    finish.standingsOrder.filter(
+      (t) =>
+        !ownedIds.has(t) ||
+        owned.find((o) => o.id === t)?.assist.rosterManagement,
+    ),
+  );
+  let working = [...players];
+  for (const team of owned) {
+    if (team.assist.rosterCoverage && !team.assist.rosterManagement) {
+      working = withCoverage(working, team.id);
+    }
+  }
+  const moves = fillRosters(rng, {
+    teams: finish.standingsOrder,
+    players: working,
+    acting,
+  });
+  const final = applyChanges(working, moves);
+  checkOwnedRosters(final, owned);
+
+  const before = new Map(players.map((p) => [p.id, p]));
+  const changed = final.filter((p) => {
+    const was = before.get(p.id) as EnginePlayer;
+    return was.teamId !== p.teamId || was.jersey !== p.jersey;
+  });
+
   // The owner decides their own staff; the computer teams hire, worst first.
   const hirers = [...finish.standingsOrder]
     .reverse()
-    .filter((t) => !owned.includes(t));
+    .filter((t) => !ownedIds.has(t));
   const hires = hireStaff(rng, { teams: hirers, staff });
   await applyRosters({
     seasonId: season.id,
-    moves: moves.map((m) => ({
-      id: m.id,
-      team_id: m.teamId,
-      jersey: m.jersey,
+    moves: changed.map((p) => ({
+      id: p.id,
+      team_id: p.teamId,
+      jersey: p.jersey,
     })),
     staffMoves: hires.map((h) => ({
       id: h.id,
@@ -331,6 +394,51 @@ async function runFreeAgency(
       contract_years: h.contractYears,
     })),
   });
+}
+
+/**
+ * The preseason ends: the owner's teams on AI Assist are made legal with
+ * releases and signings (each a small transaction), any other must already be,
+ * and the season opens.
+ */
+async function openSeason(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+): Promise<void> {
+  const [players, owned] = await Promise.all([
+    loadActivePlayers(ctx, leagueId),
+    ownedTeams(ctx, leagueId),
+  ]);
+  let working = [...players];
+  for (const team of owned) {
+    if (team.assist.rosterCoverage || team.assist.rosterManagement) {
+      working = withCoverage(working, team.id);
+    }
+  }
+  checkOwnedRosters(working, owned);
+  const before = new Map(players.map((p) => [p.id, p]));
+  for (const p of working) {
+    const was = before.get(p.id) as EnginePlayer;
+    if (was.teamId !== null && p.teamId === null) {
+      await releasePlayer({
+        seasonId: season.id,
+        teamId: was.teamId,
+        playerId: p.id,
+      });
+    }
+  }
+  for (const p of working) {
+    const was = before.get(p.id) as EnginePlayer;
+    if (was.teamId === null && p.teamId !== null) {
+      await signPlayer({
+        seasonId: season.id,
+        teamId: p.teamId,
+        playerId: p.id,
+      });
+    }
+  }
+  await startSeason(season.id);
 }
 
 async function runTrainingCamp(
@@ -342,7 +450,7 @@ async function runTrainingCamp(
   const [players, staff, owned, saved] = await Promise.all([
     loadActivePlayers(ctx, leagueId),
     loadStaff(ctx, leagueId),
-    ownedTeamIds(ctx, leagueId),
+    ownedTeams(ctx, leagueId).then((t) => t.map((x) => x.id)),
     ctx.supabase
       .from("camp_assignments")
       .select("team_id, player_id, program")
@@ -501,7 +609,23 @@ export async function getOffseason(
     );
   }
 
-  const base = { year, stage, stages, campReport };
+  // How far the offseason's own draft has got (null outside an offseason).
+  let draftStatus: OffseasonResponse["draftStatus"] = null;
+  if (season && stage) {
+    const current = await ctx.supabase
+      .from("draft_picks")
+      .select("player_id")
+      .eq("league_id", league.id)
+      .eq("season_year", season.year)
+      .limit(PAGE);
+    if (current.error) throw current.error;
+    draftStatus = {
+      lotteryHeld: current.data.length > 0,
+      made: current.data.filter((p) => p.player_id !== null).length,
+      total: current.data.length,
+    };
+  }
+  const base = { year, stage, stages, campReport, draftStatus };
   if (year === null) {
     return { ...base, draft: [], retired: [], risers: [], fallers: [] };
   }
@@ -551,7 +675,7 @@ export async function getOffseason(
 
   const ids = [
     ...new Set([
-      ...picks.data.map((p) => p.player_id),
+      ...picks.data.flatMap((p) => (p.player_id ? [p.player_id] : [])),
       ...risers.map((m) => m.id),
       ...fallers.map((m) => m.id),
     ]),
@@ -574,21 +698,17 @@ export async function getOffseason(
 
   return {
     ...base,
-    draft: picks.data.flatMap((p) => {
-      const row = byId.get(p.player_id);
-      return row
-        ? [
-            {
-              pick: p.pick,
-              round: p.round,
-              teamId: p.team_id,
-              finishRank: p.finish_rank,
-              expectedPick: p.expected_pick,
-              lotteryOdds: p.lottery_odds,
-              player: view(row),
-            },
-          ]
-        : [];
+    draft: picks.data.map((p) => {
+      const row = p.player_id ? byId.get(p.player_id) : undefined;
+      return {
+        pick: p.pick,
+        round: p.round,
+        teamId: p.team_id,
+        finishRank: p.finish_rank,
+        expectedPick: p.expected_pick,
+        lotteryOdds: p.lottery_odds,
+        player: row ? view(row) : null,
+      };
     }),
     retired: retired.data.map((p) => view(p as ReportRow)),
     risers: risers.flatMap(mover),

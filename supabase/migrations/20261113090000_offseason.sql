@@ -7,12 +7,15 @@
 --   1. admin_apply_progression   players age, some retire, staff contracts end
 --                                (runs on the archived season, before the next
 --                                season exists)
---   2. admin_apply_draft         the lottery and the draft         stage draft
+--   2. admin_create_prospects,   the draft class, the lottery and  stage draft
+--      admin_hold_lottery,      the picks, one at a time
+--      admin_make_picks
 --   3. admin_apply_rosters       free agency: rosters and staff    stage free-agency
 --   4. admin_apply_camp          training camp results             stage training-camp
 --   5. admin_start_season        the preseason ends, the season opens
--- plus owner actions in any stage: admin_hire_staff, admin_release_staff and
--- admin_set_camp.
+-- plus owner actions: admin_hire_staff, admin_release_staff (any stage),
+-- admin_set_camp (camp), admin_sign_player, admin_release_player (free agency
+-- to the preseason) and admin_set_ai_assist (any time).
 --
 -- What is kept for every offseason: `draft_picks` (who was picked where, and how
 -- the lottery treated the team), `player_ratings_history` (each active player's
@@ -23,7 +26,7 @@
 
 alter table public.players
   add column status text not null default 'active'
-    check (status in ('active', 'retired')),
+    check (status in ('active', 'retired', 'prospect')),
   add column retired_year smallint,
   add column draft_year smallint,
   add column draft_round smallint,
@@ -51,7 +54,8 @@ create table public.draft_picks (
   pick smallint not null check (pick >= 1),
   round smallint not null check (round >= 1),
   team_id uuid not null,
-  player_id uuid not null,
+  -- Null until the pick is made.
+  player_id uuid,
   -- How the pick came about: where the picking team finished (1 = best), the
   -- pick it would have had without the lottery, and its chance of the first
   -- pick (null if it made the playoffs and was not in the lottery).
@@ -449,26 +453,32 @@ grant execute on function public.admin_apply_progression(uuid, jsonb, jsonb) to 
 
 -- Step 2: the draft (server only) -----------------------------------------------------------------------------
 
--- `changes` is the rookie class, one object each: id (chosen by the caller),
--- first_name, last_name, position, age, height_inches, weight_pounds, jersey,
--- overall, potential, the thirteen ratings, team_id (the drafting team, or null
--- for an undrafted rookie), draft_round, draft_pick, draft_team_id.
--- `lottery` is one object per team: team_id, finish_rank, expected_pick, odds
--- (null outside the lottery). Runs in the draft stage of an offseason season
--- and moves it on to free agency.
-create function public.admin_apply_draft(
-  target_season uuid,
-  changes jsonb,
-  lottery jsonb
-)
-returns public.seasons
+-- The lowest jersey number nobody on the team wears.
+create function app_private.free_jersey(for_team uuid) returns smallint
+language sql stable security invoker set search_path = '' as $$
+  select n::smallint from generate_series(0, 99) as n
+  where not exists (
+    select 1 from public.players p
+    where p.team_id = for_team and p.status = 'active' and p.jersey = n
+  )
+  order by n limit 1
+$$;
+grant execute on function app_private.free_jersey(uuid) to service_role;
+
+-- The draft class, created when the offseason begins so there is a board to
+-- look at before anything is drawn. `prospects` is one object each: id (chosen
+-- by the caller), first_name, last_name, position, age, height_inches,
+-- weight_pounds, overall, potential and the thirteen ratings. They are players
+-- with the status 'prospect' and no team until they are picked.
+create function public.admin_create_prospects(target_season uuid, prospects jsonb)
+returns integer
 language plpgsql
 security invoker
 set search_path = ''
 as $$
 declare
   current_season public.seasons;
-  picks_total integer;
+  created integer;
 begin
   select * into current_season from public.seasons where id = target_season for update;
   if not found then
@@ -477,77 +487,201 @@ begin
   if current_season.phase <> 'offseason' or current_season.stage <> 'draft' then
     raise exception 'wrong_stage' using errcode = 'P0001';
   end if;
-  if changes is null or jsonb_typeof(changes) <> 'array'
-     or lottery is null or jsonb_typeof(lottery) <> 'array' then
+  if jsonb_typeof(prospects) is distinct from 'array' then
     raise exception 'invalid_changes' using errcode = '22023';
   end if;
-
-  create temp table draft_changes on commit drop as
-  select * from jsonb_to_recordset(changes) as c(
-    id uuid, first_name text, last_name text, position text,
-    age smallint, height_inches smallint, weight_pounds smallint,
-    jersey smallint, overall smallint, potential smallint,
-    inside smallint, mid_range smallint, three_point smallint,
-    free_throw smallint, passing smallint, ball_handling smallint,
-    off_rebound smallint, def_rebound smallint, perimeter_d smallint,
-    interior_d smallint, speed smallint, strength smallint, stamina smallint,
-    team_id uuid, draft_round smallint, draft_pick smallint, draft_team_id uuid
-  );
-  if (select count(*) from draft_changes) <> jsonb_array_length(changes)
-     or exists (select 1 from draft_changes where id is null) then
-    raise exception 'invalid_changes' using errcode = '22023';
+  if exists (
+    select 1 from public.players
+    where league_id = current_season.league_id and draft_year = current_season.year
+  ) then
+    raise exception 'prospects_already_exist' using errcode = 'P0001';
   end if;
 
   insert into public.players (
     id, league_id, team_id, first_name, last_name, position, age, height_inches,
     weight_pounds, jersey, overall, potential, inside, mid_range, three_point,
     free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d,
-    interior_d, speed, strength, stamina, draft_year, draft_round, draft_pick
+    interior_d, speed, strength, stamina, status, draft_year
   )
-  select c.id, current_season.league_id, c.team_id, c.first_name, c.last_name,
-         c.position, c.age, c.height_inches, c.weight_pounds, c.jersey,
+  select c.id, current_season.league_id, null, c.first_name, c.last_name,
+         c.position, c.age, c.height_inches, c.weight_pounds, 0,
          c.overall, c.potential, c.inside, c.mid_range, c.three_point,
          c.free_throw, c.passing, c.ball_handling, c.off_rebound, c.def_rebound,
          c.perimeter_d, c.interior_d, c.speed, c.strength, c.stamina,
-         case when c.draft_pick is not null then current_season.year end,
-         c.draft_round, c.draft_pick
-  from draft_changes c;
+         'prospect', current_season.year
+  from jsonb_to_recordset(prospects) as c(
+    id uuid, first_name text, last_name text, position text,
+    age smallint, height_inches smallint, weight_pounds smallint,
+    overall smallint, potential smallint,
+    inside smallint, mid_range smallint, three_point smallint,
+    free_throw smallint, passing smallint, ball_handling smallint,
+    off_rebound smallint, def_rebound smallint, perimeter_d smallint,
+    interior_d smallint, speed smallint, strength smallint, stamina smallint
+  );
+  get diagnostics created = row_count;
+  if created <> jsonb_array_length(prospects) then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+  return created;
+end;
+$$;
+
+comment on function public.admin_create_prospects is
+  'Creates the draft class as prospects. Service role only.';
+revoke execute on function public.admin_create_prospects(uuid, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.admin_create_prospects(uuid, jsonb) to service_role;
+
+-- Holds the lottery: `slots` is every pick of the draft, in order, one object
+-- each: pick, round, team_id, finish_rank, expected_pick, odds (null outside
+-- the lottery). The picks are then made one at a time.
+create function public.admin_hold_lottery(target_season uuid, slots jsonb)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  created integer;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if current_season.phase <> 'offseason' or current_season.stage <> 'draft' then
+    raise exception 'wrong_stage' using errcode = 'P0001';
+  end if;
+  if jsonb_typeof(slots) is distinct from 'array' or jsonb_array_length(slots) = 0 then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from public.draft_picks
+    where league_id = current_season.league_id and season_year = current_season.year
+  ) then
+    raise exception 'lottery_already_held' using errcode = 'P0001';
+  end if;
 
   insert into public.draft_picks (
     league_id, season_year, pick, round, team_id, player_id,
     finish_rank, expected_pick, lottery_odds
   )
-  select current_season.league_id, current_season.year, c.draft_pick, c.draft_round,
-         c.draft_team_id, c.id, l.finish_rank, l.expected_pick, l.odds
-  from draft_changes c
-  join jsonb_to_recordset(lottery) as l(
-    team_id uuid, finish_rank smallint, expected_pick smallint, odds numeric
-  ) on l.team_id = c.draft_team_id
-  where c.draft_pick is not null;
-  get diagnostics picks_total = row_count;
-  if picks_total <> (select count(*) from draft_changes where draft_pick is not null) then
-    raise exception 'invalid_changes'
-      using errcode = '22023', detail = 'A pick has no lottery entry for its team.';
+  select current_season.league_id, current_season.year, s.pick, s.round, s.team_id,
+         null, s.finish_rank, s.expected_pick, s.odds
+  from jsonb_to_recordset(slots) as s(
+    pick smallint, round smallint, team_id uuid,
+    finish_rank smallint, expected_pick smallint, odds numeric
+  );
+  get diagnostics created = row_count;
+  if created <> jsonb_array_length(slots)
+     or (select max(pick) from public.draft_picks
+         where league_id = current_season.league_id and season_year = current_season.year) <> created then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+  return created;
+end;
+$$;
+
+comment on function public.admin_hold_lottery is
+  'Stores the draft order after the lottery. Service role only.';
+revoke execute on function public.admin_hold_lottery(uuid, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.admin_hold_lottery(uuid, jsonb) to service_role;
+
+-- Makes picks: `picks` is a list of {pick, player_id}, and must be the next
+-- open picks in order, no gaps. Each prospect joins the picking team's roster.
+-- When the last pick is made the undrafted prospects join the free-agent pool
+-- and the offseason moves on to free agency.
+create function public.admin_make_picks(target_season uuid, picks jsonb)
+returns public.seasons
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  chosen record;
+  slot public.draft_picks;
+  next_open smallint;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if current_season.phase <> 'offseason' or current_season.stage <> 'draft' then
+    raise exception 'wrong_stage' using errcode = 'P0001';
+  end if;
+  if jsonb_typeof(picks) is distinct from 'array' then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.draft_picks
+    where league_id = current_season.league_id and season_year = current_season.year
+  ) then
+    raise exception 'lottery_not_held' using errcode = 'P0001';
   end if;
 
-  insert into public.player_ratings_history (
-    league_id, player_id, season_year, team_id, age, overall, potential, previous_overall
-  )
-  select current_season.league_id, c.id, current_season.year, c.team_id, c.age,
-         c.overall, c.potential, null
-  from draft_changes c;
+  for chosen in
+    select p.pick, p.player_id
+    from jsonb_to_recordset(picks) as p(pick smallint, player_id uuid)
+    order by p.pick
+  loop
+    select min(d.pick) into next_open from public.draft_picks d
+    where d.league_id = current_season.league_id
+      and d.season_year = current_season.year and d.player_id is null;
+    if next_open is null or chosen.pick <> next_open then
+      raise exception 'pick_out_of_order' using errcode = 'P0001';
+    end if;
+    select * into slot from public.draft_picks d
+    where d.league_id = current_season.league_id
+      and d.season_year = current_season.year and d.pick = chosen.pick;
 
-  update public.seasons set stage = 'free-agency'
-  where id = target_season returning * into current_season;
+    update public.players
+    set team_id = slot.team_id, status = 'active', draft_round = slot.round,
+        draft_pick = slot.pick, jersey = app_private.free_jersey(slot.team_id)
+    where id = chosen.player_id and league_id = current_season.league_id
+      and status = 'prospect' and draft_year = current_season.year;
+    if not found then
+      raise exception 'prospect_not_available' using errcode = 'P0001';
+    end if;
+    update public.draft_picks set player_id = chosen.player_id
+    where league_id = current_season.league_id
+      and season_year = current_season.year and pick = chosen.pick;
+    insert into public.player_ratings_history (
+      league_id, player_id, season_year, team_id, age, overall, potential, previous_overall
+    )
+    select league_id, id, current_season.year, team_id, age, overall, potential, null
+    from public.players where id = chosen.player_id;
+  end loop;
+
+  if not exists (
+    select 1 from public.draft_picks
+    where league_id = current_season.league_id
+      and season_year = current_season.year and player_id is null
+  ) then
+    -- The draft is over: whoever was not taken is an undrafted free agent.
+    insert into public.player_ratings_history (
+      league_id, player_id, season_year, team_id, age, overall, potential, previous_overall
+    )
+    select league_id, id, current_season.year, null, age, overall, potential, null
+    from public.players
+    where league_id = current_season.league_id and status = 'prospect'
+      and draft_year = current_season.year;
+    update public.players set status = 'active'
+    where league_id = current_season.league_id and status = 'prospect'
+      and draft_year = current_season.year;
+    update public.seasons set stage = 'free-agency'
+    where id = target_season returning * into current_season;
+  end if;
   return current_season;
 end;
 $$;
 
-comment on function public.admin_apply_draft is
-  'Stores the rookie class and the draft, and moves the offseason to free agency. Service role only.';
-revoke execute on function public.admin_apply_draft(uuid, jsonb, jsonb)
+comment on function public.admin_make_picks is
+  'Makes the next draft picks in order; ends the draft after the last. Service role only.';
+revoke execute on function public.admin_make_picks(uuid, jsonb)
   from public, anon, authenticated;
-grant execute on function public.admin_apply_draft(uuid, jsonb, jsonb) to service_role;
+grant execute on function public.admin_make_picks(uuid, jsonb) to service_role;
 
 -- Step 3: free agency (server only) -----------------------------------------------------------------------------
 
@@ -879,3 +1013,136 @@ $$;
 revoke execute on function public.admin_set_camp(uuid, uuid, jsonb)
   from public, anon, authenticated;
 grant execute on function public.admin_set_camp(uuid, uuid, jsonb) to service_role;
+
+-- Roster moves and AI Assist (server only) ------------------------------------------------------------------------
+
+-- Signs a free agent onto a team's roster, which can hold at most 15. Allowed
+-- from free agency to the end of the preseason. For now a signing has no cost:
+-- contracts and the salary cap come later.
+create function public.admin_sign_player(
+  target_season uuid,
+  sign_team uuid,
+  player uuid
+)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  roster integer;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if current_season.phase <> 'offseason'
+     or current_season.stage not in ('free-agency', 'training-camp', 'preseason') then
+    raise exception 'wrong_stage' using errcode = 'P0001';
+  end if;
+  if not exists (
+    select 1 from public.teams where id = sign_team and league_id = current_season.league_id
+  ) then
+    raise exception 'team_not_found' using errcode = 'P0002';
+  end if;
+  select count(*) into roster from public.players
+  where team_id = sign_team and status = 'active';
+  if roster >= 15 then
+    raise exception 'roster_full' using errcode = 'P0001';
+  end if;
+
+  update public.players
+  set team_id = sign_team, jersey = app_private.free_jersey(sign_team)
+  where id = player and league_id = current_season.league_id
+    and status = 'active' and team_id is null;
+  if not found then
+    raise exception 'player_not_available' using errcode = 'P0001';
+  end if;
+  update public.player_ratings_history set team_id = sign_team
+  where league_id = current_season.league_id
+    and season_year = current_season.year and player_id = player;
+  return roster + 1;
+end;
+$$;
+
+revoke execute on function public.admin_sign_player(uuid, uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.admin_sign_player(uuid, uuid, uuid) to service_role;
+
+-- Releases a player from a team into free agency, and out of its camp roster.
+create function public.admin_release_player(
+  target_season uuid,
+  release_team uuid,
+  player uuid
+)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_season public.seasons;
+  roster integer;
+begin
+  select * into current_season from public.seasons where id = target_season for update;
+  if not found then
+    raise exception 'season_not_found' using errcode = 'P0002';
+  end if;
+  if current_season.phase <> 'offseason'
+     or current_season.stage not in ('free-agency', 'training-camp', 'preseason') then
+    raise exception 'wrong_stage' using errcode = 'P0001';
+  end if;
+  update public.players set team_id = null
+  where id = player and league_id = current_season.league_id
+    and status = 'active' and team_id = release_team;
+  if not found then
+    raise exception 'player_not_found' using errcode = 'P0002';
+  end if;
+  delete from public.camp_assignments where season_id = target_season and player_id = player;
+  update public.player_ratings_history set team_id = null
+  where league_id = current_season.league_id
+    and season_year = current_season.year and player_id = player;
+  select count(*) into roster from public.players
+  where team_id = release_team and status = 'active';
+  return roster;
+end;
+$$;
+
+revoke execute on function public.admin_release_player(uuid, uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.admin_release_player(uuid, uuid, uuid) to service_role;
+
+-- Sets any of a team's AI Assist switches (keys: trades, rosterCoverage,
+-- rosterManagement, scouting, drafting). Only a franchise the user runs can
+-- have a switch on (the table's own check enforces it).
+create function public.admin_set_ai_assist(target_team uuid, flags jsonb)
+returns public.teams
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  updated public.teams;
+begin
+  if jsonb_typeof(flags) is distinct from 'object' then
+    raise exception 'invalid_changes' using errcode = '22023';
+  end if;
+  update public.teams t
+  set ai_trades = coalesce((flags ->> 'trades')::boolean, t.ai_trades),
+      ai_roster_coverage = coalesce((flags ->> 'rosterCoverage')::boolean, t.ai_roster_coverage),
+      ai_roster_management = coalesce((flags ->> 'rosterManagement')::boolean, t.ai_roster_management),
+      ai_scouting = coalesce((flags ->> 'scouting')::boolean, t.ai_scouting),
+      ai_drafting = coalesce((flags ->> 'drafting')::boolean, t.ai_drafting)
+  where t.id = target_team
+  returning * into updated;
+  if not found then
+    raise exception 'team_not_found' using errcode = 'P0002';
+  end if;
+  return updated;
+end;
+$$;
+
+revoke execute on function public.admin_set_ai_assist(uuid, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.admin_set_ai_assist(uuid, jsonb) to service_role;
