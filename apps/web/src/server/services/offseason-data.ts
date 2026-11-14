@@ -245,6 +245,8 @@ export async function previousFinish(
 
 export type OwnedTeam = {
   id: string;
+  /** Players the owner has put on the trading block. */
+  block: string[];
   assist: {
     trades: boolean;
     rosterCoverage: boolean;
@@ -262,7 +264,7 @@ export async function ownedTeams(
   const { data, error } = await ctx.supabase
     .from("teams")
     .select(
-      "id, local_player_slot, ai_trades, ai_roster_coverage, ai_roster_management, ai_scouting, ai_drafting",
+      "id, local_player_slot, trading_block, ai_trades, ai_roster_coverage, ai_roster_management, ai_scouting, ai_drafting",
     )
     .eq("league_id", leagueId)
     .not("local_player_slot", "is", null)
@@ -270,6 +272,7 @@ export async function ownedTeams(
   if (error) throw error;
   return data.map((t) => ({
     id: t.id,
+    block: t.trading_block,
     assist: {
       trades: t.ai_trades,
       rosterCoverage: t.ai_roster_coverage,

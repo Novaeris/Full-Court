@@ -114,6 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### The trading block
+
+The owner can put up to five of their players on a **trading block** (on the Moves page, under Trades). It tells the computer teams which players are available.
+
+- **Offers follow the block.** Without a block, computer teams make offers for one of the owner's eight best players. With one, they make offers for the players on the block and for no others, from different teams, at most two at a time, as before. Every offer is still one the computer team would make and that is legal for both sides.
+- **At once and every round.** Saving the block makes new offers straight away (when trades are open), and each round of computer trades (every fifth day of the season, and in free agency) uses it.
+- **Rules.** Up to five different players of the owner's own team. A player who leaves the team (traded, released) just stops counting; if nobody on the block is left the team is back to the default. Clearing the block (saving none) goes back to the default too.
+- **Not yet:** asking for something in particular (a position, a pick, cap room), and putting a player on the block with an asking price.
+
 ### Power rankings
 
 The Standings tab has a second view, **Power rankings**, that ranks every team by how good it looks right now, which isn't quite the standings. A team's score from 0 to 100 blends three things:

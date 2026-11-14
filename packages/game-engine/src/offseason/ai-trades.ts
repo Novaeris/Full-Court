@@ -197,7 +197,8 @@ export type OwnerOffer = {
 /**
  * Offers from computer teams to the owner: up to `most`, from different teams.
  * A computer team picks one of the owner's better players it would like (the
- * rest are not interesting enough to ask about), and offers the best package
+ * rest are not interesting enough to ask about; or, when the owner has a
+ * trading block, one of those players), and offers the best package
  * `shopPlayers` finds for him. So every offer is one the team would make, is
  * legal for both sides, and is worth about what he is.
  */
@@ -209,12 +210,19 @@ export function proposeOwnerOffers(
     cap: number;
     inSeason: boolean;
     most: number;
+    /** Players the owner has put on the trading block: offers are for them alone. */
+    block?: readonly string[] | undefined;
   },
 ): OwnerOffer[] {
   const value = (a: TradeAsset) => tradeValue(a, input.cap);
-  const wanted = [...input.owner.roster]
-    .sort((a, b) => value(b) - value(a))
-    .slice(0, 8);
+  // The owner's own list, if any of it is still on the roster: those players and
+  // no others. Otherwise the eight best.
+  const listed = new Set(input.block ?? []);
+  const onBlock = input.owner.roster.filter((a) => listed.has(a.id));
+  const wanted =
+    onBlock.length > 0
+      ? onBlock
+      : [...input.owner.roster].sort((a, b) => value(b) - value(a)).slice(0, 8);
   const offers: OwnerOffer[] = [];
   const used = new Set<string>();
   for (const target of shuffle(rng, wanted)) {

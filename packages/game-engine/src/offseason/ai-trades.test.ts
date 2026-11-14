@@ -122,6 +122,54 @@ describe("proposeOwnerOffers", () => {
   });
 });
 
+describe("the trading block", () => {
+  const owner = team("me", "C", "PG");
+  const make = (seed: string, block?: string[]) =>
+    proposeOwnerOffers(createRng(seedState(seed)), {
+      owner: { payroll: owner.payroll, roster: owner.roster },
+      teams,
+      cap: CAP,
+      inSeason: false,
+      most: 3,
+      block,
+    });
+  const seeds = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+
+  it("offers only for the players on the block", () => {
+    // Two players who are not among the owner's best eight.
+    const block = [
+      owner.roster[9]?.id as string,
+      owner.roster[10]?.id as string,
+    ];
+    const offers = seeds.flatMap((seed) => make(seed, block));
+    expect(offers.length).toBeGreaterThan(0);
+    for (const o of offers) {
+      expect(o.give).toHaveLength(1);
+      expect(block).toContain(o.give[0]);
+    }
+  });
+
+  it("without a block, offers are for the best eight, as before", () => {
+    const best = new Set(
+      [...owner.roster]
+        .sort((a, b) => b.overall - a.overall)
+        .slice(0, 8)
+        .map((p) => p.id),
+    );
+    for (const o of seeds.flatMap((seed) => make(seed))) {
+      expect(best.has(o.give[0] as string)).toBe(true);
+    }
+    // An empty block, or one of players who have gone, is no block at all.
+    expect(make("3", [])).toEqual(make("3"));
+    expect(make("3", ["nobody", "gone"])).toEqual(make("3"));
+  });
+
+  it("is the same for the same seed and block", () => {
+    const block = [owner.roster[8]?.id as string];
+    expect(make("s", block)).toEqual(make("s", block));
+  });
+});
+
 describe("picks in trades", () => {
   const picks = (id: string) => [
     { id: `${id}-p1`, value: 40 },

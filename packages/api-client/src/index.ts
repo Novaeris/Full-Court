@@ -50,6 +50,7 @@ import {
   type ExtensionsResponse,
   type AllStarResponse,
   type ShopRequest,
+  type TradingBlockRequest,
   type TeamOverview,
   type StatsResponse,
   type StrategyResponse,
@@ -365,6 +366,17 @@ export function createApiClient(options: ApiClientOptions) {
         request(
           "POST",
           `/leagues/${encodeURIComponent(id)}/trades/offers`,
+          (b) => TradesResponseSchema.parse(b),
+          input,
+        ),
+      /** Puts up to five of your players on the trading block. */
+      setTradingBlock: (
+        id: string,
+        input: TradingBlockRequest,
+      ): Promise<TradesResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades/block`,
           (b) => TradesResponseSchema.parse(b),
           input,
         ),

@@ -27,6 +27,8 @@ export type TradeTeam = {
   roster: TradeAsset[];
   /** Picks the team holds, valued. */
   picks?: { id: string; value: number }[];
+  /** Players an owner has put on the trading block. */
+  block?: string[];
 };
 
 /** An offer to store: a computer team to an owner team. */
@@ -111,6 +113,7 @@ export async function runTradeRound(
             cap: season.salary_cap,
             inSeason: true,
             most: OFFERS_PER_TEAM,
+            block: owner.block,
           },
         ).map((o) => ({
           team_id: owner.id,

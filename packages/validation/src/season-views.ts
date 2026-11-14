@@ -727,8 +727,22 @@ export const TradesResponseSchema = z.object({
   picks: z.array(TradePickSchema),
   /** Open offers from computer teams to this team. */
   offers: z.array(TradeOfferSchema),
+  /** The players your team has put on the trading block (up to five). */
+  block: z.array(z.uuid()),
 });
 export type TradesResponse = z.infer<typeof TradesResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/trades/block: put up to five of your players on the trading block (none clears it). */
+export const TradingBlockRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerIds: z
+    .array(z.uuid())
+    .max(5)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "List each player once.",
+    }),
+});
+export type TradingBlockRequest = z.infer<typeof TradingBlockRequestSchema>;
 
 /** GET /api/v1/leagues/:leagueId/trades/partner?partner=: a computer team's roster with contracts. */
 export const TradePartnerResponseSchema = z.object({

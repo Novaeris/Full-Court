@@ -399,3 +399,15 @@ export async function extendContract(input: {
   });
   if (error) throw error;
 }
+
+/** Sets a franchise's trading block: up to five of its players (none clears it). */
+export async function setTradingBlock(input: {
+  teamId: string;
+  playerIds: readonly string[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_set_trading_block", {
+    target_team: input.teamId,
+    block: [...input.playerIds],
+  });
+  if (error) throw error;
+}

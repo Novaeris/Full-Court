@@ -32,6 +32,7 @@ import type {
   TradeRecord,
   TradeResult,
   TradesResponse,
+  TradingBlockRequest,
 } from "@fullcourt/validation";
 import {
   acceptTradeOffer,
@@ -39,6 +40,7 @@ import {
   declineTradeOffer,
   ensurePickRights,
   replaceTradeOffers,
+  setTradingBlock,
 } from "@/server/admin/offseason";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
@@ -383,6 +385,7 @@ export async function getTrades(
         size: rows.filter((r) => r.team_id === t.id).length,
       })),
     history,
+    block: owned.find((t) => t.id === teamId)?.block ?? [],
     picks: myPicks,
     offers,
   };
@@ -914,6 +917,7 @@ export async function refreshTradeOffers(
             .filter((r) => r.team_id === t.id)
             .map((r) => assetOf(r, season)),
         },
+        block: t.block,
         teams: computer,
         cap: season.salary_cap,
         inSeason: w.inSeason,
@@ -928,4 +932,37 @@ export async function refreshTradeOffers(
     })),
   );
   await replaceTradeOffers({ seasonId: season.id, offers });
+}
+
+/** Puts up to five of your players on the trading block; the computer teams then make offers for them. */
+export async function setBlock(
+  ctx: UserContext,
+  leagueIdParam: string,
+  input: TradingBlockRequest,
+): Promise<TradesResponse> {
+  const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
+  const mine = await resolveTeam(ctx, league.id, input.teamId);
+  try {
+    await setTradingBlock({ teamId: mine, playerIds: input.playerIds });
+  } catch (error) {
+    if ((error as { message?: string }).message === "invalid_block") {
+      throw new ApiError(
+        422,
+        "invalid_block",
+        "The block can hold up to five different players from your own roster.",
+      );
+    }
+    throw error;
+  }
+  // New offers for the new block, at once, if trades are open.
+  const season = await latestSeason(ctx, league.id);
+  if (season && window(season).open) {
+    await refreshTradeOffers(
+      ctx,
+      league.id,
+      season,
+      season.phase === "offseason" ? season.fa_day : season.day,
+    );
+  }
+  return getTrades(ctx, leagueIdParam, mine);
 }

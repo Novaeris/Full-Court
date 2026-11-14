@@ -55,7 +55,7 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
     const [teams, players, rights] = await Promise.all([
       client
         .from("teams")
-        .select("id, local_player_slot, ai_trades")
+        .select("id, local_player_slot, ai_trades, trading_block")
         .eq("league_id", leagueId),
       client
         .from("players")
@@ -77,7 +77,7 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
     const byTeam = new Map<string, TradeTeam>(
       teams.data.map((t) => [
         t.id,
-        { id: t.id, payroll: 0, roster: [], picks: [] },
+        { id: t.id, payroll: 0, roster: [], picks: [], block: t.trading_block },
       ]),
     );
     for (const p of players.data) {

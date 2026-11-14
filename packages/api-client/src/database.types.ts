@@ -1774,6 +1774,7 @@ export type Database = {
           strategy_defense: string
           strategy_pace: string
           strategy_three_point: string
+          trading_block: string[]
         }
         Insert: {
           abbreviation: string
@@ -1798,6 +1799,7 @@ export type Database = {
           strategy_defense?: string
           strategy_pace?: string
           strategy_three_point?: string
+          trading_block?: string[]
         }
         Update: {
           abbreviation?: string
@@ -1822,6 +1824,7 @@ export type Database = {
           strategy_defense?: string
           strategy_pace?: string
           strategy_three_point?: string
+          trading_block?: string[]
         }
         Relationships: [
           {
@@ -2633,6 +2636,7 @@ export type Database = {
           strategy_defense: string
           strategy_pace: string
           strategy_three_point: string
+          trading_block: string[]
         }
         SetofOptions: {
           from: "*"
@@ -2681,6 +2685,41 @@ export type Database = {
           strategy_defense: string
           strategy_pace: string
           strategy_three_point: string
+          trading_block: string[]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "teams"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_set_trading_block: {
+        Args: { block: string[]; target_team: string }
+        Returns: {
+          abbreviation: string
+          ai_drafting: boolean
+          ai_roster_coverage: boolean
+          ai_roster_management: boolean
+          ai_scouting: boolean
+          ai_trades: boolean
+          city: string
+          city_id: string | null
+          conference_id: string
+          division_id: string
+          id: string
+          league_id: string
+          local_player_slot: number | null
+          logo_id: string | null
+          nickname: string
+          primary_color: string
+          rotation_size: number | null
+          secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
+          trading_block: string[]
         }
         SetofOptions: {
           from: "*"
