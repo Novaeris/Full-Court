@@ -115,6 +115,47 @@ export function RosterPanel({
         ))}
       </ul>
 
+      {roster.outlook.length > 0 ? (
+        <>
+          <h3 className="mt-5 font-bold">Cap outlook</h3>
+          <p className="text-sm text-text-muted">
+            What your contracts commit in each season, against a cap that rises
+            every year. It counts only the players under contract today, so the
+            room is what you have to re-sign people and sign others.
+          </p>
+          <ul>
+            {roster.outlook.map((y) => (
+              <li
+                key={y.year}
+                className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-border py-2 first:border-t-0"
+              >
+                <span className="font-semibold tabular-nums">{y.year}</span>
+                <span className="text-sm tabular-nums">
+                  {money(y.committed)} committed to {y.players}{" "}
+                  {y.players === 1 ? "player" : "players"}
+                </span>
+                <span
+                  className={
+                    y.room < 0
+                      ? "text-sm font-semibold text-danger tabular-nums"
+                      : "text-sm text-text-muted tabular-nums"
+                  }
+                >
+                  {y.room < 0
+                    ? `${money(-y.room)} over a ${money(y.cap)} cap`
+                    : `${money(y.room)} of room under a ${money(y.cap)} cap`}
+                </span>
+                <span className="text-sm text-text-muted">
+                  {y.expiring === 0
+                    ? "No contracts end"
+                    : `${y.expiring} ${y.expiring === 1 ? "contract ends" : "contracts end"}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
       <h3 className="mt-5 font-bold">Free agents</h3>
       {freeAgencyDays ? (
         <p className="text-sm text-text-muted">

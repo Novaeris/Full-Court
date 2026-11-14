@@ -25,6 +25,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "A written recap on every finished game: who won, who led each team, standout lines like a triple-double, and what kind of game it was.",
       "An overview on every team's page: record and rank, scoring, streak, last ten, how the team plays, its leaders, its latest results and its next games.",
       "An Inbox tab that tells you what happened to your team: injuries, signings and releases, trades, awards, open trade offers and which contracts end.",
+      "A cap outlook on your roster: what your contracts commit in each of the next five seasons, the cap, your room and how many contracts end, for planning extensions and free agency.",
       "Contract extensions: give a player with two years or fewer left a new contract from the Moves page. He signs if the offer is worth enough to him, and you can see the least he will take.",
     ],
     improved: [

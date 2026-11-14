@@ -114,6 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### The cap outlook
+
+The roster section of the Moves and Offseason pages shows a **cap outlook**: for this season and the next four, what the team's contracts commit, how many players that is, what the cap will be, the room under it (or how far over) and how many contracts end after the season. It is meant for planning an extension, a trade or free agency.
+
+- It counts only the contracts the team holds today. A contract is a flat salary until the last season it covers, so a season's commitment is the sum of the salaries that haven't run out by then; nobody is assumed to be re-signed, drafted or traded.
+- The cap rises 3% a year from the league's first season, so each season is measured against its own cap. The hard ceiling is 120% of that cap, and going over the cap is allowed only through the exceptions (re-signing your own players, the mid-level exception and minimum contracts).
+- This season's line is the same as the payroll and room the page already shows, and an extension changes the later seasons at once.
+- **Not yet:** projecting the draft picks' rookie contracts, a minimum-roster estimate, or a luxury tax.
+
 ### Game recaps
 
 A finished game's page opens with a short written recap under the score, made from the score and the box score alone, so the same game always reads the same.

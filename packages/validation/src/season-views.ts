@@ -472,6 +472,20 @@ export type CapFigures = z.infer<typeof CapFiguresSchema>;
  * when players can be released and signed (after free agency's days, at 75% of
  * the asking price).
  */
+/** What a team has committed in one season, from the contracts it holds today. */
+export const OutlookYearSchema = z.object({
+  year: z.number().int(),
+  cap: z.number().int(),
+  ceiling: z.number().int(),
+  committed: z.number().int(),
+  players: z.number().int(),
+  /** The cap less what is committed; negative when over the cap. */
+  room: z.number().int(),
+  /** Contracts that end after the season. */
+  expiring: z.number().int(),
+});
+export type OutlookYear = z.infer<typeof OutlookYearSchema>;
+
 export const RosterResponseSchema = z.object({
   teamId: z.uuid().nullable(),
   open: z.boolean(),
@@ -479,6 +493,8 @@ export const RosterResponseSchema = z.object({
   max: z.number().int(),
   figures: CapFiguresSchema.nullable(),
   players: z.array(RosterPlayerSchema),
+  /** The next five seasons' commitments and cap, empty with no season or team. */
+  outlook: z.array(OutlookYearSchema),
   freeAgents: z.array(FreeAgentSchema),
   freeAgentTotal: z.number().int(),
 });

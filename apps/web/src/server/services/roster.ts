@@ -2,6 +2,7 @@ import "server-only";
 import {
   ROSTER_LIMITS,
   askingSalary,
+  capOutlook,
   lateSigningPrice,
   maxYearsFor,
   minSalary,
@@ -24,6 +25,7 @@ import {
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { capFigures } from "./freeagency";
+import { firstYear } from "./finance";
 import { loadPayrollPlayers, mleUsers, payrolls } from "./finance";
 import { getLeague, parseLeagueId } from "./leagues";
 import { ownedTeams } from "./offseason-data";
@@ -142,6 +144,20 @@ export async function getRoster(
         ? await capFigures(ctx, league.id, season, teamId)
         : null,
     players,
+    outlook:
+      season && teamId
+        ? capOutlook(
+            players.flatMap((p) =>
+              p.salary !== null && p.expires !== null
+                ? [{ salary: p.salary, expires: p.expires }]
+                : [],
+            ),
+            {
+              year: season.year,
+              firstYear: (await firstYear(ctx, league.id)) ?? season.year,
+            },
+          )
+        : [],
     freeAgents,
     freeAgentTotal: free.count ?? free.data.length,
   };

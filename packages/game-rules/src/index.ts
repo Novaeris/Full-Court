@@ -44,3 +44,4 @@ export * from "./season/extensions";
 export * from "./season/allstar";
 export * from "./season/styles";
 export * from "./season/recap";
+export * from "./season/outlook";
