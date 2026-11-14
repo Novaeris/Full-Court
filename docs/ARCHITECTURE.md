@@ -394,6 +394,7 @@ The website must work well on phones, tablets and desktops. Layouts change shape
   - Builds `@fullcourt/web` and the packages it depends on, using pnpm through corepack.
   - Health check: `/api/health`.
   - `buildFilter` redeploys only when the web app, packages or workspace config change.
+- **One league per worker (tests).** `admin_claim_sim_job(worker_name, only_league default null)` claims the oldest queued job, of one league if `only_league` is given (migration `20261116120000_claim_sim_job_by_league.sql`). The worker reads it from `WORKER_ONLY_LEAGUE`, and the e2e helper `runWorker(leagueId)` always sets it. The e2e tests share one database and each runs its own worker; without the limit a worker spawned by one test claimed the job another test had left queued on purpose and played days of its season, which made tests fail at random. In production the variable is unset and a worker claims any league's job.
 - **Render background worker** (not created yet; `apps/worker` runs locally for now): same repository and blueprint, its own build filter, and the only holder of the service-role key outside the admin modules. Start command `pnpm --filter @fullcourt/worker start`.
 - **Environments:**
   - Local: `supabase start` in Docker.

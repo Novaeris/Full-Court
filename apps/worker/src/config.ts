@@ -11,6 +11,8 @@ export type WorkerConfig = {
   staleAfterMs: number;
   /** Stop when the queue is empty instead of waiting for more jobs. */
   once: boolean;
+  /** Claim only this league's jobs (the e2e tests share a database); unset claims any. */
+  onlyLeague: string | undefined;
 };
 
 const number = (
@@ -49,5 +51,6 @@ export function readConfig(
     pollMs: number(env.POLL_INTERVAL_MS, 2000, 100),
     staleAfterMs: number(env.STALE_AFTER_MS, 5 * 60 * 1000, 10_000),
     once: argv.includes("--once"),
+    onlyLeague: env.WORKER_ONLY_LEAGUE || undefined,
   };
 }

@@ -129,6 +129,7 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
     async claimJob(worker: string): Promise<SimJobRow | null> {
       const { data, error } = await client.rpc("admin_claim_sim_job", {
         worker_name: worker,
+        ...(config.onlyLeague ? { only_league: config.onlyLeague } : {}),
       });
       if (error) throw error;
       return data[0] ?? null;

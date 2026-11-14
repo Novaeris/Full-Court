@@ -2081,7 +2081,7 @@ export type Database = {
         }
       }
       admin_claim_sim_job: {
-        Args: { worker_name: string }
+        Args: { only_league?: string; worker_name: string }
         Returns: {
           created_at: string
           days_done: number

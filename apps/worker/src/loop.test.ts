@@ -72,6 +72,16 @@ describe("readConfig", () => {
     expect(config.once).toBe(true);
   });
 
+  it("claims any league's jobs unless limited to one", () => {
+    expect(readConfig(env, []).onlyLeague).toBeUndefined();
+    expect(readConfig({ ...env, WORKER_ONLY_LEAGUE: "" }, []).onlyLeague).toBe(
+      undefined,
+    );
+    expect(
+      readConfig({ ...env, WORKER_ONLY_LEAGUE: "league-1" }, []).onlyLeague,
+    ).toBe("league-1");
+  });
+
   it("falls back to the public URL variable", () => {
     const config = readConfig(
       {
