@@ -1,5 +1,9 @@
 import { sitOut } from "@fullcourt/game-engine";
-import { coachingBonus, isRotationSize } from "@fullcourt/game-rules";
+import {
+  chooseTeamStrategy,
+  coachingBonus,
+  isRotationSize,
+} from "@fullcourt/game-rules";
 import type {
   GameReplay,
   RngState,
@@ -112,26 +116,45 @@ export function toSimTeams(
       (options as readonly string[]).includes(value ?? "")
         ? (value as T)
         : fallback;
+    // An owner's team plays the strategy they saved (the usual one if they never
+    // set it). A computer team picks the style its whole roster suits, hurt
+    // players included, so its style doesn't change with every injury.
+    const ownerRun = coach !== undefined && coach.local_player_slot !== null;
+    const style = ownerRun
+      ? {
+          pace: pick(
+            PACE_LEVELS,
+            coach?.strategy_pace,
+            DEFAULT_TEAM_STRATEGY.pace,
+          ),
+          threePointFocus: pick(
+            THREE_POINT_FOCUS_LEVELS,
+            coach?.strategy_three_point,
+            DEFAULT_TEAM_STRATEGY.threePointFocus,
+          ),
+          defense: pick(
+            DEFENSE_STYLES,
+            coach?.strategy_defense,
+            DEFAULT_TEAM_STRATEGY.defense,
+          ),
+        }
+      : chooseTeamStrategy(
+          (byTeam.get(id) ?? []).map((r) => {
+            const p = toSimPlayer(r);
+            return {
+              overall: p.overall,
+              threePoint: p.ratings.threePoint,
+              speed: p.ratings.speed,
+              stamina: p.ratings.stamina,
+              perimeterD: p.ratings.perimeterD,
+              interiorD: p.ratings.interiorD,
+            };
+          }),
+        );
     return {
       id,
       players: roster,
-      strategy: {
-        pace: pick(
-          PACE_LEVELS,
-          coach?.strategy_pace,
-          DEFAULT_TEAM_STRATEGY.pace,
-        ),
-        threePointFocus: pick(
-          THREE_POINT_FOCUS_LEVELS,
-          coach?.strategy_three_point,
-          DEFAULT_TEAM_STRATEGY.threePointFocus,
-        ),
-        defense: pick(
-          DEFENSE_STYLES,
-          coach?.strategy_defense,
-          DEFAULT_TEAM_STRATEGY.defense,
-        ),
-      },
+      strategy: style,
       coachBonus: coachingBonus(headCoachOf.get(id)),
       rotation:
         coach?.rotation_size && isRotationSize(coach.rotation_size)

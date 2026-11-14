@@ -193,7 +193,7 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         client
           .from("teams")
           .select(
-            "id, strategy_pace, strategy_three_point, strategy_defense, starters, rotation_size",
+            "id, strategy_pace, strategy_three_point, strategy_defense, starters, rotation_size, local_player_slot",
           )
           .eq("league_id", season.league_id)
           .in("id", teamIds),

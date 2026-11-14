@@ -42,3 +42,4 @@ export * from "./season/coaching";
 export * from "./season/stats";
 export * from "./season/extensions";
 export * from "./season/allstar";
+export * from "./season/styles";

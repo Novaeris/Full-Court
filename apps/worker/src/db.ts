@@ -36,6 +36,8 @@ export type CoachRow = {
   starters: string[];
   /** How many players the coach uses, or null for everyone. */
   rotation_size: number | null;
+  /** The owner's slot; null for a computer team, which picks its own style. */
+  local_player_slot: number | null;
 };
 
 /** A team's head coach, whose rating adds to every player in its games. */
