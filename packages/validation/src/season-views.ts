@@ -795,6 +795,8 @@ export const StrategyResponseSchema = z.object({
       name: z.string(),
       position: z.enum(POSITIONS),
       overall: z.number().int(),
+      /** Days he is still out hurt (0 when fit). */
+      injuryDays: z.number().int(),
     }),
   ),
 });

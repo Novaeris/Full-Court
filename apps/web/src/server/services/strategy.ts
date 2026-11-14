@@ -56,7 +56,7 @@ export async function getStrategy(
       .single(),
     ctx.supabase
       .from("players")
-      .select("id, first_name, last_name, position, overall")
+      .select("id, first_name, last_name, position, overall, injury_days")
       .eq("league_id", league.id)
       .eq("team_id", teamId)
       .eq("status", "active")
@@ -84,6 +84,7 @@ export async function getStrategy(
       name: `${p.first_name} ${p.last_name}`,
       position: p.position as Position,
       overall: p.overall,
+      injuryDays: p.injury_days,
     })),
   };
 }

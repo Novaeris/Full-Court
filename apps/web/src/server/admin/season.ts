@@ -95,6 +95,14 @@ export async function archiveSeason(input: {
   return data;
 }
 
+/** Heals every injured player in a season's league (a new season starts fit). */
+export async function healInjuries(seasonId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_heal_injuries", {
+    target_season: seasonId,
+  });
+  if (error) throw error;
+}
+
 /** Stores an archived season's awards, replacing the earlier ones (not the champion). */
 export async function setSeasonAwards(input: {
   seasonId: string;

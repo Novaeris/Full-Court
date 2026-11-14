@@ -1,3 +1,4 @@
+import { sitOut } from "@fullcourt/game-engine";
 import type {
   GameReplay,
   RngState,
@@ -83,12 +84,20 @@ export function toSimTeams(
   const teamIds = new Set(
     games.flatMap((g) => [g.home_team_id, g.away_team_id]),
   );
-  const rosters = new Map<string, SimPlayer[]>();
-  for (const id of teamIds) rosters.set(id, []);
+  // Injured players sit out, unless that would leave a team too short.
+  const byTeam = new Map<string, PlayerRow[]>();
+  for (const id of teamIds) byTeam.set(id, []);
   for (const row of players) {
-    if (row.team_id && rosters.has(row.team_id)) {
-      rosters.get(row.team_id)?.push(toSimPlayer(row));
+    if (row.team_id && byTeam.has(row.team_id)) {
+      byTeam.get(row.team_id)?.push(row);
     }
+  }
+  const rosters = new Map<string, SimPlayer[]>();
+  for (const [id, rows] of byTeam) {
+    const out = sitOut(
+      rows.map((r) => ({ id: r.id, injuryDays: r.injury_days })),
+    );
+    rosters.set(id, rows.filter((r) => !out.has(r.id)).map(toSimPlayer));
   }
   return [...rosters].map(([id, roster]) => {
     const coach = coachOf.get(id);
@@ -120,10 +129,35 @@ export function toSimTeams(
           DEFAULT_TEAM_STRATEGY.defense,
         ),
       },
-      // The engine ignores a list that isn't five of this roster.
-      starters: coach && coach.starters.length > 0 ? coach.starters : undefined,
+      starters:
+        coach && coach.starters.length > 0
+          ? coachStarters(coach.starters, roster)
+          : undefined,
     };
   });
+}
+
+/**
+ * The starters the owner named, with any who is out hurt (or gone) replaced by
+ * the best healthy player not already starting. Left as named if they can't be
+ * made five (the engine then uses its own five).
+ */
+function coachStarters(
+  named: readonly string[],
+  roster: readonly SimPlayer[],
+): string[] {
+  const here = new Set(roster.map((p) => p.id));
+  const keep = named.filter((id) => here.has(id));
+  if (keep.length === named.length) return [...named];
+  const spare = [...roster]
+    .filter((p) => !keep.includes(p.id))
+    .sort((a, b) => b.overall - a.overall || (a.id < b.id ? -1 : 1));
+  const filled = [...keep];
+  for (const p of spare) {
+    if (filled.length >= named.length) break;
+    filled.push(p.id);
+  }
+  return filled;
 }
 
 /** A finished game as the row `admin_commit_sim_day` expects. */

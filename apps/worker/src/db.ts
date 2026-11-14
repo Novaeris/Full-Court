@@ -23,6 +23,7 @@ export type PlayerRow = Pick<
   | "speed"
   | "strength"
   | "stamina"
+  | "injury_days"
 >;
 
 /** How a team plays: its strategy and the starters its owner named. */
@@ -85,6 +86,14 @@ export class CommitRejected extends Error {
   }
 }
 
+/** An injury to store: who is hurt, for how many days, and with what. */
+export type StoredInjury = {
+  player_id: string;
+  team_id: string;
+  days: number;
+  kind: string;
+};
+
 /** Everything the worker does to the database, so the job logic can be tested without one. */
 export interface WorkerDb extends Partial<TradeStore> {
   claimJob(worker: string): Promise<SimJobRow | null>;
@@ -93,4 +102,10 @@ export interface WorkerDb extends Partial<TradeStore> {
   loadDay(season: SeasonRow, day: number): Promise<DayRows>;
   commitDay(input: DayCommit): Promise<SimJobRow>;
   failJob(jobId: string, message: string): Promise<void>;
+  /** Heals a day and stores that day's new injuries (once for each day). */
+  applyInjuries?(
+    seasonId: string,
+    day: number,
+    injuries: StoredInjury[],
+  ): Promise<void>;
 }

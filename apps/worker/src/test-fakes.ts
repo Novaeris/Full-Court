@@ -6,6 +6,7 @@ import {
   type PlayerRow,
   type SeasonRow,
   type SimJobRow,
+  type StoredInjury,
   type WorkerDb,
 } from "./db";
 
@@ -31,6 +32,7 @@ export function fakePlayers(rosterSize = 8): PlayerRow[] {
       speed: 58,
       strength: 55,
       stamina: 60 + i,
+      injury_days: 0,
     })),
   );
 }
@@ -51,6 +53,9 @@ export type FakeOptions = {
   commitError?: { onCall: number; error: Error };
   loadDayError?: Error;
   seasonPhase?: string;
+  /** Leave out `applyInjuries`, as a database without it would. */
+  withInjuries?: boolean;
+  injuryError?: Error;
 };
 
 /** An in-memory season, job and league that behaves like the database functions. */
@@ -75,6 +80,7 @@ export function fakeDb(options: FakeOptions = {}) {
   let rngState = [11, 22, 33, 44];
   const commits: DayCommit[] = [];
   const failures: { jobId: string; message: string }[] = [];
+  const injuryCalls: { day: number; injuries: StoredInjury[] }[] = [];
   let claimed = false;
   let requeueCalls = 0;
   let commitCalls = 0;
@@ -134,6 +140,18 @@ export function fakeDb(options: FakeOptions = {}) {
     async failJob(jobId, message) {
       failures.push({ jobId, message });
     },
+    ...(options.withInjuries === false
+      ? {}
+      : {
+          async applyInjuries(
+            _seasonId: string,
+            day: number,
+            injuries: StoredInjury[],
+          ) {
+            if (options.injuryError) throw options.injuryError;
+            injuryCalls.push({ day, injuries });
+          },
+        }),
   };
 
   return {
@@ -142,6 +160,7 @@ export function fakeDb(options: FakeOptions = {}) {
     season,
     commits,
     failures,
+    injuryCalls,
     requeueCalls: () => requeueCalls,
   };
 }

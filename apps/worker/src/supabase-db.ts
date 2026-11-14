@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { WorkerConfig } from "./config";
 import { describeError } from "./errors";
 import type { StoredOffer, TradeTeam } from "./trade-round";
+import type { StoredInjury } from "./db";
 import {
   CommitRefused,
   CommitRejected,
@@ -16,7 +17,7 @@ import {
 } from "./db";
 
 const PLAYER_COLUMNS =
-  "id, team_id, position, overall, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina";
+  "id, team_id, position, overall, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina, injury_days";
 
 /** The worker's database access: the service role, calling the admin_* functions. */
 export function createSupabaseDb(config: WorkerConfig): WorkerDb {
@@ -258,6 +259,19 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
       const { error } = await client.rpc("admin_replace_trade_offers", {
         target_season: seasonId,
         new_offers: offers as never,
+      });
+      if (error) throw error;
+    },
+
+    async applyInjuries(
+      seasonId: string,
+      day: number,
+      injuries: StoredInjury[],
+    ): Promise<void> {
+      const { error } = await client.rpc("admin_apply_injuries", {
+        target_season: seasonId,
+        sim_day: day,
+        new_injuries: injuries as never,
       });
       if (error) throw error;
     },

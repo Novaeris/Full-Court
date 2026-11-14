@@ -171,6 +171,17 @@ Nothing the AI does is hidden: what it did shows in the offseason report. Simula
 - **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
 - **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
 
+### Injuries
+
+Players get hurt, on every team, in the regular season and the playoffs.
+
+- **When.** Injuries happen between games: after each day's games, each player who played is rolled once. The chance rises with his minutes (about 0.6% for a 36-minute game), so starters are hurt more often than the bench. Nobody is hurt in the middle of a game.
+- **How long.** Most are minor (about 72%: 1 to 5 days, mostly the short end), some moderate (23%: 6 to 20 days) and a few major (5%: 21 to 80 days). Each has a name (a sprained ankle, a torn ligament). Days are league days: every simulated day, everyone who is hurt is a day closer to playing, whether or not his team played.
+- **What it changes.** A hurt player stays on his team and its roster (and still counts towards 12 to 15, still counts for cap and trades) but does not play. A team always has at least 8 healthy players: if more are hurt, the ones with the fewest days left play. A starter the owner named who is hurt is replaced on game day by the best healthy player not already starting. An injury never changes a player's ratings.
+- **The offseason heals everyone**, so a new season starts fit.
+- **Where it shows.** The team page has a Status column ("Out 6 days"), the player page says what the injury is and how long is left, and the starters picker marks hurt players. Every injury is kept in a table for the league's history.
+- **Not yet:** injuries during a game, injuries that last into the next season or lower ratings, rehab, and the AI taking injuries into account when it trades or signs.
+
 ### Awards and history
 
 When a season is archived (at the start of the next offseason) its awards are decided from the season's totals, by fixed rules, so the same season always gives the same winners.
@@ -206,7 +217,7 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); what is still missing is the head coach's effect on games, minutes and rotations, and a bench order.
 
-**6. Smaller gaps.** Awards and a history page were built in Phase 23; no injuries; no all-star game; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
+**6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; no all-star game; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
 
 **Order.** (a) Make AI Assist real and move the offseason's decisions to the owner: a draft board that exists before the draft, choosing picks, roster moves in free agency and the preseason. (b) Finances and contracts: salaries, the cap, rookie scale, owner budget, staff payroll folded into it. (c) Free agency with offers and negotiation, extensions, releases. (d) In-season roster moves and trades. (e) Strategy, lineups and the head coach's effect on games. (f) Awards and history.
 

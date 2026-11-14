@@ -647,6 +647,71 @@ export type Database = {
           },
         ]
       }
+      player_injuries: {
+        Row: {
+          created_at: string
+          day: number
+          days: number
+          id: string
+          kind: string
+          league_id: string
+          player_id: string
+          season_id: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          day: number
+          days: number
+          id?: string
+          kind: string
+          league_id: string
+          player_id: string
+          season_id: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          days?: number
+          id?: string
+          kind?: string
+          league_id?: string
+          player_id?: string
+          season_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_injuries_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_injuries_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_injuries_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_injuries_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       player_ratings_history: {
         Row: {
           age: number
@@ -937,6 +1002,8 @@ export type Database = {
           free_throw: number
           height_inches: number
           id: string
+          injury_days: number
+          injury_kind: string | null
           inside: number
           interior_d: number
           jersey: number
@@ -972,6 +1039,8 @@ export type Database = {
           free_throw: number
           height_inches: number
           id?: string
+          injury_days?: number
+          injury_kind?: string | null
           inside: number
           interior_d: number
           jersey: number
@@ -1007,6 +1076,8 @@ export type Database = {
           free_throw?: number
           height_inches?: number
           id?: string
+          injury_days?: number
+          injury_kind?: string | null
           inside?: number
           interior_d?: number
           jersey?: number
@@ -1236,6 +1307,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1253,6 +1325,7 @@ export type Database = {
           day?: number
           fa_day?: number
           id?: string
+          injuries_through_day?: number
           last_day: number
           league_id: string
           offseason_done_at?: string | null
@@ -1270,6 +1343,7 @@ export type Database = {
           day?: number
           fa_day?: number
           id?: string
+          injuries_through_day?: number
           last_day?: number
           league_id?: string
           offseason_done_at?: string | null
@@ -1839,6 +1913,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1871,6 +1946,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1889,6 +1965,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_apply_injuries: {
+        Args: { new_injuries: Json; sim_day: number; target_season: string }
+        Returns: number
+      }
       admin_apply_progression: {
         Args: { changes: Json; staff_changes: Json; target_season: string }
         Returns: {
@@ -1897,6 +1977,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1923,6 +2004,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1979,6 +2061,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2126,6 +2209,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2164,6 +2248,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2222,6 +2307,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_heal_injuries: { Args: { target_season: string }; Returns: number }
       admin_hire_staff: {
         Args: {
           hire_team: string
@@ -2287,6 +2373,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2439,6 +2526,7 @@ export type Database = {
           day: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null

@@ -137,3 +137,12 @@ export {
   type AiTradeTeam,
   type PickAsset,
 } from "./offseason/ai-trades";
+export {
+  INJURY_RATE_PER_MINUTE,
+  MIN_HEALTHY,
+  rollInjuries,
+  sitOut,
+  type Injury,
+  type InjuryCandidate,
+  type InjurySeverity,
+} from "./season/injuries";

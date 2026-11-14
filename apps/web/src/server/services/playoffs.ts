@@ -11,7 +11,11 @@ import type {
   PlayoffsResponse,
   Season,
 } from "@fullcourt/validation";
-import { archiveSeason, insertPlayoffs } from "@/server/admin/season";
+import {
+  archiveSeason,
+  healInjuries,
+  insertPlayoffs,
+} from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { awardSeason } from "./awards";
@@ -194,6 +198,8 @@ export async function startNextSeason(
   } catch (error) {
     console.error("Season awards failed", { leagueId: league.id, error });
   }
+  // Everyone is fit again for the new season.
+  await healInjuries(archived.id);
   await beginOffseason(ctx, league.id, archived);
   try {
     await createSeason(ctx, league, season.year + 1, { inOffseason: true });

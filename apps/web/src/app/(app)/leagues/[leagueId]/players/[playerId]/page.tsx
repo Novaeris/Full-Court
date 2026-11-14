@@ -74,6 +74,12 @@ async function PlayerProfile({
             Age {player.age} · {formatHeight(player.heightInches)} ·{" "}
             {player.weightPounds} lb
           </p>
+          {player.injuryDays > 0 ? (
+            <p role="status" className="mt-2 font-semibold text-danger">
+              Injured: {player.injuryKind}. Out {player.injuryDays}{" "}
+              {player.injuryDays === 1 ? "more day" : "more days"}.
+            </p>
+          ) : null}
           {team ? (
             <Link
               href={`/leagues/${league.id}/teams/${team.id}`}

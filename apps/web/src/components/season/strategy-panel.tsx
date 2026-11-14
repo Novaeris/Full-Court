@@ -174,6 +174,12 @@ export function StrategyPanel({
           <span className="font-semibold">Choose my starting five</span>
         </label>
         {custom ? (
+          <p className="mt-2 text-sm text-text-muted">
+            A starter who is injured is replaced by the best healthy player on
+            game day.
+          </p>
+        ) : null}
+        {custom ? (
           <ol className="mt-3 grid gap-2 sm:grid-cols-2">
             {starters.map((id, i) => (
               <li key={i}>
@@ -193,6 +199,7 @@ export function StrategyPanel({
                     {data.roster.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.position}, {p.overall})
+                        {p.injuryDays > 0 ? ` - out ${p.injuryDays}d` : ""}
                       </option>
                     ))}
                   </select>

@@ -90,6 +90,52 @@ describe("toSimTeams", () => {
     expect(teams.find((t) => t.id === "t1")?.strategy.pace).toBe("normal");
   });
 
+  it("leaves out a hurt player, unless the team would be too short", () => {
+    const hurt = (ids: string[]) =>
+      fakePlayers(12).map((p) =>
+        ids.includes(p.id) ? { ...p, injury_days: 5 } : p,
+      );
+    const roster = (list: ReturnType<typeof fakePlayers>) =>
+      toSimTeams(games, list)
+        .find((t) => t.id === "t1")
+        ?.players.map((p) => p.id) ?? [];
+    expect(roster(hurt(["t1-p1"]))).toHaveLength(11);
+    expect(roster(hurt(["t1-p1"]))).not.toContain("t1-p1");
+    // Seven of twelve hurt: only five are healthy, so three come back.
+    const many = hurt([
+      "t1-p1",
+      "t1-p2",
+      "t1-p3",
+      "t1-p4",
+      "t1-p5",
+      "t1-p6",
+      "t1-p7",
+    ]);
+    expect(roster(many)).toHaveLength(8);
+  });
+
+  it("replaces a starter who is hurt with the best healthy player", () => {
+    const players = fakePlayers(10).map((p) =>
+      p.id === "t1-p1" ? { ...p, injury_days: 3 } : p,
+    );
+    const named = ["t1-p1", "t1-p2", "t1-p3", "t1-p4", "t1-p5"];
+    const t1 = toSimTeams(games, players, [
+      {
+        id: "t1",
+        strategy_pace: "normal",
+        strategy_three_point: "normal",
+        strategy_defense: "balanced",
+        starters: named,
+      },
+    ]).find((t) => t.id === "t1");
+    expect(t1?.starters).toHaveLength(5);
+    expect(t1?.starters).not.toContain("t1-p1");
+    expect(new Set(t1?.starters).size).toBe(5);
+    for (const id of t1?.starters ?? []) {
+      expect(t1?.players.some((p) => p.id === id)).toBe(true);
+    }
+  });
+
   it("rejects an unknown position", () => {
     const players = fakePlayers().map((p) => ({ ...p, position: "G" }));
     expect(() => toSimTeams(games, players)).toThrow(/unknown position/);

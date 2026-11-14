@@ -59,6 +59,19 @@ async function TeamRoster({
     },
     { key: "pos", header: "Position", abbr: "Pos", cell: (p) => p.position },
     {
+      key: "status",
+      header: "Status",
+      cell: (p) =>
+        p.injuryDays > 0 ? (
+          <span className="font-semibold text-danger">
+            Out {p.injuryDays} {p.injuryDays === 1 ? "day" : "days"}
+            <span className="sr-only">: {p.injuryKind}</span>
+          </span>
+        ) : (
+          <span className="text-text-muted">Fit</span>
+        ),
+    },
+    {
       key: "ovr",
       header: "Overall",
       abbr: "OVR",
