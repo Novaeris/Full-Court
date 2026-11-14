@@ -70,6 +70,12 @@ async function History({
   }
   return (
     <div className="flex flex-col gap-8">
+      <Link
+        href={`/leagues/${league.id}/hall-of-fame`}
+        className="-mb-4 inline-flex min-h-touch w-fit items-center font-semibold text-accent underline underline-offset-4"
+      >
+        Hall of Fame
+      </Link>
       <Titles history={history} teams={teams} />
       <Records leagueId={league.id} history={history} teams={teams} />
       <Seasons leagueId={league.id} history={history} teams={teams} />

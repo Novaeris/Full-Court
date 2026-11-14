@@ -25,6 +25,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "A written recap on every finished game: who won, who led each team, standout lines like a triple-double, and what kind of game it was.",
       "An overview on every team's page: record and rank, scoring, streak, last ten, how the team plays, its leaders, its latest results and its next games.",
       "An Inbox tab that tells you what happened to your team: injuries, signings and releases, trades, awards, open trade offers and which contracts end.",
+      "A Hall of Fame: great players are inducted three seasons after they retire, and the page lists their careers.",
       "An award race on the Stats tab: who leads the MVP, defensive player, sixth man, rookie and most improved awards as the season goes.",
       "Players develop during the season, not only in the offseason: the young improve and the old decline a little at two points of the year, for every team alike.",
       "A News tab with the moves of every team: signings, trades, serious injuries, retirements and each season's champion.",

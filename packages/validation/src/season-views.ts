@@ -1078,6 +1078,35 @@ export const AwardRaceResponseSchema = z.object({
 });
 export type AwardRaceResponse = z.infer<typeof AwardRaceResponseSchema>;
 
+/** GET /api/v1/leagues/:leagueId/hall-of-fame: the retired players inducted into the Hall of Fame (docs/DESIGN.md, "The Hall of Fame"). */
+export const HallOfFameResponseSchema = z.object({
+  /** The season the Hall is as of; null before any season. */
+  year: z.number().int().nullable(),
+  /** Retired players in all, inducted or not. */
+  retired: z.number().int(),
+  members: z.array(
+    z.object({
+      playerId: z.uuid(),
+      name: z.string(),
+      position: z.string(),
+      retiredYear: z.number().int(),
+      inductedYear: z.number().int(),
+      seasons: z.number().int(),
+      games: z.number().int(),
+      /** Career averages per game in the league. */
+      points: z.number(),
+      rebounds: z.number(),
+      assists: z.number(),
+      titles: z.number().int(),
+      allStars: z.number().int(),
+      honors: z.array(z.object({ label: z.string(), count: z.number().int() })),
+      /** The career score the rules gave him. */
+      score: z.number(),
+    }),
+  ),
+});
+export type HallOfFameResponse = z.infer<typeof HallOfFameResponseSchema>;
+
 /** A player of your team who can be given a new contract (docs/DESIGN.md, "Extending a contract"). */
 export const ExtensionCandidateSchema = z.object({
   player: OffseasonPlayerSchema,

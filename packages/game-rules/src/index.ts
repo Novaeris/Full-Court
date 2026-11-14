@@ -45,5 +45,6 @@ export * from "./season/allstar";
 export * from "./season/styles";
 export * from "./season/recap";
 export * from "./season/development";
+export * from "./season/hallfame";
 export * from "./season/outlook";
 export * from "./season/power";

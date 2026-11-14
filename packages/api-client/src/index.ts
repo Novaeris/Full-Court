@@ -13,6 +13,7 @@ import {
   HistoryResponseSchema,
   LeagueExportSchema,
   AwardRaceResponseSchema,
+  HallOfFameResponseSchema,
   InboxResponseSchema,
   NewsResponseSchema,
   ExtendResultSchema,
@@ -49,6 +50,7 @@ import {
   type HistoryResponse,
   type LeagueExport,
   type AwardRaceResponse,
+  type HallOfFameResponse,
   type InboxResponse,
   type NewsResponse,
   type ExtendRequest,
@@ -585,6 +587,11 @@ export function createApiClient(options: ApiClientOptions) {
       awardRace: (id: string): Promise<AwardRaceResponse> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/award-race`, (b) =>
           AwardRaceResponseSchema.parse(b),
+        ),
+      /** The retired players inducted into the Hall of Fame. */
+      hallOfFame: (id: string): Promise<HallOfFameResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/hall-of-fame`, (b) =>
+          HallOfFameResponseSchema.parse(b),
         ),
       /** What has happened around the league, newest first. */
       news: (id: string): Promise<NewsResponse> =>

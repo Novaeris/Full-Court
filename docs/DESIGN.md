@@ -317,6 +317,17 @@ Players get hurt, on every team, in the regular season and the playoffs.
 - **Where it shows.** The team page has a Status column ("Out 6 days"), the player page says what the injury is and how long is left, and the starters picker marks hurt players. Every injury is kept in a table for the league's history.
 - **Not yet:** a hurt player playing through it, injuries that last into the next season or lower ratings, rehab, and the AI taking injuries into account when it trades or signs.
 
+### The Hall of Fame
+
+A retired player can be inducted into the league's **Hall of Fame**, listed on its own page (a link at the top of the History tab).
+
+- **Who.** A retired player is inducted **three seasons after he retires**, if his career in this league scores **60 or more**. The same rules apply to every player, whoever he played for.
+- **The score.** For each season, his production above an ordinary player (efficiency per game over 10, the same measure the awards use, counted by games played out of 82), plus points for each honour: MVP 12; finals MVP, defensive player and all-league first team 6 each; all-league second team 4; sixth man, a statistical title and all-league third team 2 to 3; rookie of the year and most improved 2; plus 2 for each All-Star Game and 3 for each championship (a season with at least ten games for the champion).
+- **What the page shows.** Each member's seasons, career averages, titles, All-Star Games and honours, the year he was inducted and the year he retired, best career first.
+- **What this means in practice.** Only seasons in this league count, so a veteran who joins a new league late can't reach the Hall; it fills slowly, as the league's own stars retire.
+- **Computed, not stored.** The Hall is worked out from the archived seasons whenever it is asked for, so it always agrees with the records.
+- **Not yet:** a vote with a ballot, a ceremony in the news, jersey retirement, and putting the Hall of Fame mark on a player's own page.
+
 ### The award race
 
 The Stats tab has an **Award race** view: who leads each of the season's main awards on the games played so far.
@@ -335,7 +346,7 @@ When a season is archived (at the start of the next offseason) its awards are de
 - **Most valuable player:** efficiency, weighted by the team's winning share (a good player on a losing team loses ground). **Defensive player:** steals, blocks and rebounds per game, weighted by how few points the team allows. **Sixth man:** the best efficiency among eligible players who started at most a quarter of their games and play 15 minutes or more. **Rookie of the year:** the best efficiency among first-year players. **Most improved:** the biggest rise in efficiency on last season. **Scoring, rebounding, assists, steals and blocks titles:** the best per game. **Finals MVP:** the champion's best player in the playoffs.
 - **All-league teams.** Three teams of five, by the MVP measure: two guards, two forwards and a centre each (a position that runs short is filled by the best player left), nobody on two teams.
 - **The History tab** lists every season's champion, finalist, awards and all-league teams, how many titles each team has, and a record book (best single game and best single season in each category, and the best team records). A player's page lists his awards and his seasons.
-- **Not yet:** playoff stat lines, career totals and leaders, retired numbers or a hall of fame.
+- **Not yet:** playoff stat lines, career totals and leaders, and retired numbers. (The Hall of Fame is below.)
 
 ### What the owner sees
 
