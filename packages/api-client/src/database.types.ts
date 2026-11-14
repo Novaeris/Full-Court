@@ -1425,6 +1425,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -1443,6 +1444,7 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: number
+          development_steps?: number
           fa_day?: number
           id?: string
           injuries_through_day?: number
@@ -1461,6 +1463,7 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: number
+          development_steps?: number
           fa_day?: number
           id?: string
           injuries_through_day?: number
@@ -2037,6 +2040,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2058,6 +2062,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_apply_development: {
+        Args: { changes: Json; step: number; target_season: string }
+        Returns: number
+      }
       admin_apply_fa_day: {
         Args: {
           lapsed: Json
@@ -2070,6 +2078,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2101,6 +2110,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2128,6 +2138,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2185,6 +2196,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2333,6 +2345,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2372,6 +2385,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2571,6 +2585,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2767,6 +2782,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
           injuries_through_day: number
@@ -2876,6 +2892,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      import_new_id: { Args: { old: string; salt: string }; Returns: string }
       league_limit: { Args: never; Returns: number }
       player_season_totals: {
         Args: { playoffs?: boolean; target_season: string }

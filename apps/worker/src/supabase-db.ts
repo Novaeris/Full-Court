@@ -1,5 +1,5 @@
 import type { Database } from "@fullcourt/api-client";
-import type { AiTrade } from "@fullcourt/game-engine";
+import type { AiTrade, DevelopingPlayer } from "@fullcourt/game-engine";
 import {
   awardLines,
   pickValue,
@@ -353,6 +353,67 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         payload: game as never,
       });
       if (error) throw error;
+    },
+
+    async loadDevelopingPlayers(seasonId: string): Promise<DevelopingPlayer[]> {
+      const season = await client
+        .from("seasons")
+        .select("league_id")
+        .eq("id", seasonId)
+        .single();
+      if (season.error) throw season.error;
+      const out: DevelopingPlayer[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await client
+          .from("players")
+          .select(
+            "id, position, age, overall, potential, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina",
+          )
+          .eq("league_id", season.data.league_id)
+          .eq("status", "active")
+          .order("id")
+          .range(from, from + 999);
+        if (error) throw error;
+        for (const p of data) {
+          out.push({
+            id: p.id,
+            position: p.position as DevelopingPlayer["position"],
+            age: p.age,
+            overall: p.overall,
+            potential: p.potential,
+            ratings: {
+              inside: p.inside,
+              midRange: p.mid_range,
+              threePoint: p.three_point,
+              freeThrow: p.free_throw,
+              passing: p.passing,
+              ballHandling: p.ball_handling,
+              offRebound: p.off_rebound,
+              defRebound: p.def_rebound,
+              perimeterD: p.perimeter_d,
+              interiorD: p.interior_d,
+              speed: p.speed,
+              strength: p.strength,
+              stamina: p.stamina,
+            },
+          });
+        }
+        if (data.length < 1000) return out;
+      }
+    },
+
+    async applyDevelopment(
+      seasonId: string,
+      step: number,
+      changes: Record<string, string | number>[],
+    ): Promise<number> {
+      const { data, error } = await client.rpc("admin_apply_development", {
+        target_season: seasonId,
+        step,
+        changes: changes as never,
+      });
+      if (error) throw error;
+      return data;
     },
 
     async applyInjuries(

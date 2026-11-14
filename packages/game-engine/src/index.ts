@@ -36,6 +36,11 @@ export {
 export { generateSchedule, type ScheduleOptions } from "./season/schedule";
 export { simulateGame } from "./season/game";
 export {
+  developPlayers,
+  type Developed,
+  type DevelopingPlayer,
+} from "./season/development";
+export {
   simulateDay,
   type SimulateDayInput,
   type SimulateDayResult,

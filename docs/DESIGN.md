@@ -254,6 +254,17 @@ AI Assist is for owners who want a less hands-on game, or who simulate through a
 
 Nothing the AI does is hidden: what it did shows in the offseason report. Simulating never blocks on a job that the AI is doing.
 
+### Development during the season
+
+A player's ratings don't wait for the offseason to change. A third and two thirds of the way through the regular season, before that day's games, every player in the league develops a little.
+
+- **Everyone alike.** Every active player takes the step: a computer team's, the owner's and free agents'. A player's own age, ratings and potential decide it, and nothing else; no team gets a better step than another.
+- **What a step is.** A player's ratings move by a share of the change expected for his age (the young improve, the old decline, the body fades before the touch) plus some luck, and a player of 25 or under can't grow far past his potential. Age and potential only change in the offseason.
+- **The year is the same size.** In-season steps carry 30% of a year's expected change (15% each); the offseason's ageing applies the other 70%, so a player's year adds up to what it always did. The luck is small, so a player rarely moves more than a point or two in a step.
+- **Once each.** A season remembers how many steps it has had, so a step is never taken twice, even if a simulation is retried; the same league and year always give the same steps.
+- **Where it shows.** The players' current ratings (the roster, player pages, trades, free agency) are the developed ones; the ratings history keeps each season's starting values.
+- **Not yet:** coaches and playing time making a difference, injuries slowing growth, and a "breakout" or "slump" notice in the news.
+
 ### Training camp
 
 - **Programs.** Six, each improving a group of ratings: Shooting (mid-range, three-point, free throw), Inside game (inside scoring, offensive and defensive rebounding), Playmaking (passing, ball handling), Perimeter defense, Interior defense, and Athleticism (speed, strength, stamina).

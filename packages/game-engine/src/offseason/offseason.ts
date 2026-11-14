@@ -6,6 +6,7 @@ import {
 } from "@fullcourt/game-types";
 import {
   DRAFT_ROUNDS,
+  IN_SEASON_SHARE,
   LOTTERY_PICKS,
   MAX_PLAYER_AGE,
   UNDRAFTED_PROSPECTS,
@@ -66,7 +67,9 @@ export function progress(
   >,
 ): { age: number; ratings: Ratings; overall: number; potential: number } {
   const age = player.age + 1;
-  let change = expectedChange(player.age) + normalSum(rng, 0, 1.6);
+  // Part of the year's change has already happened during the season.
+  let change =
+    expectedChange(player.age) * (1 - IN_SEASON_SHARE) + normalSum(rng, 0, 1.6);
   // A young player can't grow far past his potential.
   if (player.age <= 25) {
     change = Math.min(change, player.potential - player.overall + 2);

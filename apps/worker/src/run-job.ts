@@ -6,6 +6,7 @@ import {
 } from "@fullcourt/game-engine";
 import type { Game } from "@fullcourt/game-types";
 import { isAllStarDay, runAllStarGame } from "./all-star";
+import { developmentStep, runDevelopmentStep } from "./development";
 import { isTradeDay, runTradeRound } from "./trade-round";
 import {
   CommitRefused,
@@ -75,6 +76,34 @@ export async function runJob(
       } catch (error) {
         log(
           `job ${current.id}: trades skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
+    // A third and two thirds of the way through the season, before that day's
+    // games: the players develop a little (each step happens once).
+    const step = developmentStep(day, season.last_day);
+    if (
+      step !== null &&
+      db.loadDevelopingPlayers &&
+      db.applyDevelopment &&
+      season.phase === "regular-season"
+    ) {
+      try {
+        const changed = await runDevelopmentStep(
+          {
+            loadDevelopingPlayers: db.loadDevelopingPlayers,
+            applyDevelopment: db.applyDevelopment,
+          },
+          season,
+          step,
+        );
+        if (changed > 0)
+          log(
+            `job ${current.id}: development step ${step}, ${changed} player(s), before day ${day}`,
+          );
+      } catch (error) {
+        log(
+          `job ${current.id}: development step ${step} skipped on day ${day}: ${String(error)}`,
         );
       }
     }

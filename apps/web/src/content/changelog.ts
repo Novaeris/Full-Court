@@ -25,6 +25,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "A written recap on every finished game: who won, who led each team, standout lines like a triple-double, and what kind of game it was.",
       "An overview on every team's page: record and rank, scoring, streak, last ten, how the team plays, its leaders, its latest results and its next games.",
       "An Inbox tab that tells you what happened to your team: injuries, signings and releases, trades, awards, open trade offers and which contracts end.",
+      "Players develop during the season, not only in the offseason: the young improve and the old decline a little at two points of the year, for every team alike.",
       "A News tab with the moves of every team: signings, trades, serious injuries, retirements and each season's champion.",
       "Download a backup of a league from its Settings page, and restore a backup as a new league from the Leagues page.",
       "A trading block: put up to five of your players on it and computer teams make offers for them.",
