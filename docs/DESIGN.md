@@ -171,6 +171,17 @@ Nothing the AI does is hidden: what it did shows in the offseason report. Simula
 - **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
 - **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
 
+### Awards and history
+
+When a season is archived (at the start of the next offseason) its awards are decided from the season's totals, by fixed rules, so the same season always gives the same winners.
+
+- **Eligibility.** A player must have played at least 60% of the games the most-used player played (a rookie 40%).
+- **Efficiency** is points, rebounds, assists, steals and blocks, less every missed shot and free throw and every turnover, per game.
+- **Most valuable player:** efficiency, weighted by the team's winning share (a good player on a losing team loses ground). **Defensive player:** steals, blocks and rebounds per game, weighted by how few points the team allows. **Sixth man:** the best efficiency among eligible players who started at most a quarter of their games and play 15 minutes or more. **Rookie of the year:** the best efficiency among first-year players. **Most improved:** the biggest rise in efficiency on last season. **Scoring, rebounding, assists, steals and blocks titles:** the best per game. **Finals MVP:** the champion's best player in the playoffs.
+- **All-league teams.** Three teams of five, by the MVP measure: two guards, two forwards and a centre each (a position that runs short is filled by the best player left), nobody on two teams.
+- **The History tab** lists every season's champion, finalist, awards and all-league teams, how many titles each team has, and a record book (best single game and best single season in each category, and the best team records). A player's page lists his awards and his seasons.
+- **Not yet:** playoff stat lines, career totals and leaders, retired numbers or a hall of fame.
+
 ### What the owner sees
 
 An **Offseason** page: the stage and calendar at the top with the button for the next step, then, for the current stage, the lottery and draft, the staff market, the camp (choose players and programs) and the camp report. The draft and the camp reports of past years stay readable.
@@ -195,7 +206,7 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); what is still missing is the head coach's effect on games, minutes and rotations, and a bench order.
 
-**6. Smaller gaps.** Only the champion and the finalist are recorded as awards (no MVP, rookie of the year, all-league teams, scoring titles); no injuries; no all-star game; no record book or league history page; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
+**6. Smaller gaps.** Awards and a history page were built in Phase 23; no injuries; no all-star game; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
 
 **Order.** (a) Make AI Assist real and move the offseason's decisions to the owner: a draft board that exists before the draft, choosing picks, roster moves in free agency and the preseason. (b) Finances and contracts: salaries, the cap, rookie scale, owner budget, staff payroll folded into it. (c) Free agency with offers and negotiation, extensions, releases. (d) In-season roster moves and trades. (e) Strategy, lineups and the head coach's effect on games. (f) Awards and history.
 

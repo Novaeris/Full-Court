@@ -2379,6 +2379,10 @@ export type Database = {
         Args: { assignments: Json; camp_team: string; target_season: string }
         Returns: number
       }
+      admin_set_season_awards: {
+        Args: { new_awards: Json; target_season: string }
+        Returns: number
+      }
       admin_set_team_strategy: {
         Args: {
           new_defense: string

@@ -816,3 +816,82 @@ export const UpdateStrategyRequestSchema = z.object({
     ),
 });
 export type UpdateStrategyRequest = z.infer<typeof UpdateStrategyRequestSchema>;
+
+/** A player named in the history pages. */
+const HistoryPlayerSchema = z.object({
+  playerId: z.uuid(),
+  name: z.string(),
+  position: z.string(),
+  teamId: z.uuid(),
+});
+
+/**
+ * GET /api/v1/leagues/:leagueId/history: every archived season's champion and
+ * awards, the teams' titles and the record book (docs/DESIGN.md, "Awards and
+ * history").
+ */
+export const HistoryResponseSchema = z.object({
+  /** Newest first. */
+  seasons: z.array(
+    z.object({
+      year: z.number().int(),
+      championId: z.uuid().nullable(),
+      finalistId: z.uuid().nullable(),
+      /** The individual awards, in the order the page lists them. */
+      awards: z.array(
+        HistoryPlayerSchema.extend({ award: z.string(), label: z.string() }),
+      ),
+      /** The three all-league teams (empty if there was no season to judge). */
+      allLeague: z.array(
+        z.object({
+          team: z.number().int(),
+          players: z.array(HistoryPlayerSchema),
+        }),
+      ),
+    }),
+  ),
+  /** Titles by team, most first. */
+  titles: z.array(
+    z.object({
+      teamId: z.uuid(),
+      titles: z.number().int(),
+      finals: z.number().int(),
+    }),
+  ),
+  records: z.object({
+    /** The best single game in each category. */
+    game: z.array(
+      z.object({
+        label: z.string(),
+        value: z.number().int(),
+        playerId: z.uuid(),
+        name: z.string(),
+        teamId: z.uuid(),
+        year: z.number().int(),
+        day: z.number().int(),
+        opponentId: z.uuid(),
+      }),
+    ),
+    /** The most in a season (regular season totals). */
+    season: z.array(
+      z.object({
+        label: z.string(),
+        value: z.number().int(),
+        playerId: z.uuid(),
+        name: z.string(),
+        teamId: z.uuid(),
+        year: z.number().int(),
+      }),
+    ),
+    /** The best team records. */
+    teams: z.array(
+      z.object({
+        teamId: z.uuid(),
+        year: z.number().int(),
+        wins: z.number().int(),
+        losses: z.number().int(),
+      }),
+    ),
+  }),
+});
+export type HistoryResponse = z.infer<typeof HistoryResponseSchema>;

@@ -11,7 +11,8 @@ import { Suspense } from "react";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { ApiError } from "@/server/api/handler";
 import { loadLeague } from "@/server/leagues/load";
-import { getPlayer } from "@/server/services/world";
+import { getCareer } from "@/server/services/history";
+import { getPlayer, listTeams } from "@/server/services/world";
 
 export const metadata: Metadata = { title: "Player" };
 
@@ -50,6 +51,11 @@ async function PlayerProfile({
       throw error;
     },
   );
+
+  const [career, teams] = await Promise.all([
+    getCareer(ctx, league.id, player.id),
+    listTeams(ctx, league.id),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,6 +114,60 @@ async function PlayerProfile({
           </section>
         ))}
       </div>
+
+      {career.awards.length > 0 ? (
+        <section
+          aria-labelledby="awards-heading"
+          className="rounded-lg border border-border bg-surface p-5"
+        >
+          <h3 id="awards-heading" className="text-lg font-bold">
+            Awards
+          </h3>
+          <ul className="mt-2">
+            {career.awards.map((a) => (
+              <li
+                key={`${a.year}-${a.award}`}
+                className="flex justify-between gap-3 border-t border-border py-1.5 first:border-t-0"
+              >
+                <span>{a.label}</span>
+                <span className="tabular-nums text-text-muted">{a.year}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {career.seasons.length > 0 ? (
+        <section
+          aria-labelledby="career-heading"
+          className="rounded-lg border border-border bg-surface p-5"
+        >
+          <h3 id="career-heading" className="text-lg font-bold">
+            Career
+          </h3>
+          <p className="text-sm text-text-muted">Regular season, per game.</p>
+          <ul className="mt-2">
+            {career.seasons.map((s) => {
+              const t = teams.find((x) => x.id === s.teamId);
+              return (
+                <li
+                  key={`${s.year}-${s.teamId}`}
+                  className="flex flex-wrap justify-between gap-x-3 border-t border-border py-1.5 first:border-t-0"
+                >
+                  <span>
+                    <span className="font-semibold tabular-nums">{s.year}</span>{" "}
+                    {t ? t.abbreviation : ""} · {s.games} games
+                  </span>
+                  <span className="tabular-nums">
+                    {s.points.toFixed(1)} pts · {s.rebounds.toFixed(1)} reb ·{" "}
+                    {s.assists.toFixed(1)} ast
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import type {
 import { archiveSeason, insertPlayoffs } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
+import { awardSeason } from "./awards";
 import { ensureProspects } from "./draft";
 import { beginOffseason } from "./offseason";
 import { getLeague, getSettings, parseLeagueId } from "./leagues";
@@ -186,6 +187,13 @@ export async function startNextSeason(
   // Players age and staff turn over, once; a retry after a failure skips what
   // already happened. The next season then starts with its offseason.
   const archived = (await latestSeason(ctx, league.id)) ?? season;
+  // The awards come from the archived totals. They are not worth stopping the
+  // next season for: the History page works out any that are missing.
+  try {
+    await awardSeason(ctx, league.id, archived);
+  } catch (error) {
+    console.error("Season awards failed", { leagueId: league.id, error });
+  }
   await beginOffseason(ctx, league.id, archived);
   try {
     await createSeason(ctx, league, season.year + 1, { inOffseason: true });

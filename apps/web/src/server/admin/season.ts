@@ -94,3 +94,15 @@ export async function archiveSeason(input: {
   if (error) throw error;
   return data;
 }
+
+/** Stores an archived season's awards, replacing the earlier ones (not the champion). */
+export async function setSeasonAwards(input: {
+  seasonId: string;
+  awards: readonly { award: string; player_id: string; team_id: string }[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_set_season_awards", {
+    target_season: input.seasonId,
+    new_awards: input.awards as never,
+  });
+  if (error) throw error;
+}

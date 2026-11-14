@@ -10,6 +10,7 @@ import {
   AiAssistResponseSchema,
   CampResponseSchema,
   DraftResponseSchema,
+  HistoryResponseSchema,
   ShopResponseSchema,
   StrategyResponseSchema,
   TradeEvaluationSchema,
@@ -36,6 +37,7 @@ import {
   type DraftPickRequest,
   type DraftResponse,
   type DraftSimRequest,
+  type HistoryResponse,
   type ShopRequest,
   type StrategyResponse,
   type UpdateStrategyRequest,
@@ -492,6 +494,11 @@ export function createApiClient(options: ApiClientOptions) {
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
           input,
+        ),
+      /** Champions, awards, titles and records from the archived seasons. */
+      history: (id: string): Promise<HistoryResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/history`, (b) =>
+          HistoryResponseSchema.parse(b),
         ),
       /** How your team plays, its starters and its roster. */
       strategy: (id: string, teamId?: string): Promise<StrategyResponse> =>
