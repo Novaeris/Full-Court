@@ -41,24 +41,46 @@ type Stat = {
   fta: number;
 };
 
+/** The season a player retired in, or null if he hasn't retired. */
+export async function getRetiredYear(
+  ctx: UserContext,
+  leagueId: string,
+  playerId: string,
+): Promise<number | null> {
+  const { data, error } = await ctx.supabase
+    .from("players")
+    .select("retired_year")
+    .eq("league_id", leagueId)
+    .eq("id", playerId)
+    .eq("status", "retired")
+    .maybeSingle();
+  if (error) throw error;
+  return data?.retired_year ?? null;
+}
+
+/**
+ * The Hall as of the latest season, or, with `only`, just that player's place
+ * in it (he is in `members` if he is inducted, which is cheaper to find out).
+ */
 export async function getHallOfFame(
   ctx: UserContext,
   leagueIdParam: string,
+  only?: string,
 ): Promise<HallOfFameResponse> {
   const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
   const season = await latestSeason(ctx, league.id);
   if (!season) return { year: null, retired: 0, members: [] };
 
-  const retired = await allRows((from, to) =>
-    ctx.supabase
+  const retired = await allRows((from, to) => {
+    let query = ctx.supabase
       .from("players")
       .select("id, first_name, last_name, position, retired_year")
       .eq("league_id", league.id)
       .eq("status", "retired")
-      .not("retired_year", "is", null)
-      .order("id")
-      .range(from, to),
-  );
+      .not("retired_year", "is", null);
+    if (only) query = query.eq("id", only);
+    return query.order("id").range(from, to);
+  });
   // Only players whose waiting time has passed can be in.
   const waited = retired.filter(
     (p) => inductionYear(Number(p.retired_year)) <= season.year,

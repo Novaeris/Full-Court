@@ -11,6 +11,7 @@ import { Suspense } from "react";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { ApiError } from "@/server/api/handler";
 import { loadLeague } from "@/server/leagues/load";
+import { getHallOfFame, getRetiredYear } from "@/server/services/hall-of-fame";
 import { getCareer } from "@/server/services/history";
 import { getPlayerSeason, type Line } from "@/server/services/stats";
 import { getPlayer, listTeams } from "@/server/services/world";
@@ -53,11 +54,14 @@ async function PlayerProfile({
     },
   );
 
-  const [career, teams, season] = await Promise.all([
+  const [career, teams, season, retiredYear, hall] = await Promise.all([
     getCareer(ctx, league.id, player.id),
     listTeams(ctx, league.id),
     getPlayerSeason(ctx, league.id, player.id),
+    getRetiredYear(ctx, league.id, player.id),
+    getHallOfFame(ctx, league.id, player.id),
   ]);
+  const inducted = hall.members[0] ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -90,9 +94,21 @@ async function PlayerProfile({
               <TeamBadge team={team} size="sm" />
               {teamName(team)}
             </Link>
+          ) : retiredYear !== null ? (
+            <p className="mt-3 font-semibold">Retired {retiredYear}</p>
           ) : (
             <p className="mt-3 font-semibold">Free agent</p>
           )}
+          {inducted ? (
+            <p className="mt-1 font-semibold text-accent">
+              <Link
+                href={`/leagues/${league.id}/hall-of-fame`}
+                className="inline-flex min-h-touch items-center underline underline-offset-4"
+              >
+                Hall of Fame · inducted {inducted.inductedYear}
+              </Link>
+            </p>
+          ) : null}
         </div>
         <dl className="flex gap-6">
           <BigNumber label="Overall" value={player.overall} />

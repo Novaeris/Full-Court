@@ -103,6 +103,23 @@ test.describe("the Hall of Fame", () => {
     // The original league has no such players.
     expect((await api.leagues.hallOfFame(league.id)).members).toEqual([]);
 
+    // The news announces the induction, once, in the year it happened.
+    const news = (await api.leagues.news(copy.id)).items;
+    const line = news.filter(
+      (i) =>
+        i.text ===
+        `${member.name} (${member.position}) was inducted into the Hall of Fame.`,
+    );
+    expect(line).toHaveLength(1);
+    expect(line[0]?.year).toBe(year - 3);
+    expect(
+      news.some(
+        (i) =>
+          i.text.includes(named(recent.player_id)) &&
+          i.text.includes("Hall of Fame"),
+      ),
+    ).toBe(false);
+
     // The page lists the member, with his career.
     await signInThroughUi(
       page,
@@ -113,6 +130,17 @@ test.describe("the Hall of Fame", () => {
     const row = page.getByRole("listitem").filter({ hasText: member.name });
     await expect(row).toContainText(`inducted ${year - 3}`);
     await expect(row).toContainText("100 reb");
+    await noOverflow(page);
+    await touchTargets(page);
+    await expectAccessible(page);
+
+    // His own page says he retired, and that he is in the Hall.
+    await page.goto(`/leagues/${copy.id}/players/${member.playerId}`);
+    await expect(page.getByText(`Retired ${year - 6}`)).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: `Hall of Fame · inducted ${year - 3}` }),
+    ).toBeVisible();
+    await expect(page.getByText("Free agent")).toHaveCount(0);
     await noOverflow(page);
     await touchTargets(page);
     await expectAccessible(page);

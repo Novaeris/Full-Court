@@ -2,6 +2,7 @@ import "server-only";
 import { AWARD_NAMES } from "@fullcourt/game-rules";
 import type { NewsItem, NewsResponse } from "@fullcourt/validation";
 import type { UserContext } from "@/server/auth/session";
+import { getHallOfFame } from "./hall-of-fame";
 import { getLeague, parseLeagueId } from "./leagues";
 
 /**
@@ -26,7 +27,7 @@ export async function getNews(
   const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
   const base = `/leagues/${league.id}`;
 
-  const [moves, trades, injuries, retired, awards, seasons, teams] =
+  const [moves, trades, injuries, retired, awards, seasons, teams, hall] =
     await Promise.all([
       ctx.supabase
         .from("player_transactions")
@@ -76,6 +77,7 @@ export async function getNews(
         .from("teams")
         .select("id, city, nickname")
         .eq("league_id", league.id),
+      getHallOfFame(ctx, league.id),
     ]);
   for (const r of [moves, trades, injuries, retired, awards, seasons, teams]) {
     if (r.error) throw r.error;
@@ -195,6 +197,18 @@ export async function getNews(
         href: `${base}/history`,
       });
     }
+  }
+
+  // Inductions come with the new season, before its first game.
+  for (const m of hall.members) {
+    add({
+      year: m.inductedYear,
+      day: 0,
+      kind: "award",
+      order: 1,
+      text: `${m.name} (${m.position}) was inducted into the Hall of Fame.`,
+      href: `${base}/hall-of-fame`,
+    });
   }
 
   items.sort((a, b) => b.year - a.year || b.day - a.day || b.order - a.order);

@@ -326,7 +326,8 @@ A retired player can be inducted into the league's **Hall of Fame**, listed on i
 - **What the page shows.** Each member's seasons, career averages, titles, All-Star Games and honours, the year he was inducted and the year he retired, best career first.
 - **What this means in practice.** Only seasons in this league count, so a veteran who joins a new league late can't reach the Hall; it fills slowly, as the league's own stars retire.
 - **Computed, not stored.** The Hall is worked out from the archived seasons whenever it is asked for, so it always agrees with the records.
-- **Not yet:** a vote with a ballot, a ceremony in the news, jersey retirement, and putting the Hall of Fame mark on a player's own page.
+- **Where else it shows.** A member's own page says "Hall of Fame · inducted YEAR" (a retired player's page says "Retired YEAR" rather than "Free agent"), and the News tab has a line when each is inducted, dated to the season he was inducted.
+- **Not yet:** a vote with a ballot, an induction ceremony, and jersey retirement.
 
 ### The award race
 
