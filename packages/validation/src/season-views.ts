@@ -909,3 +909,32 @@ export const HistoryResponseSchema = z.object({
   }),
 });
 export type HistoryResponse = z.infer<typeof HistoryResponseSchema>;
+
+/** One thing that happened to your team (docs/DESIGN.md, "The inbox"). */
+export const INBOX_KINDS = [
+  "injury",
+  "move",
+  "trade",
+  "award",
+  "offer",
+  "reminder",
+] as const;
+
+export const InboxItemSchema = z.object({
+  id: z.string(),
+  year: z.number().int(),
+  /** The season's day, 0 in the offseason; 998 and up come after the season's games. */
+  day: z.number().int(),
+  kind: z.enum(INBOX_KINDS),
+  text: z.string(),
+  /** A page to look at it on, if there is one. */
+  href: z.string().nullable(),
+});
+export type InboxItem = z.infer<typeof InboxItemSchema>;
+
+/** GET /api/v1/leagues/:leagueId/inbox?team=: what happened to your team, newest first. */
+export const InboxResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  items: z.array(InboxItemSchema),
+});
+export type InboxResponse = z.infer<typeof InboxResponseSchema>;

@@ -11,6 +11,7 @@ import {
   CampResponseSchema,
   DraftResponseSchema,
   HistoryResponseSchema,
+  InboxResponseSchema,
   ShopResponseSchema,
   StrategyResponseSchema,
   TradeEvaluationSchema,
@@ -38,6 +39,7 @@ import {
   type DraftResponse,
   type DraftSimRequest,
   type HistoryResponse,
+  type InboxResponse,
   type ShopRequest,
   type StrategyResponse,
   type UpdateStrategyRequest,
@@ -494,6 +496,15 @@ export function createApiClient(options: ApiClientOptions) {
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
           input,
+        ),
+      /** What has happened to your team, newest first. */
+      inbox: (id: string, teamId?: string): Promise<InboxResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/inbox${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+          }`,
+          (b) => InboxResponseSchema.parse(b),
         ),
       /** Champions, awards, titles and records from the archived seasons. */
       history: (id: string): Promise<HistoryResponse> =>

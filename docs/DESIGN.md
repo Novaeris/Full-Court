@@ -171,6 +171,19 @@ Nothing the AI does is hidden: what it did shows in the offseason report. Simula
 - **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
 - **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
 
+### The inbox
+
+The **Inbox** tab tells the owner what has happened to their team, newest first, so nothing slips by while a season is simulated in bulk. It lists:
+
+- **Injuries** to their players ("X was hurt: sprained ankle. Out 6 days.").
+- **Roster moves**: players drafted, signed, re-signed and released, and contracts that ended.
+- **Trades** their team made, with the players and picks each way.
+- **Awards** won by their players, and their team's championships and finals.
+- **Open trade offers** from computer teams, until they are accepted, declined or expire.
+- **A reminder** while a season is on: which contracts end after it.
+
+Each line links to where to act on it (the player, Moves, Roster or History). It is worked out from the league's own records when the page is opened, so it can't disagree with them. It holds the latest 80 items.
+
 ### Coaching and rotations
 
 - **The head coach matters in games.** Every team has a head coach (a staff member, rated 30 to 95) from its first season. In every game his rating adds to all of the team's players' effective ratings: nothing at 60, up to +2 at 95 and down to -1.7 at 30. That is small on one possession and shows up over a season as a few wins. Computer teams have head coaches too, so a good coach is worth hiring from the staff market. A team with no head coach gets nothing.
@@ -223,7 +236,7 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); the head coach's effect and the rotation size came in Phase 25; what is still missing is player-by-player minutes and a bench order.
 
-**6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; no all-star game; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
+**6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; no all-star game; an inbox in Phase 26 (a player who retires from another team isn't announced); a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
 
 **Order.** (a) Make AI Assist real and move the offseason's decisions to the owner: a draft board that exists before the draft, choosing picks, roster moves in free agency and the preseason. (b) Finances and contracts: salaries, the cap, rookie scale, owner budget, staff payroll folded into it. (c) Free agency with offers and negotiation, extensions, releases. (d) In-season roster moves and trades. (e) Strategy, lineups and the head coach's effect on games. (f) Awards and history.
 

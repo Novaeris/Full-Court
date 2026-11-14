@@ -11,6 +11,7 @@ const TABS = [
   { segment: "standings", label: "Standings" },
   { segment: "playoffs", label: "Playoffs" },
   { segment: "history", label: "History" },
+  { segment: "inbox", label: "Inbox" },
   { segment: "moves", label: "Moves" },
   { segment: "offseason", label: "Offseason" },
   { segment: "settings", label: "Settings" },
