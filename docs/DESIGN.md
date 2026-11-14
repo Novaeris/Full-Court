@@ -114,6 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### League export
+
+On the league's Settings page, **Download a backup** saves the league as one JSON file (`full-court-league.json`).
+
+- **What is in it.** The league (name, seed, size, settings), every team, every player (retired ones too, with ratings and contracts), every season, every game with its score, the awards, each player's season stats and the draft picks. Each row is as the database holds it, without the league id, which the file already states once.
+- **Who can take it.** Only the league's owner; anyone else gets "not found", like every other league page.
+- **Layout version.** The file starts with `format: 1`. It changes only if a field's meaning does.
+- **Not yet:** loading a backup back in as a new league, and play-by-play or box scores (these are large and can be rebuilt from the seed).
+
 ### The trading block
 
 The owner can put up to five of their players on a **trading block** (on the Moves page, under Trades). It tells the computer teams which players are available.

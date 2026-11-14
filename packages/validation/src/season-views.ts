@@ -1166,3 +1166,20 @@ export const TeamOverviewSchema = z.object({
   ),
 });
 export type TeamOverview = z.infer<typeof TeamOverviewSchema>;
+
+/** GET /api/v1/leagues/:leagueId/export: a backup of the whole league, as one file. */
+const ExportRows = z.array(z.record(z.string(), z.unknown()));
+export const LeagueExportSchema = z.object({
+  /** The layout of this file; changes only when a field's meaning does. */
+  format: z.literal(1),
+  exportedAt: z.iso.datetime(),
+  league: z.record(z.string(), z.unknown()),
+  teams: ExportRows,
+  players: ExportRows,
+  seasons: ExportRows,
+  games: ExportRows,
+  awards: ExportRows,
+  playerSeasonStats: ExportRows,
+  draftPicks: ExportRows,
+});
+export type LeagueExport = z.infer<typeof LeagueExportSchema>;

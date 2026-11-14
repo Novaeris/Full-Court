@@ -11,6 +11,7 @@ import {
   CampResponseSchema,
   DraftResponseSchema,
   HistoryResponseSchema,
+  LeagueExportSchema,
   InboxResponseSchema,
   ExtendResultSchema,
   ExtensionsResponseSchema,
@@ -44,6 +45,7 @@ import {
   type DraftResponse,
   type DraftSimRequest,
   type HistoryResponse,
+  type LeagueExport,
   type InboxResponse,
   type ExtendRequest,
   type ExtendResult,
@@ -566,6 +568,11 @@ export function createApiClient(options: ApiClientOptions) {
             teamId ? `?team=${encodeURIComponent(teamId)}` : ""
           }`,
           (b) => InboxResponseSchema.parse(b),
+        ),
+      /** A backup of the whole league: teams, players, seasons, games, awards. */
+      exportLeague: (id: string): Promise<LeagueExport> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/export`, (b) =>
+          LeagueExportSchema.parse(b),
         ),
       /** Champions, awards, titles and records from the archived seasons. */
       history: (id: string): Promise<HistoryResponse> =>

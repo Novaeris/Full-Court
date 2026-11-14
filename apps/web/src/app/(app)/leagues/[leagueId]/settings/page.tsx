@@ -44,6 +44,18 @@ async function Settings({
         <RenameLeagueForm leagueId={league.id} current={league.name} />
       </SettingsCard>
       <SettingsCard
+        title="Back up this league"
+        description="Save everything in it (teams, players, seasons, games and awards) as one file on your computer."
+      >
+        <a
+          href={`/api/v1/leagues/${league.id}/export`}
+          download="full-court-league.json"
+          className="inline-flex min-h-11 items-center rounded-md border border-border px-4 font-semibold"
+        >
+          Download a backup
+        </a>
+      </SettingsCard>
+      <SettingsCard
         title="League rules"
         description="The rules this league was created with."
       >
