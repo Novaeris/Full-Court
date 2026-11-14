@@ -186,6 +186,14 @@ export function createApiClient(options: ApiClientOptions) {
         request("GET", "/leagues", (b) => LeagueListSchema.parse(b)),
       create: (input: CreateLeagueRequest): Promise<League> =>
         request("POST", "/leagues", (b) => LeagueSchema.parse(b), input),
+      /** Restores a backup document (see exportLeague) as a new league. */
+      importLeague: (backup: LeagueExport): Promise<League> =>
+        request(
+          "POST",
+          "/leagues/import",
+          (b) => LeagueSchema.parse(b),
+          backup,
+        ),
       get: (id: string): Promise<League> =>
         request("GET", `/leagues/${encodeURIComponent(id)}`, (b) =>
           LeagueSchema.parse(b),

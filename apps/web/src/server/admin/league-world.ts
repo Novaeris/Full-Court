@@ -147,3 +147,20 @@ export async function insertOwnerLeagueWithWorld(input: {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Restores a backup document as a new league for the owner, in one
+ * transaction, through public.admin_import_league() (service role only). Every
+ * id in the file is replaced; the database checks the rest.
+ */
+export async function importLeagueBackup(input: {
+  ownerId: string;
+  backup: unknown;
+}): Promise<LeagueRow> {
+  const { data, error } = await createAdminClient().rpc("admin_import_league", {
+    owner: input.ownerId,
+    payload: input.backup as never,
+  });
+  if (error) throw error;
+  return data;
+}

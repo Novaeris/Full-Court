@@ -25,7 +25,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "A written recap on every finished game: who won, who led each team, standout lines like a triple-double, and what kind of game it was.",
       "An overview on every team's page: record and rank, scoring, streak, last ten, how the team plays, its leaders, its latest results and its next games.",
       "An Inbox tab that tells you what happened to your team: injuries, signings and releases, trades, awards, open trade offers and which contracts end.",
-      "Download a backup of a league from its Settings page.",
+      "Download a backup of a league from its Settings page, and restore a backup as a new league from the Leagues page.",
       "A trading block: put up to five of your players on it and computer teams make offers for them.",
       "Power rankings on the Standings tab: every team ranked by its record, how much it wins and loses by, and its last ten games.",
       "A cap outlook on your roster: what your contracts commit in each of the next five seasons, the cap, your room and how many contracts end, for planning extensions and free agency.",

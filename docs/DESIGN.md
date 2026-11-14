@@ -114,14 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
-### League export
+### League backup and restore
 
-On the league's Settings page, **Download a backup** saves the league as one JSON file (`full-court-league.json`).
+On the league's Settings page, **Download a backup** saves the league as one JSON file (`full-court-league.json`). On the Leagues page, **Restore a backup** turns such a file back into a league.
 
-- **What is in it.** The league (name, seed, size, settings), every team, every player (retired ones too, with ratings and contracts), every season, every game with its score, the awards, each player's season stats and the draft picks. Each row is as the database holds it, without the league id, which the file already states once.
-- **Who can take it.** Only the league's owner; anyone else gets "not found", like every other league page.
-- **Layout version.** The file starts with `format: 1`. It changes only if a field's meaning does.
-- **Not yet:** loading a backup back in as a new league, and play-by-play or box scores (these are large and can be rebuilt from the seed).
+- **What is in the file.** The league's own row and every table that belongs to it, as the database holds them: teams, players (retired ones too), seasons, games with scores and play-by-play recipes, this season's box scores, season stats, awards, draft picks and pick rights, contracts and offers, trades, injuries, staff, camp results, All-Star games and the rest. Only the owner can take it; anyone else gets "not found".
+- **Restoring.** It always makes a **new** league, named "(restored)" after the old name, so the original is left alone and a backup can be restored as often as you like. Every id is replaced by a new one, so nothing in the new league points at the old. The league's owner is whoever restores it, and every row is put in the new league whatever the file says.
+- **All or nothing.** If anything in the file doesn't fit (a missing team, a rule the database checks), nothing is created and the page says the file isn't a backup it can restore. The league limit (five) still applies.
+- **Same version.** The file starts with `format: 2` and the site only restores that layout. A backup from a future version that changed a table won't restore until a matching converter exists.
+- **Not yet:** restoring into the same league (replacing it), and restoring a backup made by an older layout.
 
 ### The trading block
 

@@ -2516,6 +2516,29 @@ export type Database = {
         Args: { slots: Json; target_season: string }
         Returns: number
       }
+      admin_import_league: {
+        Args: { owner: string; payload: Json }
+        Returns: {
+          config: Json | null
+          config_schema_version: number | null
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          rng_state: number[]
+          seed: string
+          size: string
+          status: string
+          updated_at: string
+          user_team_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_make_offer: {
         Args: {
           offer_salary: number

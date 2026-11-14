@@ -18,6 +18,7 @@ import {
   LeagueConfigSchema,
   LeagueIdSchema,
   type CreateLeagueInput,
+  type LeagueExport,
   type League,
   type LeagueList,
   type LeagueSettings,
@@ -25,6 +26,7 @@ import {
   type RenameLeagueRequest,
 } from "@fullcourt/validation";
 import {
+  importLeagueBackup,
   insertLeagueWithWorld,
   insertOwnerLeagueWithWorld,
 } from "@/server/admin/league-world";
@@ -173,6 +175,43 @@ export async function createLeague(
     return toLeague(row, 0);
   } catch (error) {
     if (isLimitError(error)) throw limitReached();
+    throw error;
+  }
+}
+
+/**
+ * Restores a backup (see export.ts) as a new league. The league keeps its
+ * name with "(restored)" after it, so it can sit next to the one it came from.
+ */
+export async function importLeague(
+  ctx: UserContext,
+  backup: LeagueExport,
+): Promise<League> {
+  const name = String(backup.league.name ?? "League")
+    .slice(0, 28)
+    .trim();
+  try {
+    const row = await importLeagueBackup({
+      ownerId: ctx.user.id,
+      backup: {
+        ...backup,
+        league: { ...backup.league, name: `${name || "League"} (restored)` },
+      },
+    });
+    return toLeague(row, (backup.tables.league_local_players ?? []).length);
+  } catch (error) {
+    if (isLimitError(error)) throw limitReached();
+    if (
+      error instanceof Object &&
+      "message" in error &&
+      error.message === "invalid_backup"
+    ) {
+      throw new ApiError(
+        422,
+        "invalid_backup",
+        "That file isn't a backup this version can restore.",
+      );
+    }
     throw error;
   }
 }
