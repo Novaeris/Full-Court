@@ -8,6 +8,7 @@ import {
   RenameStructureForm,
 } from "@/components/leagues/league-forms";
 import { LeagueRules } from "@/components/leagues/league-rules";
+import { ReplaceLeagueForm } from "@/components/leagues/replace-league-form";
 import { SeasonRulesForm } from "@/components/leagues/season-rules-form";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { loadLeague } from "@/server/leagues/load";
@@ -55,6 +56,12 @@ async function Settings({
         >
           Download a backup
         </a>
+      </SettingsCard>
+      <SettingsCard
+        title="Restore a backup over this league"
+        description="Replace this league with a backup you downloaded. The league you have now is removed, but only once the backup has been restored. To keep it, restore into a new league from the Leagues page instead."
+      >
+        <ReplaceLeagueForm leagueId={league.id} name={league.name} />
       </SettingsCard>
       <SettingsCard
         title="League rules"

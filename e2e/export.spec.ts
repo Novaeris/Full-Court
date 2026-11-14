@@ -220,4 +220,97 @@ test.describe("the league backup", () => {
     ).toContainText("isn't a backup");
     expect((await api.leagues.list()).leagues).toHaveLength(2);
   });
+
+  test("a backup can replace the league it came from, all or nothing", async () => {
+    test.setTimeout(300_000);
+    const { api, league } = await startedLeague("replace");
+    await api.leagues.simulate(league.id, { kind: "week" });
+    await finishJob(api, league.id);
+    const backup = await api.leagues.exportLeague(league.id);
+    const finals = (b: typeof backup) =>
+      (b.tables.games ?? []).filter((g) => g.status === "final").length;
+
+    // The league moves on after the backup was taken.
+    await api.leagues.simulate(league.id, { kind: "week" });
+    await finishJob(api, league.id);
+    expect(finals(await api.leagues.exportLeague(league.id))).toBeGreaterThan(
+      finals(backup),
+    );
+
+    // A broken file changes nothing.
+    await expect(
+      api.leagues.restoreLeague(league.id, {
+        ...backup,
+        tables: { ...backup.tables, teams: [] },
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "invalid_backup" });
+    expect((await api.leagues.get(league.id)).id).toBe(league.id);
+
+    // A good one replaces it: the same name, the league as it was in the backup, and no extra league.
+    const before = (await api.leagues.get(league.id)).name;
+    const restored = await api.leagues.restoreLeague(league.id, backup);
+    expect(restored.id).not.toBe(league.id);
+    expect(restored.name).toBe(before);
+    await expect(api.leagues.get(league.id)).rejects.toMatchObject({
+      status: 404,
+    });
+    expect((await api.leagues.list()).leagues.map((l) => l.id)).toEqual([
+      restored.id,
+    ]);
+    expect(finals(await api.leagues.exportLeague(restored.id))).toBe(
+      finals(backup),
+    );
+
+    // Somebody else's league can't be replaced.
+    const other = await startedLeague("replaceother");
+    await expect(
+      other.api.leagues.restoreLeague(restored.id, backup),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("Settings replaces the league after the name is typed", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const { user, api, league } = await startedLeague("replacepage");
+    const backup = await api.leagues.exportLeague(league.id);
+    await signInThroughUi(
+      page,
+      user.email,
+      user.password,
+      `/leagues/${league.id}/settings`,
+    );
+    const card = page.getByRole("region", {
+      name: "Restore a backup over this league",
+    });
+    await expect(card).toBeVisible();
+    const replace = card.getByRole("button", { name: "Replace this league" });
+    await expect(replace).toBeDisabled();
+
+    // Until a file is chosen and the name typed, it can't be pressed.
+    const file = {
+      name: "full-court-league.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(backup)),
+    };
+    await expect(async () => {
+      await card.getByLabel("Backup file").setInputFiles(file);
+      await card.getByLabel("Type the league's name to confirm").fill("nope");
+      await expect(replace).toBeDisabled({ timeout: 1000 });
+    }).toPass();
+    await card
+      .getByLabel("Type the league's name to confirm")
+      .fill((await api.leagues.get(league.id)).name);
+    await expect(replace).toBeEnabled();
+    await noOverflow(page);
+    await touchTargets(page);
+    await expectAccessible(page);
+
+    await replace.click();
+    await page.waitForURL(/\/leagues\/(?!new)[0-9a-f-]{36}$/);
+    expect(page.url()).not.toContain(league.id);
+    const lists = (await api.leagues.list()).leagues;
+    expect(lists).toHaveLength(1);
+    expect(lists[0]?.id).not.toBe(league.id);
+  });
 });

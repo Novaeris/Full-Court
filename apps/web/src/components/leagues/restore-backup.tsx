@@ -3,16 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { gzip } from "./backup-file";
 
 type ErrorBody = { error?: { message?: string } };
-
-/** Packs text the way the server unpacks it, so a big league stays small on the wire. */
-async function gzip(text: string): Promise<Blob> {
-  const stream = new Blob([text])
-    .stream()
-    .pipeThrough(new CompressionStream("gzip"));
-  return new Response(stream).blob();
-}
 
 /** Restores a league from a backup file (the one Settings downloads). */
 export function RestoreBackup() {

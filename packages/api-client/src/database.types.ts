@@ -2641,6 +2641,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_replace_league: {
+        Args: { old_league: string; owner: string; payload: Json }
+        Returns: {
+          config: Json | null
+          config_schema_version: number | null
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          rng_state: number[]
+          seed: string
+          size: string
+          status: string
+          updated_at: string
+          user_team_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_replace_trade_offers: {
         Args: { new_offers: Json; target_season: string }
         Returns: number

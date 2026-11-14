@@ -9,6 +9,7 @@ Full Court is a fictional basketball franchise-management game. There are no rea
 - **Online-first.** Progress is stored on the server, so a save opens on any device.
 - **Platforms.** Website first, then iOS/Android, and possibly desktop/Steam later ([ARCHITECTURE.md](./ARCHITECTURE.md)).
 - **Simulation.** Games are simulated from player ratings and team strategy by a deterministic engine. The same seed and the same decisions always produce the same results.
+- **Computer teams play by the owner's rules.** A computer team never gets a privilege the owner doesn't have: the same contracts, the same cap and ceiling, the same free agency and draft, the same trades and the same steps (development, injuries) applied the same way. It doesn't get a head start or a fixed quota. (Computer teams re-signing their own players before free agency was tried and removed for this reason: their expiring players reach free agency like everyone else's.)
 
 ## Game modes
 
@@ -131,7 +132,8 @@ On the league's Settings page, **Download a backup** saves the league as one JSO
 - **Restoring.** It always makes a **new** league, named "(restored)" after the old name, so the original is left alone and a backup can be restored as often as you like. Every id is replaced by a new one, so nothing in the new league points at the old. The league's owner is whoever restores it, and every row is put in the new league whatever the file says.
 - **All or nothing.** If anything in the file doesn't fit (a missing team, a rule the database checks), nothing is created and the page says the file isn't a backup it can restore. The league limit (five) still applies.
 - **Same version.** The file starts with `format: 2` and the site only restores that layout. A backup from a future version that changed a table won't restore until a matching converter exists.
-- **Not yet:** restoring into the same league (replacing it), and restoring a backup made by an older layout.
+- **Replacing a league.** The league's Settings page can also restore a backup **over this league**. The league you have now is removed and the backup restored in its place (with the same name, and new ids as in any restore), in one step: if the backup can't be restored, your league is left exactly as it was. Because it removes a league, it asks you to type the league's name first. To keep the current league, restore into a new league from the Leagues page instead.
+- **Not yet:** restoring a backup made by an older layout, and keeping a league's id when it is replaced.
 
 ### The trading block
 
@@ -209,7 +211,7 @@ An owner doesn't have to wait for a contract to end. On the **Moves** page, any 
 - **What an extension is.** A new salary and a length of one to five years (no longer than his age allows), counted from the current season, so it has to end later than his old contract does. The new salary replaces the old one at once, and the team's payroll can't pass the hard ceiling (an extension is like re-signing a player: no cap room is needed, only room under the ceiling).
 - **Whether he agrees.** He decides the way a free agent does: what the offer is worth to him is the salary raised or lowered by how he sees the team (winning, role, market and history, weighted by what he cares about), and the line is that worth being at least what he asks. There is no luck in it. The page shows each player's **ask**, **the least he will sign for** and how he feels (eager, willing or reluctant), and an offer under the line is turned down with the figure he would take. A player who already plays for the team counts it a little in its favour. In a league's first season there is no past to judge a team by, so every team looks average to its players.
 - **Open** in the regular season and from free agency to the preseason. It shows in the inbox ("You extended ...").
-- **Not yet:** the computer teams extending their own players (they still let contracts run out and re-sign in free agency), negotiating (asking for more years or a discount for them), and bonuses.
+- **Not yet:** negotiating (asking for more years or a discount for them), and bonuses. Computer teams don't extend players early: they re-sign their own players in free agency, by the same rules as everyone else.
 
 ### Free agency day by day
 

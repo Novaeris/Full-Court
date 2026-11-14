@@ -25,6 +25,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "A written recap on every finished game: who won, who led each team, standout lines like a triple-double, and what kind of game it was.",
       "An overview on every team's page: record and rank, scoring, streak, last ten, how the team plays, its leaders, its latest results and its next games.",
       "An Inbox tab that tells you what happened to your team: injuries, signings and releases, trades, awards, open trade offers and which contracts end.",
+      "Restore a backup over a league from its settings: it replaces the league, and only if the backup can be restored.",
       "Season rules: change the season length and the playoff format for the next season from the league settings.",
       "Fixed: ending free agency could be refused for a computer team that had to shed salary and then refill its roster.",
       "Head to head on every team page: its all-time record against each opponent, with rivalries marked.",

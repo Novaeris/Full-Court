@@ -28,6 +28,7 @@ import {
 } from "@fullcourt/validation";
 import {
   importLeagueBackup,
+  replaceLeagueWithBackup,
   insertLeagueWithWorld,
   insertOwnerLeagueWithWorld,
 } from "@/server/admin/league-world";
@@ -223,6 +224,44 @@ export async function importLeague(
         "That file isn't a backup this version can restore.",
       );
     }
+    throw error;
+  }
+}
+
+/**
+ * Restores a backup over one of the owner's leagues: the league is replaced
+ * (all or nothing) by one made from the backup, which keeps the old league's
+ * name. Every id is new, as in any restore.
+ */
+export async function replaceLeague(
+  ctx: UserContext,
+  leagueIdParam: string,
+  backup: LeagueExport,
+): Promise<League> {
+  const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
+  try {
+    const row = await replaceLeagueWithBackup({
+      ownerId: ctx.user.id,
+      leagueId: league.id,
+      backup: {
+        ...backup,
+        league: { ...backup.league, name: league.name },
+      },
+    });
+    return toLeague(row, (backup.tables.league_local_players ?? []).length);
+  } catch (error) {
+    if (
+      error instanceof Object &&
+      "message" in error &&
+      error.message === "invalid_backup"
+    ) {
+      throw new ApiError(
+        422,
+        "invalid_backup",
+        "That file isn't a backup this version can restore. Your league has not been changed.",
+      );
+    }
+    if (isLimitError(error)) throw limitReached();
     throw error;
   }
 }
