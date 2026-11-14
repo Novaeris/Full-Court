@@ -114,6 +114,16 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### Power rankings
+
+The Standings tab has a second view, **Power rankings**, that ranks every team by how good it looks right now, which isn't quite the standings. A team's score from 0 to 100 blends three things:
+
+- **Its record** (45%): the share of its games it has won.
+- **Its margin** (35%): how many points it scores less how many it allows, per game. A margin of 15 points a game or more, either way, counts as the best (or worst) it can be.
+- **Its last ten games** (20%): the share of those it won.
+
+A team with no games yet scores 50. Ties go to the better record, then to the team's id, so the list never changes between page loads. Each line shows the team's record, margin, last ten, score and where it stands in the standings, and how many places higher or lower the power rankings put it. A hot team with a big margin can outrank a team with a better record.
+
 ### The cap outlook
 
 The roster section of the Moves and Offseason pages shows a **cap outlook**: for this season and the next four, what the team's contracts commit, how many players that is, what the cap will be, the room under it (or how far over) and how many contracts end after the season. It is meant for planning an extension, a trade or free agency.
