@@ -151,11 +151,13 @@ export async function getInbox(
         ? `You drafted ${player}.`
         : m.kind === "signed"
           ? `You signed ${player}${money(m.salary)}${m.years ? ` for ${m.years} ${m.years === 1 ? "year" : "years"}` : ""}.`
-          : m.kind === "re-signed"
-            ? `You re-signed ${player}${money(m.salary)}${m.years ? ` for ${m.years} ${m.years === 1 ? "year" : "years"}` : ""}.`
-            : m.kind === "released"
-              ? `You released ${player}.`
-              : `${player}'s contract ended.`;
+          : m.kind === "extended"
+            ? `You extended ${player}${money(m.salary)}${m.years ? ` for ${m.years} ${m.years === 1 ? "year" : "years"}` : ""}.`
+            : m.kind === "re-signed"
+              ? `You re-signed ${player}${money(m.salary)}${m.years ? ` for ${m.years} ${m.years === 1 ? "year" : "years"}` : ""}.`
+              : m.kind === "released"
+                ? `You released ${player}.`
+                : `${player}'s contract ended.`;
     add({
       year: m.season_year,
       day: m.day,

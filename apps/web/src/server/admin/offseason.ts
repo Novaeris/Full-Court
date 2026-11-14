@@ -383,3 +383,19 @@ export async function setTeamStrategy(input: {
   });
   if (error) throw error;
 }
+
+/** Replaces a player's contract with a longer one, through admin_extend_contract. */
+export async function extendContract(input: {
+  seasonId: string;
+  playerId: string;
+  salary: number;
+  years: number;
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_extend_contract", {
+    target_season: input.seasonId,
+    target_player: input.playerId,
+    new_salary: input.salary,
+    new_years: input.years,
+  });
+  if (error) throw error;
+}

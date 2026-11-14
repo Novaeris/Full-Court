@@ -40,3 +40,4 @@ export * from "./season/trade";
 export * from "./season/awards";
 export * from "./season/coaching";
 export * from "./season/stats";
+export * from "./season/extensions";

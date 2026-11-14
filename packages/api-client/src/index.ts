@@ -12,6 +12,8 @@ import {
   DraftResponseSchema,
   HistoryResponseSchema,
   InboxResponseSchema,
+  ExtendResultSchema,
+  ExtensionsResponseSchema,
   ShopResponseSchema,
   StatsResponseSchema,
   StrategyResponseSchema,
@@ -41,6 +43,9 @@ import {
   type DraftSimRequest,
   type HistoryResponse,
   type InboxResponse,
+  type ExtendRequest,
+  type ExtendResult,
+  type ExtensionsResponse,
   type ShopRequest,
   type StatsResponse,
   type StrategyResponse,
@@ -497,6 +502,23 @@ export function createApiClient(options: ApiClientOptions) {
           "PUT",
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
+          input,
+        ),
+      /** Who on your team can be given a new contract. */
+      extensions: (id: string, teamId?: string): Promise<ExtensionsResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/extensions${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+          }`,
+          (b) => ExtensionsResponseSchema.parse(b),
+        ),
+      /** Offers a player a new contract; he signs if it is worth enough to him. */
+      extendPlayer: (id: string, input: ExtendRequest): Promise<ExtendResult> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/extensions`,
+          (b) => ExtendResultSchema.parse(b),
           input,
         ),
       /** The league's leaders for the season being played. */

@@ -114,6 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### Extending a contract
+
+An owner doesn't have to wait for a contract to end. On the **Moves** page, any player of their team with **two years or fewer left** can be given a new contract.
+
+- **What an extension is.** A new salary and a length of one to five years (no longer than his age allows), counted from the current season, so it has to end later than his old contract does. The new salary replaces the old one at once, and the team's payroll can't pass the hard ceiling (an extension is like re-signing a player: no cap room is needed, only room under the ceiling).
+- **Whether he agrees.** He decides the way a free agent does: what the offer is worth to him is the salary raised or lowered by how he sees the team (winning, role, market and history, weighted by what he cares about), and the line is that worth being at least what he asks. There is no luck in it. The page shows each player's **ask**, **the least he will sign for** and how he feels (eager, willing or reluctant), and an offer under the line is turned down with the figure he would take. A player who already plays for the team counts it a little in its favour. In a league's first season there is no past to judge a team by, so every team looks average to its players.
+- **Open** in the regular season and from free agency to the preseason. It shows in the inbox ("You extended ...").
+- **Not yet:** the computer teams extending their own players (they still let contracts run out and re-sign in free agency), negotiating (asking for more years or a discount for them), and bonuses.
+
 ### Free agency day by day
 
 - **The offers.** An offer is a salary and a length (and says whether it uses the mid-level exception). It is checked when it is made and again when the player decides: if the team's payroll has changed so that it no longer fits, the offer is void. A team can have an offer out to many players, but a team can't sign more players than it has roster places for.

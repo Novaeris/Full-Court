@@ -2286,6 +2286,57 @@ export type Database = {
         Args: { target_season: string }
         Returns: number
       }
+      admin_extend_contract: {
+        Args: {
+          new_salary: number
+          new_years: number
+          target_player: string
+          target_season: string
+        }
+        Returns: {
+          age: number
+          ball_handling: number
+          contract_expires: number | null
+          def_rebound: number
+          draft_pick: number | null
+          draft_round: number | null
+          draft_year: number | null
+          first_name: string
+          free_throw: number
+          height_inches: number
+          id: string
+          injury_days: number
+          injury_kind: string | null
+          inside: number
+          interior_d: number
+          jersey: number
+          last_name: string
+          league_id: string
+          mid_range: number
+          off_rebound: number
+          overall: number
+          passing: number
+          perimeter_d: number
+          position: string
+          potential: number
+          retired_year: number | null
+          rights_team_id: string | null
+          salary: number | null
+          speed: number
+          stamina: number
+          status: string
+          strength: number
+          team_id: string | null
+          three_point: number
+          weight_pounds: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_fail_sim_job: {
         Args: { message: string; target_job: string }
         Returns: {

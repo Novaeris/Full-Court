@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { ExtensionPanel } from "@/components/season/extension-panel";
 import { RosterPanel } from "@/components/season/roster-panel";
 import { StrategyPanel } from "@/components/season/strategy-panel";
 import { TradePanel } from "@/components/season/trade-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { loadLeague } from "@/server/leagues/load";
+import { getExtensions } from "@/server/services/extensions";
 import { getRoster } from "@/server/services/roster";
 import { getStrategy } from "@/server/services/strategy";
 import { getTrades } from "@/server/services/trades";
@@ -43,11 +45,12 @@ async function Moves({
       />
     );
   }
-  const [trades, roster, teams, strategy] = await Promise.all([
+  const [trades, roster, teams, strategy, extensions] = await Promise.all([
     getTrades(ctx, league.id),
     getRoster(ctx, league.id),
     listTeams(ctx, league.id),
     getStrategy(ctx, league.id),
+    getExtensions(ctx, league.id),
   ]);
   return (
     <div className="flex flex-col gap-8">
@@ -59,6 +62,7 @@ async function Moves({
         leagueId={league.id}
         data={strategy}
       />
+      <ExtensionPanel leagueId={league.id} data={extensions} />
       {roster.teamId ? (
         <RosterPanel
           leagueId={league.id}

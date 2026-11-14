@@ -978,3 +978,51 @@ export const StatsResponseSchema = z.object({
   ),
 });
 export type StatsResponse = z.infer<typeof StatsResponseSchema>;
+
+/** A player of your team who can be given a new contract (docs/DESIGN.md, "Extending a contract"). */
+export const ExtensionCandidateSchema = z.object({
+  player: OffseasonPlayerSchema,
+  /** His contract now: salary and the last season it covers. */
+  salary: z.number().int(),
+  expires: z.number().int(),
+  yearsLeft: z.number().int(),
+  /** What he asks, and for how long. */
+  askSalary: z.number().int(),
+  askYears: z.number().int(),
+  /** The longest contract his age allows. */
+  maxYears: z.number().int(),
+  /** The least salary he signs for, because of how he sees your team. */
+  minimum: z.number().int(),
+  mood: z.enum(["eager", "willing", "reluctant"]),
+});
+export type ExtensionCandidate = z.infer<typeof ExtensionCandidateSchema>;
+
+/** GET /api/v1/leagues/:leagueId/extensions?team=: who can be extended, and the cap figures. */
+export const ExtensionsResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  open: z.boolean(),
+  figures: CapFiguresSchema.nullable(),
+  candidates: z.array(ExtensionCandidateSchema),
+});
+export type ExtensionsResponse = z.infer<typeof ExtensionsResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/extensions: offer a new contract. */
+export const ExtendRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerId: z.uuid(),
+  /** In thousands of dollars a year. */
+  salary: z.number().int().positive(),
+  years: z.number().int().min(1).max(5),
+});
+export type ExtendRequest = z.infer<typeof ExtendRequestSchema>;
+
+export const ExtendResultSchema = z.object({
+  /** Whether he signed. */
+  done: z.boolean(),
+  /** What the offer was worth to him as a share of his ask. */
+  worth: z.number(),
+  /** Why not, in words, when he didn't. */
+  reason: z.string().nullable(),
+  extensions: ExtensionsResponseSchema,
+});
+export type ExtendResult = z.infer<typeof ExtendResultSchema>;
