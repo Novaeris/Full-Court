@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import type { Team } from "@fullcourt/validation";
+import type { AllStarGame, Team } from "@fullcourt/validation";
 import { EmptyState } from "@/components/ui/empty-state";
 import { loadLeague } from "@/server/leagues/load";
+import { getAllStar } from "@/server/services/allstar";
 import { getStats } from "@/server/services/stats";
 import { listTeams } from "@/server/services/world";
 
@@ -24,6 +25,83 @@ export default function StatsPage({
   );
 }
 
+/** The All-Star Game: the score, who was most valuable, and both squads' lines. */
+function AllStarSection({
+  leagueId,
+  game,
+  abbr,
+}: {
+  leagueId: string;
+  game: AllStarGame;
+  abbr: (id: string) => string;
+}) {
+  const winner = game.squads.find((s) => s.squad === game.winner);
+  return (
+    <section
+      aria-labelledby="all-star-heading"
+      className="rounded-lg border border-border bg-surface p-5"
+    >
+      <h2 id="all-star-heading" className="text-xl font-bold">
+        {game.year} All-Star Game
+      </h2>
+      <p className="mt-1">
+        {game.squads.map((s, i) => (
+          <span key={s.squad}>
+            {i > 0 ? " · " : ""}
+            <span className={s.squad === game.winner ? "font-bold" : ""}>
+              {s.name} {s.score}
+            </span>
+          </span>
+        ))}
+        {game.overtimes > 0 ? " (overtime)" : ""}
+      </p>
+      {game.mvp ? (
+        <p className="text-sm text-text-muted">
+          Most valuable player:{" "}
+          <Link
+            href={`/leagues/${leagueId}/players/${game.mvp.playerId}`}
+            className="font-semibold text-accent underline underline-offset-4"
+          >
+            {game.mvp.name}
+          </Link>
+          {winner ? ` (${winner.name})` : ""}
+        </p>
+      ) : null}
+      <div className="mt-3 grid gap-4 tablet:grid-cols-2">
+        {game.squads.map((s) => (
+          <div key={s.squad}>
+            <h3 className="font-semibold">{s.name}</h3>
+            <ul>
+              {s.players.map((p) => (
+                <li
+                  key={p.playerId}
+                  className="flex flex-wrap items-baseline justify-between gap-x-3 border-t border-border py-1 text-sm first:border-t-0"
+                >
+                  <span>
+                    <Link
+                      href={`/leagues/${leagueId}/players/${p.playerId}`}
+                      className="font-semibold text-accent underline underline-offset-4"
+                    >
+                      {p.name}
+                    </Link>{" "}
+                    <span className="text-text-muted">
+                      {p.position} {p.teamId ? abbr(p.teamId) : ""}
+                      {p.captain ? " · captain" : p.starter ? " · starter" : ""}
+                    </span>
+                  </span>
+                  <span className="tabular-nums">
+                    {p.points} pts · {p.rebounds} reb · {p.assists} ast
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 async function Stats({
   params,
   searchParams,
@@ -35,9 +113,10 @@ async function Stats({
   const query = await searchParams;
   const playoffs = query.phase === "playoffs";
   const { ctx, league } = await loadLeague(leagueId);
-  const [stats, teams] = await Promise.all([
+  const [stats, teams, allStar] = await Promise.all([
     getStats(ctx, league.id, playoffs),
     listTeams(ctx, league.id),
+    playoffs ? Promise.resolve({ game: null }) : getAllStar(ctx, league.id),
   ]);
   const abbr = (id: string) =>
     teams.find((t: Team) => t.id === id)?.abbreviation ?? "";
@@ -69,6 +148,9 @@ async function Stats({
           </Link>
         ))}
       </nav>
+      {allStar.game ? (
+        <AllStarSection leagueId={league.id} game={allStar.game} abbr={abbr} />
+      ) : null}
       {!stats.season || stats.games === 0 ? (
         <EmptyState
           icon="trophy"

@@ -45,7 +45,7 @@ export function toRngState(values: readonly number[]): RngState {
   ];
 }
 
-function toSimPlayer(row: PlayerRow): SimPlayer {
+export function toSimPlayer(row: PlayerRow): SimPlayer {
   if (!isPosition(row.position)) {
     throw new Error(`Player ${row.id} has an unknown position.`);
   }

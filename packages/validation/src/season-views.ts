@@ -851,6 +851,16 @@ export const HistoryResponseSchema = z.object({
       year: z.number().int(),
       championId: z.uuid().nullable(),
       finalistId: z.uuid().nullable(),
+      /** The season's All-Star Game, if one was played. */
+      allStar: z
+        .object({
+          nameA: z.string(),
+          nameB: z.string(),
+          scoreA: z.number().int(),
+          scoreB: z.number().int(),
+          mvpName: z.string().nullable(),
+        })
+        .nullable(),
       /** The individual awards, in the order the page lists them. */
       awards: z.array(
         HistoryPlayerSchema.extend({ award: z.string(), label: z.string() }),
@@ -1026,3 +1036,44 @@ export const ExtendResultSchema = z.object({
   extensions: ExtensionsResponseSchema,
 });
 export type ExtendResult = z.infer<typeof ExtendResultSchema>;
+
+/** A player in the All-Star Game, with his line. */
+export const AllStarPlayerSchema = z.object({
+  playerId: z.uuid(),
+  name: z.string(),
+  position: z.string(),
+  /** The team he played for when he was picked. */
+  teamId: z.uuid().nullable(),
+  starter: z.boolean(),
+  captain: z.boolean(),
+  minutes: z.number().int(),
+  points: z.number().int(),
+  rebounds: z.number().int(),
+  assists: z.number().int(),
+  steals: z.number().int(),
+  blocks: z.number().int(),
+});
+
+export const AllStarGameSchema = z.object({
+  year: z.number().int(),
+  /** The season's day it was played before. */
+  day: z.number().int(),
+  overtimes: z.number().int(),
+  winner: z.enum(["a", "b"]),
+  mvp: z.object({ playerId: z.uuid(), name: z.string() }).nullable(),
+  squads: z.array(
+    z.object({
+      squad: z.enum(["a", "b"]),
+      name: z.string(),
+      score: z.number().int(),
+      players: z.array(AllStarPlayerSchema),
+    }),
+  ),
+});
+export type AllStarGame = z.infer<typeof AllStarGameSchema>;
+
+/** GET /api/v1/leagues/:leagueId/all-star?year=: a season's All-Star Game (the latest by default); null before the first. */
+export const AllStarResponseSchema = z.object({
+  game: AllStarGameSchema.nullable(),
+});
+export type AllStarResponse = z.infer<typeof AllStarResponseSchema>;

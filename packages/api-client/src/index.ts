@@ -14,6 +14,7 @@ import {
   InboxResponseSchema,
   ExtendResultSchema,
   ExtensionsResponseSchema,
+  AllStarResponseSchema,
   ShopResponseSchema,
   StatsResponseSchema,
   StrategyResponseSchema,
@@ -46,6 +47,7 @@ import {
   type ExtendRequest,
   type ExtendResult,
   type ExtensionsResponse,
+  type AllStarResponse,
   type ShopRequest,
   type StatsResponse,
   type StrategyResponse,
@@ -503,6 +505,13 @@ export function createApiClient(options: ApiClientOptions) {
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
           input,
+        ),
+      /** A season's All-Star Game (the latest by default). */
+      allStar: (id: string, year?: number): Promise<AllStarResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/all-star${year ? `?year=${year}` : ""}`,
+          (b) => AllStarResponseSchema.parse(b),
         ),
       /** Who on your team can be given a new contract. */
       extensions: (id: string, teamId?: string): Promise<ExtensionsResponse> =>

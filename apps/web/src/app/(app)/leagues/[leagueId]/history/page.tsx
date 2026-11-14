@@ -234,6 +234,19 @@ function Seasons({
               </span>
             ) : null}
           </p>
+          {s.allStar ? (
+            <p className="mt-1">
+              <span className="font-semibold">All-Star Game:</span>{" "}
+              {s.allStar.nameA} {s.allStar.scoreA}, {s.allStar.nameB}{" "}
+              {s.allStar.scoreB}
+              {s.allStar.mvpName ? (
+                <span className="text-text-muted">
+                  {" "}
+                  (MVP {s.allStar.mvpName})
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           {s.awards.length > 0 ? (
             <ul className="mt-2">
               {s.awards.map((a) => (

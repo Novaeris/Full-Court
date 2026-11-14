@@ -9,6 +9,126 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      all_star_games: {
+        Row: {
+          created_at: string
+          day: number
+          id: string
+          league_id: string
+          mvp_player_id: string | null
+          name_a: string
+          name_b: string
+          overtimes: number
+          score_a: number
+          score_b: number
+          season_id: string
+        }
+        Insert: {
+          created_at?: string
+          day: number
+          id?: string
+          league_id: string
+          mvp_player_id?: string | null
+          name_a: string
+          name_b: string
+          overtimes?: number
+          score_a: number
+          score_b: number
+          season_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          id?: string
+          league_id?: string
+          mvp_player_id?: string | null
+          name_a?: string
+          name_b?: string
+          overtimes?: number
+          score_a?: number
+          score_b?: number
+          season_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "all_star_games_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "all_star_games_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: true
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      all_star_players: {
+        Row: {
+          assists: number
+          blocks: number
+          captain: boolean
+          game_id: string
+          league_id: string
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          squad: string
+          starter: boolean
+          steals: number
+          team_id: string | null
+        }
+        Insert: {
+          assists: number
+          blocks: number
+          captain?: boolean
+          game_id: string
+          league_id: string
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          squad: string
+          starter: boolean
+          steals: number
+          team_id?: string | null
+        }
+        Update: {
+          assists?: number
+          blocks?: number
+          captain?: boolean
+          game_id?: string
+          league_id?: string
+          minutes?: number
+          player_id?: string
+          points?: number
+          rebounds?: number
+          squad?: string
+          starter?: boolean
+          steals?: number
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "all_star_players_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "all_star_games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "all_star_players_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       box_score_lines: {
         Row: {
           assists: number
@@ -2445,6 +2565,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_record_all_star_game: {
+        Args: { payload: Json; target_season: string }
+        Returns: boolean
       }
       admin_record_event: {
         Args: { event_name: string; event_path?: string }

@@ -5,6 +5,7 @@ import {
   type SimulateDayResult,
 } from "@fullcourt/game-engine";
 import type { Game } from "@fullcourt/game-types";
+import { isAllStarDay, runAllStarGame } from "./all-star";
 import { isTradeDay, runTradeRound } from "./trade-round";
 import {
   CommitRefused,
@@ -74,6 +75,33 @@ export async function runJob(
       } catch (error) {
         log(
           `job ${current.id}: trades skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
+    // Half way through the season, before that day's games: the All-Star Game.
+    if (
+      db.hasAllStarGame &&
+      db.loadAllStarLines &&
+      db.loadAllStarPlayers &&
+      db.recordAllStarGame &&
+      season.phase === "regular-season" &&
+      isAllStarDay(day, season.last_day)
+    ) {
+      try {
+        const played = await runAllStarGame(
+          {
+            hasAllStarGame: db.hasAllStarGame,
+            loadAllStarLines: db.loadAllStarLines,
+            loadAllStarPlayers: db.loadAllStarPlayers,
+            recordAllStarGame: db.recordAllStarGame,
+          },
+          season,
+        );
+        if (played)
+          log(`job ${current.id}: the All-Star Game, before day ${day}`);
+      } catch (error) {
+        log(
+          `job ${current.id}: the All-Star Game was skipped on day ${day}: ${String(error)}`,
         );
       }
     }

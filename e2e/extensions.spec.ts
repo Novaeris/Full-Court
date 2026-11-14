@@ -13,6 +13,37 @@ import { finishJob } from "./support/worker";
  * player says to an offer, and that the new contract is the one he plays under.
  */
 
+type Extensions = Awaited<
+  ReturnType<
+    Awaited<ReturnType<typeof startedLeague>>["api"]["leagues"]["extensions"]
+  >
+>;
+
+/** A player who can be given a longer contract and offered a little less than his line. */
+function suitable(data: Extensions) {
+  const floor = data.figures?.minSalary ?? 0;
+  return data.candidates.find(
+    (c) => c.maxYears > c.yearsLeft && c.minimum - 20 >= floor,
+  );
+}
+
+/**
+ * A league whose owner has a player the scenarios below need. The league is
+ * random: now and then every player with a short contract asks about the league
+ * minimum, and nothing can be offered "a little under his line". Then start
+ * another league, as a person would.
+ */
+async function leagueWithCandidate(label: string) {
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    const made = await startedLeague(`${label}${attempt}`);
+    await made.api.leagues.simulate(made.league.id, { kind: "day" });
+    await finishJob(made.api, made.league.id);
+    const before = await made.api.leagues.extensions(made.league.id);
+    if (suitable(before)) return { ...made, before };
+  }
+  throw new Error("No league with a player who can be extended in six tries.");
+}
+
 test.describe("contract extensions", () => {
   test.beforeEach(({ browserName: _ }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "runs once, on desktop");
@@ -20,13 +51,9 @@ test.describe("contract extensions", () => {
 
   test("offers below his line are turned down, offers at it are signed", async () => {
     test.setTimeout(240_000);
-    const { api, league } = await startedLeague("extend");
-    await api.leagues.simulate(league.id, { kind: "day" });
-    await finishJob(api, league.id);
-
-    const before = await api.leagues.extensions(league.id);
-    expect(before.open).toBe(true);
+    const { api, league, before } = await leagueWithCandidate("extend");
     const trades = await api.leagues.trades(league.id);
+    expect(before.open).toBe(true);
 
     // Exactly the players with two years or fewer left can be extended.
     const short = trades.roster.filter((p) => p.yearsLeft <= 2);
@@ -51,12 +78,9 @@ test.describe("contract extensions", () => {
       ).rejects.toMatchObject({ status: 422, code: "not_extendable" });
     }
 
-    // Someone whose age lets him sign longer than he has left.
-    // (one who asks more than the league minimum, so an offer a little under his line is a legal one)
-    const floor = before.figures?.minSalary ?? 0;
-    const target = before.candidates.find(
-      (c) => c.maxYears > c.yearsLeft && c.minimum - 20 >= floor,
-    );
+    // Someone whose age lets him sign longer than he has left, and who asks more
+    // than the league minimum (so an offer a little under his line is a legal one).
+    const target = suitable(before);
     expect(target).toBeDefined();
     const c = target as NonNullable<typeof target>;
     const years = c.maxYears;
@@ -131,11 +155,13 @@ test.describe("contract extensions", () => {
     page,
   }) => {
     test.setTimeout(240_000);
-    const { user, api, league } = await startedLeague("extendlayout");
-    await api.leagues.simulate(league.id, { kind: "day" });
-    await finishJob(api, league.id);
-    const data = await api.leagues.extensions(league.id);
-    const target = data.candidates.find((c) => c.maxYears > c.yearsLeft);
+    const {
+      user,
+      api,
+      league,
+      before: data,
+    } = await leagueWithCandidate("extendlayout");
+    const target = suitable(data);
     expect(target).toBeDefined();
     const c = target as NonNullable<typeof target>;
 

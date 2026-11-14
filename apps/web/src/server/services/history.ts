@@ -85,6 +85,14 @@ export async function getHistory(
   }
   if (missing.length > 0) awards = await loadAwards(ctx, league.id);
 
+  // The All-Star Games, one a season.
+  const starGames = await ctx.supabase
+    .from("all_star_games")
+    .select("season_id, name_a, name_b, score_a, score_b, mvp_player_id")
+    .eq("league_id", league.id);
+  if (starGames.error) throw starGames.error;
+  const starBySeason = new Map(starGames.data.map((g) => [g.season_id, g]));
+
   // Records: the best of each, found by the database.
   const best = await Promise.all([
     ...GAME_HIGHS.map(([, , column]) =>
@@ -124,6 +132,9 @@ export async function getHistory(
   // Everyone named, with name and position.
   const wanted = new Set<string>();
   for (const a of awards) if (a.player_id) wanted.add(a.player_id);
+  for (const g of starGames.data) {
+    if (g.mvp_player_id) wanted.add(g.mvp_player_id);
+  }
   for (let i = 0; i < GAME_HIGHS.length + SEASON_TOTALS.length; i++) {
     for (const r of rows(i)) wanted.add(String(r.player_id));
   }
@@ -175,10 +186,22 @@ export async function getHistory(
       list.filter(
         (a) => a.award === award && a.player_id !== null && a.team_id !== null,
       );
+    const star = starBySeason.get(s.id);
     return {
       year: s.year,
       championId: champion,
       finalistId: finalist,
+      allStar: star
+        ? {
+            nameA: star.name_a,
+            nameB: star.name_b,
+            scoreA: star.score_a,
+            scoreB: star.score_b,
+            mvpName: star.mvp_player_id
+              ? (people.get(star.mvp_player_id)?.name ?? null)
+              : null,
+          }
+        : null,
       awards: PLAYER_AWARDS.flatMap((award) =>
         mine(award).map((a) => ({
           ...named(a.player_id as string, a.team_id as string),
@@ -264,7 +287,7 @@ export async function getCareer(
   leagueId: string,
   playerId: string,
 ): Promise<PlayerCareer> {
-  const [stats, awards] = await Promise.all([
+  const [stats, awards, stars] = await Promise.all([
     ctx.supabase
       .from("player_season_stats")
       .select("season_id, team_id, games_played, points, rebounds, assists")
@@ -276,13 +299,32 @@ export async function getCareer(
       .select("season_id, award")
       .eq("league_id", leagueId)
       .eq("player_id", playerId),
+    ctx.supabase
+      .from("all_star_players")
+      .select("game_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerId),
   ]);
   if (stats.error) throw stats.error;
   if (awards.error) throw awards.error;
+  if (stars.error) throw stars.error;
+  // The seasons of his All-Star Games.
+  const starGames = stars.data.length
+    ? await ctx.supabase
+        .from("all_star_games")
+        .select("id, season_id")
+        .eq("league_id", leagueId)
+        .in(
+          "id",
+          stars.data.map((s) => s.game_id),
+        )
+    : { data: [], error: null };
+  if (starGames.error) throw starGames.error;
   const seasonIds = [
     ...new Set([
       ...stats.data.map((s) => s.season_id),
       ...awards.data.map((a) => a.season_id),
+      ...starGames.data.map((g) => g.season_id),
     ]),
   ];
   if (seasonIds.length === 0) return { seasons: [], awards: [] };
@@ -298,6 +340,7 @@ export async function getCareer(
     "all-league-1",
     "all-league-2",
     "all-league-3",
+    "all-star",
   ];
   return {
     seasons: stats.data
@@ -310,17 +353,22 @@ export async function getCareer(
         assists: s.assists / s.games_played,
       }))
       .sort((a, b) => a.year - b.year),
-    awards: awards.data
-      .map((a) => ({
+    awards: [
+      ...awards.data.map((a) => ({
         year: yearOf.get(a.season_id) ?? 0,
         award: a.award,
         label: AWARD_NAMES[a.award] ?? a.award,
-      }))
-      .sort(
-        (a, b) =>
-          a.year - b.year ||
-          order.indexOf(a.award as (typeof order)[number]) -
-            order.indexOf(b.award as (typeof order)[number]),
-      ),
+      })),
+      ...starGames.data.map((g) => ({
+        year: yearOf.get(g.season_id) ?? 0,
+        award: "all-star",
+        label: "All-Star",
+      })),
+    ].sort(
+      (a, b) =>
+        a.year - b.year ||
+        order.indexOf(a.award as (typeof order)[number]) -
+          order.indexOf(b.award as (typeof order)[number]),
+    ),
   };
 }

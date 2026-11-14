@@ -104,7 +104,7 @@ test.describe("inbox", () => {
     for (const i of kinds("injury"))
       expect(i.text).toMatch(/was hurt: .+\. Out \d+ days?\./);
 
-    // Awards: the team's own (champion, finalist) and its players'.
+    // Awards: the team's own (champion, finalist) and its players',
     const won = await db
       .from("season_awards")
       .select("award, player_id")
@@ -113,7 +113,15 @@ test.describe("inbox", () => {
     const expected = (won.data ?? []).filter(
       (a) => a.player_id || ["champion", "finalist"].includes(a.award),
     );
-    expect(kinds("award")).toHaveLength(expected.length);
+    // ...and each of its players picked for the All-Star Game.
+    const stars = await db
+      .from("all_star_players")
+      .select("player_id")
+      .eq("league_id", league.id)
+      .eq("team_id", mine);
+    expect(kinds("award")).toHaveLength(
+      expected.length + (stars.data?.length ?? 0),
+    );
 
     // Roster moves: the draft picks you made are listed.
     const drafted = await db

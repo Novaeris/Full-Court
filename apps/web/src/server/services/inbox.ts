@@ -39,7 +39,7 @@ export async function getInbox(
   const season = await latestSeason(ctx, league.id);
   const base = `/leagues/${league.id}`;
 
-  const [injuries, moves, trades, awards, offers, seasons, teams] =
+  const [injuries, moves, trades, awards, offers, seasons, teams, stars] =
     await Promise.all([
       ctx.supabase
         .from("player_injuries")
@@ -90,8 +90,22 @@ export async function getInbox(
         .from("teams")
         .select("id, city, nickname, abbreviation")
         .eq("league_id", league.id),
+      ctx.supabase
+        .from("all_star_players")
+        .select("game_id, player_id, squad, points")
+        .eq("league_id", league.id)
+        .eq("team_id", teamId),
     ]);
-  for (const r of [injuries, moves, trades, awards, offers, seasons, teams]) {
+  for (const r of [
+    injuries,
+    moves,
+    trades,
+    awards,
+    offers,
+    seasons,
+    teams,
+    stars,
+  ]) {
     if (r.error) throw r.error;
   }
   const yearOf = new Map(seasons.data?.map((s) => [s.id, s.year]));
@@ -108,6 +122,7 @@ export async function getInbox(
     for (const id of [...t.gave_a, ...t.gave_b]) wanted.add(id);
   }
   for (const a of awards.data ?? []) if (a.player_id) wanted.add(a.player_id);
+  for (const s of stars.data ?? []) wanted.add(s.player_id);
   for (const o of offers.data ?? []) {
     for (const id of [...o.give, ...o.get]) wanted.add(id);
   }
@@ -212,6 +227,29 @@ export async function getInbox(
         href: `${base}/history`,
       });
     }
+  }
+
+  // Your players picked for the All-Star Game, and how it went for them.
+  const starGames = (stars.data ?? []).length
+    ? await ctx.supabase
+        .from("all_star_games")
+        .select("id, season_id, day, name_a, name_b, score_a, score_b")
+        .in("id", [...new Set((stars.data ?? []).map((s) => s.game_id))])
+    : { data: [], error: null };
+  if (starGames.error) throw starGames.error;
+  for (const s of stars.data ?? []) {
+    const g = starGames.data.find((x) => x.id === s.game_id);
+    if (!g) continue;
+    const mine = s.squad === "a" ? g.score_a : g.score_b;
+    const theirs = s.squad === "a" ? g.score_b : g.score_a;
+    add({
+      year: yearOf.get(g.season_id) ?? 0,
+      day: g.day,
+      kind: "award",
+      order: 1,
+      text: `${who(s.player_id)} was an All-Star: ${s.points} points as ${s.squad === "a" ? g.name_a : g.name_b} ${mine > theirs ? "won" : "lost"} ${mine}-${theirs}.`,
+      href: `${base}/stats`,
+    });
   }
 
   for (const o of offers.data ?? []) {

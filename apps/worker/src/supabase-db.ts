@@ -1,9 +1,16 @@
 import type { Database } from "@fullcourt/api-client";
 import type { AiTrade } from "@fullcourt/game-engine";
-import { pickValue, teamWorstness } from "@fullcourt/game-rules";
+import {
+  awardLines,
+  pickValue,
+  teamWorstness,
+  type AwardLine,
+  type StatRow,
+} from "@fullcourt/game-rules";
 import { createClient } from "@supabase/supabase-js";
 import type { WorkerConfig } from "./config";
 import { describeError } from "./errors";
+import type { AllStarRecord } from "./all-star";
 import type { StoredOffer, TradeTeam } from "./trade-round";
 import type { StoredInjury } from "./db";
 import {
@@ -271,6 +278,79 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
       const { error } = await client.rpc("admin_replace_trade_offers", {
         target_season: seasonId,
         new_offers: offers as never,
+      });
+      if (error) throw error;
+    },
+
+    async hasAllStarGame(seasonId: string): Promise<boolean> {
+      const { data, error } = await client
+        .from("all_star_games")
+        .select("id")
+        .eq("season_id", seasonId)
+        .maybeSingle();
+      if (error) throw error;
+      return data !== null;
+    },
+
+    async loadAllStarLines(seasonId: string): Promise<AwardLine[]> {
+      const totals = await client
+        .rpc("player_season_totals", {
+          target_season: seasonId,
+          playoffs: false,
+        })
+        .range(0, 4999);
+      if (totals.error) throw totals.error;
+      const ids = [...new Set(totals.data.map((r) => r.player_id))];
+      const info = new Map<string, { position: string; rookie: boolean }>();
+      for (let i = 0; i < ids.length; i += 150) {
+        const found = await client
+          .from("players")
+          .select("id, position")
+          .in("id", ids.slice(i, i + 150));
+        if (found.error) throw found.error;
+        for (const p of found.data) {
+          info.set(p.id, { position: p.position, rookie: false });
+        }
+      }
+      const rows: StatRow[] = totals.data.map((r) => ({
+        playerId: r.player_id,
+        teamId: r.team_id,
+        games: r.games,
+        started: r.started,
+        minutes: r.minutes,
+        points: r.points,
+        rebounds: r.rebounds,
+        assists: r.assists,
+        steals: r.steals,
+        blocks: r.blocks,
+        turnovers: r.turnovers,
+        fgm: r.fgm,
+        fga: r.fga,
+        ftm: r.ftm,
+        fta: r.fta,
+      }));
+      return awardLines(rows, info);
+    },
+
+    async loadAllStarPlayers(_seasonId: string, ids: readonly string[]) {
+      const found = await client
+        .from("players")
+        .select(`${PLAYER_COLUMNS}, last_name`)
+        .in("id", [...ids]);
+      if (found.error) throw found.error;
+      return {
+        players: found.data,
+        lastNames: new Map(found.data.map((p) => [p.id, p.last_name])),
+      };
+    },
+
+    async recordAllStarGame(
+      seasonId: string,
+      game: AllStarRecord,
+    ): Promise<void> {
+      const { error } = await client.rpc("admin_record_all_star_game", {
+        target_season: seasonId,
+        payload: game as never,
       });
       if (error) throw error;
     },

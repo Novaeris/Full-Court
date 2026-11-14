@@ -114,6 +114,17 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### The All-Star Game
+
+Half way through the regular season (before day `floor(last day / 2)`, never the first), the league plays an All-Star Game.
+
+- **Who is picked.** The 24 best players so far, by efficiency per game (points, rebounds, assists, steals and blocks, less misses and turnovers). A player must have played at least half the games the most-used player has, so a star who has barely played isn't picked. If fewer than 24 qualify, there is no game that season.
+- **Two squads.** The two best players are the captains, one for each squad, and the rest are drafted in a snake (A, B, B, A, A, B, B, A...) so the squads come out even. Each squad is named for its captain ("Team Okafor"); the best five by pick order start.
+- **The game.** One real game between two squads of twelve, with the same engine as every other game: all-stars play a fast pace and shoot a lot of threes, there is no home court, and it can go to overtime. It is the same game every time for a league and year, so a repeated run plays the same one.
+- **Most valuable player** is the best line on the winning squad (points, rebounds, assists, steals and blocks, less turnovers).
+- **Where it shows.** The Stats tab has the score, the MVP and both squads' lines; History lists each season's game; a selected player's page lists "All-Star" with his awards; and the owner's inbox says which of their players were picked and how they did. It doesn't count in any statistics and a player isn't hurt in it.
+- **Not yet:** a dunk or three-point contest, voting by fans, coaches, a game for rookies, and the owner choosing the reserves.
+
 ### Extending a contract
 
 An owner doesn't have to wait for a contract to end. On the **Moves** page, any player of their team with **two years or fewer left** can be given a new contract.
@@ -253,7 +264,7 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); the head coach's effect and the rotation size came in Phase 25; what is still missing is player-by-player minutes and a bench order.
 
-**6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; no all-star game; an inbox in Phase 26 (a player who retires from another team isn't announced); a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
+**6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; an All-Star Game in Phase 29; an inbox in Phase 26 (a player who retires from another team isn't announced); a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
 
 **Order.** (a) Make AI Assist real and move the offseason's decisions to the owner: a draft board that exists before the draft, choosing picks, roster moves in free agency and the preseason. (b) Finances and contracts: salaries, the cap, rookie scale, owner budget, staff payroll folded into it. (c) Free agency with offers and negotiation, extensions, releases. (d) In-season roster moves and trades. (e) Strategy, lineups and the head coach's effect on games. (f) Awards and history.
 
