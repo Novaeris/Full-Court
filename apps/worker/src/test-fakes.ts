@@ -56,6 +56,10 @@ export type FakeOptions = {
   /** Leave out `applyInjuries`, as a database without it would. */
   withInjuries?: boolean;
   injuryError?: Error;
+  /** Throw on this many claims (then work normally), as a dropped connection would. */
+  claimFailures?: number;
+  /** Throw on this many requeue checks. */
+  requeueFailures?: number;
 };
 
 /** An in-memory season, job and league that behaves like the database functions. */
@@ -83,15 +87,25 @@ export function fakeDb(options: FakeOptions = {}) {
   const injuryCalls: { day: number; injuries: StoredInjury[] }[] = [];
   let claimed = false;
   let requeueCalls = 0;
+  let claimsFailed = 0;
+  let requeuesFailed = 0;
   let commitCalls = 0;
 
   const db: WorkerDb = {
     async claimJob() {
+      if (claimsFailed < (options.claimFailures ?? 0)) {
+        claimsFailed++;
+        throw new TypeError("fetch failed");
+      }
       if (claimed) return null;
       claimed = true;
       return { ...job };
     },
     async requeueStale() {
+      if (requeuesFailed < (options.requeueFailures ?? 0)) {
+        requeuesFailed++;
+        throw new TypeError("fetch failed");
+      }
       requeueCalls++;
       return 0;
     },

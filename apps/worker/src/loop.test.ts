@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readConfig } from "./config";
-import { work } from "./loop";
+import { MAX_FAILURES_IN_A_ROW, work } from "./loop";
 import { fakeDb } from "./test-fakes";
 
 const quiet = () => {};
@@ -32,6 +32,42 @@ describe("work", () => {
       log: quiet,
     });
     expect(fake.commits).toEqual([]);
+  });
+
+  const options = {
+    workerId: "w1",
+    pollMs: 1,
+    staleAfterMs: 60_000,
+    once: true,
+    shouldStop: () => false,
+    log: quiet,
+  };
+
+  it("carries on after a dropped connection while looking for work", async () => {
+    const fake = fakeDb({ claimFailures: 2, requeueFailures: 1 });
+    await work(fake.db, options);
+    // Three failures in all (one requeue, two claims), then the job is played.
+    expect(fake.commits).toHaveLength(3);
+    expect(fake.job.status).toBe("done");
+  });
+
+  it("a run that must end gives up when looking for work keeps failing", async () => {
+    const fake = fakeDb({ claimFailures: 1000 });
+    await expect(work(fake.db, options)).rejects.toThrow("fetch failed");
+    expect(fake.commits).toEqual([]);
+    expect(MAX_FAILURES_IN_A_ROW).toBe(5);
+  });
+
+  it("a worker that keeps running keeps looking, however many times it fails", async () => {
+    const fake = fakeDb({ claimFailures: 12 });
+    let polls = 0;
+    await work(fake.db, {
+      ...options,
+      once: false,
+      shouldStop: () => ++polls > 20,
+    });
+    // It survived twelve failures in a row and then played the job.
+    expect(fake.commits).toHaveLength(3);
   });
 
   it("survives a database error and carries on", async () => {

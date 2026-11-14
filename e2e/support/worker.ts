@@ -7,13 +7,30 @@ import { execSync } from "node:child_process";
  * Several tests may run it at once: each worker claims only its own league's jobs.
  */
 export function runWorker(leagueId: string): void {
-  execSync("pnpm --filter @fullcourt/worker once", {
-    stdio: "pipe",
-    timeout: 180_000,
-    // Only this league's jobs: another test may have left a job queued on
-    // purpose, and a worker that took it would change what that test sees.
-    env: { ...process.env, WORKER_ONLY_LEAGUE: leagueId },
-  });
+  try {
+    execSync("pnpm --filter @fullcourt/worker once", {
+      stdio: "pipe",
+      timeout: 180_000,
+      // Only this league's jobs: another test may have left a job queued on
+      // purpose, and a worker that took it would change what that test sees.
+      env: { ...process.env, WORKER_ONLY_LEAGUE: leagueId },
+    });
+  } catch (error) {
+    // Say why the worker failed: execSync's own message is only "Command failed".
+    const e = error as { stdout?: Buffer; stderr?: Buffer; message: string };
+    const tail = (b: Buffer | undefined) =>
+      (b?.toString() ?? "").trim().split("\n").slice(-15).join("\n");
+    throw new Error(
+      [
+        e.message,
+        "--- worker output ---",
+        tail(e.stdout),
+        "--- worker errors ---",
+        tail(e.stderr),
+      ].join("\n"),
+      { cause: error },
+    );
+  }
 }
 
 /**

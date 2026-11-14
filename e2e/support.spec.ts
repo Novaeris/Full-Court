@@ -4,6 +4,12 @@ import { createConfirmedUser, signInThroughUi } from "./support/auth";
 /**
  * Contact & Support form. Visitors are rate limited per IP address, so each
  * test claims its own address; signed-in players are limited per account.
+ *
+ * There is also a global guard of 200 requests a day (`support:all` in
+ * `app_private.rate_limits`), and one full run sends about ten. Run the whole
+ * suite more than about twenty times in a UTC day and these tests fail with the
+ * form refusing every message. To start again on a local database:
+ *   delete from app_private.rate_limits where bucket like 'support:%';
  */
 test.beforeEach(async ({ page }) => {
   const octet = () => Math.floor(Math.random() * 250) + 1;
