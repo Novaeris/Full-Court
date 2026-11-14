@@ -1043,6 +1043,41 @@ export const StatsResponseSchema = z.object({
 });
 export type StatsResponse = z.infer<typeof StatsResponseSchema>;
 
+/** GET /api/v1/leagues/:leagueId/award-race: who is leading each award on the season so far (docs/DESIGN.md, "The award race"). */
+export const AwardRaceResponseSchema = z.object({
+  season: z
+    .object({
+      year: z.number().int(),
+      day: z.number().int(),
+      phase: z.string(),
+    })
+    .nullable(),
+  /** The most games any player has played. */
+  games: z.number().int(),
+  races: z.array(
+    z.object({
+      award: z.string(),
+      label: z.string(),
+      candidates: z.array(
+        z.object({
+          rank: z.number().int(),
+          playerId: z.uuid(),
+          name: z.string(),
+          position: z.string(),
+          teamId: z.uuid(),
+          games: z.number().int(),
+          points: z.number(),
+          rebounds: z.number(),
+          assists: z.number(),
+          /** The score the award's rules give him, so the gaps can be seen. */
+          score: z.number(),
+        }),
+      ),
+    }),
+  ),
+});
+export type AwardRaceResponse = z.infer<typeof AwardRaceResponseSchema>;
+
 /** A player of your team who can be given a new contract (docs/DESIGN.md, "Extending a contract"). */
 export const ExtensionCandidateSchema = z.object({
   player: OffseasonPlayerSchema,

@@ -12,6 +12,7 @@ import {
   DraftResponseSchema,
   HistoryResponseSchema,
   LeagueExportSchema,
+  AwardRaceResponseSchema,
   InboxResponseSchema,
   NewsResponseSchema,
   ExtendResultSchema,
@@ -47,6 +48,7 @@ import {
   type DraftSimRequest,
   type HistoryResponse,
   type LeagueExport,
+  type AwardRaceResponse,
   type InboxResponse,
   type NewsResponse,
   type ExtendRequest,
@@ -578,6 +580,11 @@ export function createApiClient(options: ApiClientOptions) {
             teamId ? `?team=${encodeURIComponent(teamId)}` : ""
           }`,
           (b) => InboxResponseSchema.parse(b),
+        ),
+      /** Who is leading each award on the season so far. */
+      awardRace: (id: string): Promise<AwardRaceResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/award-race`, (b) =>
+          AwardRaceResponseSchema.parse(b),
         ),
       /** What has happened around the league, newest first. */
       news: (id: string): Promise<NewsResponse> =>

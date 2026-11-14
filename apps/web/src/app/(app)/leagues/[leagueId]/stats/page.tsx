@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import type { AllStarGame, Team } from "@fullcourt/validation";
+import type {
+  AllStarGame,
+  AwardRaceResponse,
+  Team,
+} from "@fullcourt/validation";
 import { EmptyState } from "@/components/ui/empty-state";
 import { loadLeague } from "@/server/leagues/load";
 import { getAllStar } from "@/server/services/allstar";
+import { getAwardRace } from "@/server/services/award-race";
 import { getStats } from "@/server/services/stats";
 import { listTeams } from "@/server/services/world";
 
@@ -22,6 +27,80 @@ export default function StatsPage({
     >
       <Stats params={params} searchParams={searchParams} />
     </Suspense>
+  );
+}
+
+/** The award race: who leads each of the season's main awards so far. */
+function AwardRaceSection({
+  race,
+  abbr,
+  base,
+}: {
+  race: AwardRaceResponse;
+  abbr: (id: string) => string;
+  base: string;
+}) {
+  if (!race.season) {
+    return (
+      <EmptyState
+        icon="trophy"
+        title="No games yet"
+        description="The award race starts once the season has games to count. Simulate a day from the schedule."
+      />
+    );
+  }
+  return (
+    <>
+      <p className="text-text-muted">
+        {race.season.year} season · after {race.games}{" "}
+        {race.games === 1 ? "game" : "games"} · the leaders on the rules that
+        pick each award, so the race ends on the winner
+      </p>
+      <div className="grid gap-4 tablet:grid-cols-2">
+        {race.races.map((r) => (
+          <section
+            key={r.award}
+            aria-labelledby={`race-${r.award}`}
+            className="rounded-lg border border-border bg-surface p-5"
+          >
+            <h2 id={`race-${r.award}`} className="text-lg font-bold">
+              {r.label}
+            </h2>
+            {r.candidates.length === 0 ? (
+              <p className="mt-2 text-text-muted">Nobody qualifies yet.</p>
+            ) : (
+              <ol className="mt-2">
+                {r.candidates.map((c) => (
+                  <li
+                    key={c.playerId}
+                    className="flex items-baseline justify-between gap-3 border-t border-border py-1.5 first:border-t-0"
+                  >
+                    <span className="min-w-0">
+                      <span className="tabular-nums text-text-muted">
+                        {c.rank}.
+                      </span>{" "}
+                      <Link
+                        href={`${base}/players/${c.playerId}`}
+                        className="font-semibold text-accent underline underline-offset-4"
+                      >
+                        {c.name}
+                      </Link>{" "}
+                      <span className="text-sm text-text-muted">
+                        {c.position} {abbr(c.teamId)} · {c.points} pts,{" "}
+                        {c.rebounds} reb, {c.assists} ast
+                      </span>
+                    </span>
+                    <span className="font-bold tabular-nums">
+                      {c.score.toFixed(1)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -111,12 +190,16 @@ async function Stats({
 }) {
   const { leagueId } = await params;
   const query = await searchParams;
-  const playoffs = query.phase === "playoffs";
+  const awards = query.view === "awards";
+  const playoffs = !awards && query.phase === "playoffs";
   const { ctx, league } = await loadLeague(leagueId);
-  const [stats, teams, allStar] = await Promise.all([
+  const [stats, teams, allStar, race] = await Promise.all([
     getStats(ctx, league.id, playoffs),
     listTeams(ctx, league.id),
-    playoffs ? Promise.resolve({ game: null }) : getAllStar(ctx, league.id),
+    playoffs || awards
+      ? Promise.resolve({ game: null })
+      : getAllStar(ctx, league.id),
+    awards ? getAwardRace(ctx, league.id) : Promise.resolve(null),
   ]);
   const abbr = (id: string) =>
     teams.find((t: Team) => t.id === id)?.abbreviation ?? "";
@@ -126,11 +209,20 @@ async function Stats({
     <div className="flex flex-col gap-6">
       <nav aria-label="Statistics" className="flex flex-wrap gap-2">
         {[
-          { label: "Regular season", href: `${base}/stats`, on: !playoffs },
+          {
+            label: "Regular season",
+            href: `${base}/stats`,
+            on: !playoffs && !awards,
+          },
           {
             label: "Playoffs",
             href: `${base}/stats?phase=playoffs`,
             on: playoffs,
+          },
+          {
+            label: "Award race",
+            href: `${base}/stats?view=awards`,
+            on: awards,
           },
         ].map((t) => (
           <Link
@@ -148,10 +240,11 @@ async function Stats({
           </Link>
         ))}
       </nav>
-      {allStar.game ? (
+      {race ? <AwardRaceSection race={race} abbr={abbr} base={base} /> : null}
+      {awards ? null : allStar.game ? (
         <AllStarSection leagueId={league.id} game={allStar.game} abbr={abbr} />
       ) : null}
-      {!stats.season || stats.games === 0 ? (
+      {awards ? null : !stats.season || stats.games === 0 ? (
         <EmptyState
           icon="trophy"
           title={playoffs ? "No playoff games yet" : "No games yet"}

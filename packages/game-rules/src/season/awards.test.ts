@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  RACE_AWARDS,
   awardLines,
+  awardRace,
   chooseAwards,
   efficiency,
   type AwardInput,
@@ -211,5 +213,54 @@ describe("awardLines", () => {
     expect(awardLines([{ ...row("a", 1, 1), playerId: "x" }], info)).toEqual(
       [],
     );
+  });
+});
+
+describe("awardRace", () => {
+  const lines = [
+    line("a", { points: 70 * 28 }),
+    line("b", { points: 70 * 24, teamId: "t2" }),
+    line("c", { points: 70 * 20, steals: 200, blocks: 150 }),
+    line("d", { points: 70 * 10, started: 0, minutes: 70 * 20 }),
+    line("e", { rookie: true, games: 50, points: 50 * 18 }),
+    line("f", { games: 10 }),
+  ];
+  const data = input(lines, { previous: new Map([["b", 5]]) });
+
+  it("ends on the winner the season's award picks, for every race", () => {
+    const won = chooseAwards(data);
+    for (const award of RACE_AWARDS) {
+      expect(awardRace(data, award, 1)[0]?.line.playerId, award).toBe(
+        winner(won, award),
+      );
+    }
+  });
+
+  it("lists the candidates best first, each with a score, up to the limit", () => {
+    const race = awardRace(data, "mvp", 3);
+    expect(race).toHaveLength(3);
+    // The best scorer on the winning team leads.
+    expect(race[0]?.line.playerId).toBe("a");
+    for (let i = 1; i < race.length; i++) {
+      expect(race[i - 1]!.score).toBeGreaterThanOrEqual(race[i]!.score);
+    }
+  });
+
+  it("leaves out who hasn't played enough, and who can't win that award", () => {
+    const mvp = awardRace(data, "mvp", 10).map((r) => r.line.playerId);
+    expect(mvp).not.toContain("f");
+    expect(
+      awardRace(data, "rookie-of-the-year", 10).map((r) => r.line.playerId),
+    ).toEqual(["e"]);
+    expect(
+      awardRace(data, "sixth-man", 10).map((r) => r.line.playerId),
+    ).toEqual(["d"]);
+    expect(
+      awardRace(data, "most-improved", 10).map((r) => r.line.playerId),
+    ).toEqual(["b"]);
+  });
+
+  it("is empty when nobody has played", () => {
+    expect(awardRace(input([]), "mvp")).toEqual([]);
   });
 });

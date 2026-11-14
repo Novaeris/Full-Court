@@ -102,12 +102,24 @@ const ranked = (
 const GUARDS = ["PG", "SG"];
 const FORWARDS = ["SF", "PF"];
 
-/** All the season's awards. A category nobody qualifies for is left out. */
-export function chooseAwards(input: AwardInput): AwardWinner[] {
-  const out: AwardWinner[] = [];
-  const give = (award: string, l: AwardLine | null) => {
-    if (l) out.push({ award, playerId: l.playerId, teamId: l.teamId });
-  };
+/** The awards that can be followed through the season as a race. */
+export const RACE_AWARDS = [
+  "mvp",
+  "defensive-player",
+  "sixth-man",
+  "rookie-of-the-year",
+  "most-improved",
+] as const;
+export type RaceAward = (typeof RACE_AWARDS)[number];
+
+/** Who can win an award and how a line is scored for it (higher wins). */
+type Contest = { pool: AwardLine[]; score: (l: AwardLine) => number };
+
+/**
+ * What the award rules share: who is eligible and each race's pool and score.
+ * `value` is a player's worth to his team, for the MVP and the all-league teams.
+ */
+function contests(input: AwardInput) {
   const maxGames = Math.max(0, ...input.lines.map((l) => l.games));
   const eligible = input.lines.filter(
     (l) => l.games >= maxGames * AWARD_MIN_GAMES && l.games > 0,
@@ -131,48 +143,67 @@ export function chooseAwards(input: AwardInput): AwardWinner[] {
     return 1 - at / (order.length - 1);
   };
 
-  // A player's worth to his team, for the MVP and the all-league teams:
-  // efficiency, weighted by how well the team did.
+  // Efficiency, weighted by how well the team did.
   const value = (l: AwardLine) =>
     efficiency(l) * (0.6 + 0.8 * winShare(l.teamId));
 
-  give("mvp", best(eligible, value));
-  give(
-    "defensive-player",
-    best(
-      eligible,
-      (l) =>
+  const races: Record<RaceAward, Contest> = {
+    mvp: { pool: eligible, score: value },
+    "defensive-player": {
+      pool: eligible,
+      score: (l) =>
         (2.5 * perGame(l, l.steals) +
           2 * perGame(l, l.blocks) +
           0.5 * perGame(l, l.rebounds)) *
         (0.9 + 0.2 * defenceShare(l.teamId)),
-    ),
-  );
-  give(
-    "sixth-man",
-    best(
-      eligible.filter(
+    },
+    "sixth-man": {
+      pool: eligible.filter(
         (l) => l.started <= l.games * 0.25 && perGame(l, l.minutes) >= 15,
       ),
-      efficiency,
-    ),
-  );
-  give(
-    "rookie-of-the-year",
-    best(
-      input.lines.filter(
+      score: efficiency,
+    },
+    "rookie-of-the-year": {
+      pool: input.lines.filter(
         (l) => l.rookie && l.games >= maxGames * (AWARD_MIN_GAMES * 0.67),
       ),
-      efficiency,
-    ),
-  );
-  give(
-    "most-improved",
-    best(
-      eligible.filter((l) => input.previous.has(l.playerId)),
-      (l) => efficiency(l) - (input.previous.get(l.playerId) ?? 0),
-    ),
-  );
+      score: efficiency,
+    },
+    "most-improved": {
+      pool: eligible.filter((l) => input.previous.has(l.playerId)),
+      score: (l) => efficiency(l) - (input.previous.get(l.playerId) ?? 0),
+    },
+  };
+  return { eligible, value, races };
+}
+
+/**
+ * The leading candidates for an award on the totals so far, best first, with
+ * the score the rules give each (the same rules the season's award uses, so
+ * the race ends on the winner). Ties go to the smaller player id.
+ */
+export function awardRace(
+  input: AwardInput,
+  award: RaceAward,
+  limit = 5,
+): { line: AwardLine; score: number }[] {
+  const { pool, score } = contests(input).races[award];
+  return ranked(pool, score)
+    .slice(0, limit)
+    .map((line) => ({ line, score: score(line) }));
+}
+
+/** All the season's awards. A category nobody qualifies for is left out. */
+export function chooseAwards(input: AwardInput): AwardWinner[] {
+  const out: AwardWinner[] = [];
+  const give = (award: string, l: AwardLine | null) => {
+    if (l) out.push({ award, playerId: l.playerId, teamId: l.teamId });
+  };
+  const { eligible, value, races } = contests(input);
+
+  for (const award of RACE_AWARDS) {
+    give(award, best(races[award].pool, races[award].score));
+  }
   give(
     "scoring-title",
     best(eligible, (l) => perGame(l, l.points)),

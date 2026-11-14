@@ -317,6 +317,15 @@ Players get hurt, on every team, in the regular season and the playoffs.
 - **Where it shows.** The team page has a Status column ("Out 6 days"), the player page says what the injury is and how long is left, and the starters picker marks hurt players. Every injury is kept in a table for the league's history.
 - **Not yet:** a hurt player playing through it, injuries that last into the next season or lower ratings, rehab, and the AI taking injuries into account when it trades or signs.
 
+### The award race
+
+The Stats tab has an **Award race** view: who leads each of the season's main awards on the games played so far.
+
+- **Which awards.** Most valuable player, defensive player, sixth man, rookie of the year and most improved player. The five leaders of each are listed with their points, rebounds and assists a game and the score the award's rules give them, so the gaps can be seen.
+- **The same rules as the award.** The race doesn't have its own formula: it ranks the candidates by the very rules the season's award uses (who is eligible, how a player is scored, ties to the smaller player id), on the totals so far and each team's record so far. At the end of the regular season the leader of each race is the player the award then goes to. Early in the season few players have played enough games to qualify, so a race can be short or empty.
+- **Same for everyone.** It is the whole league's race; the owner's players are ranked exactly like everybody else's.
+- **Not yet:** finals MVP and the all-league teams (they need the playoffs), a history of how a race moved, and the standard deviations a "projected winner" would need.
+
 ### Awards and history
 
 When a season is archived (at the start of the next offseason) its awards are decided from the season's totals, by fixed rules, so the same season always gives the same winners.

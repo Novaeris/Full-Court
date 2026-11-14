@@ -74,6 +74,25 @@ async function statsOf(
   )) as unknown as Stat[];
 }
 
+/** Each player's efficiency per game in a season's regular season. */
+export async function efficiencyOf(
+  ctx: UserContext,
+  leagueId: string,
+  seasonId: string,
+): Promise<Map<string, number>> {
+  const rows = (await statsOf(ctx, leagueId, seasonId))
+    .filter((r) => !r.playoffs)
+    .map(toStatRow);
+  const out = new Map<string, number>();
+  for (const l of awardLines(
+    rows,
+    new Map(rows.map((r) => [r.playerId, { position: "", rookie: false }])),
+  )) {
+    out.set(l.playerId, efficiency(l));
+  }
+  return out;
+}
+
 /** Computes and stores the awards of an archived season; returns how many. */
 export async function awardSeason(
   ctx: UserContext,
@@ -131,18 +150,9 @@ export async function awardSeason(
     .map(toStatRow);
 
   // Last season's efficiency, for the most improved player.
-  const previous = new Map<string, number>();
-  if (earlier.data) {
-    const before = (await statsOf(ctx, leagueId, earlier.data.id))
-      .filter((r) => !r.playoffs)
-      .map(toStatRow);
-    for (const l of awardLines(
-      before,
-      new Map(before.map((r) => [r.playerId, { position: "", rookie: false }])),
-    )) {
-      previous.set(l.playerId, efficiency(l));
-    }
-  }
+  const previous = earlier.data
+    ? await efficiencyOf(ctx, leagueId, earlier.data.id)
+    : new Map<string, number>();
 
   const winners = chooseAwards({
     lines: awardLines(regular, info),
