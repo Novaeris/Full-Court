@@ -93,6 +93,9 @@ test("signed-in players get their details filled in and are rate limited", async
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "flow runs on desktop");
+  // Four requests with their waits, and up to a minute of waiting for the next
+  // ten-minute window to begin (see startInsideAWindow).
+  test.setTimeout(120_000);
   const { email, password } = await createConfirmedUser("support", "Pat Coach");
   await signInThroughUi(page, email, password);
   await startInsideAWindow(page);

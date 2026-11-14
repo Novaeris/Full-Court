@@ -111,10 +111,25 @@ test("an unconfirmed account can't sign in and can resend the link", async ({
   await expect(page.locator("#main").getByRole("alert")).toContainText(
     "Confirm your email",
   );
-  await page
-    .getByRole("button", { name: "Send the confirmation link again" })
-    .click();
-  await expect(page.getByRole("status")).toContainText("new link");
+  // The auth service sends one email to an address every second (locally; a
+  // minute on staging), and counts that against its own clock and the
+  // database's, which can be a few seconds apart. Sign-up just sent one, so the
+  // first ask can be refused with "Too many attempts": wait and ask again, as a
+  // person told to wait would.
+  const resend = page.getByRole("button", {
+    name: "Send the confirmation link again",
+  });
+  const sent = page.getByRole("status").filter({ hasText: "new link" });
+  const refused = page
+    .getByRole("alert")
+    .filter({ hasText: "Too many attempts" });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await resend.click();
+    await expect(sent.or(refused)).toBeVisible();
+    if (await sent.isVisible()) break;
+    await page.waitForTimeout(2_000);
+  }
+  await expect(sent).toBeVisible();
 });
 
 test("sign in, return to the requested page, then sign out", async ({
