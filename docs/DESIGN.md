@@ -114,6 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### Game recaps
+
+A finished game's page opens with a short written recap under the score, made from the score and the box score alone, so the same game always reads the same.
+
+- **The headline** names the winner first, with a verb that fits the margin (edged for 1 to 3 points, beat up to 9, defeated up to 19, routed beyond) and the score, and says if it went to overtime: "Boston Comets edged Denver Peaks 101-99 in overtime."
+- **Notes**, a few at most: who led each team in points (the winner's first), then standout lines, most striking first (a triple-double, a 40-point game, a double-double, five steals, five blocks, six threes), then what kind of game it was (decided by three points or fewer without overtime, a blowout of 25 or more, 230 or more points in all, or 170 or fewer).
+- A game not yet played has no recap.
+- **Not yet:** who was ahead when, runs and lead changes (those need the plays), series context for playoff games, streaks and season highs.
+
 ### The team page
 
 Every team's page (reached from Teams, Standings or any link to a team) opens with an overview of its season, above the roster:
