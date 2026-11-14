@@ -200,7 +200,18 @@ An owner doesn't have to wait for a contract to end. On the **Moves** page, any 
 - **What an extension is.** A new salary and a length of one to five years (no longer than his age allows), counted from the current season, so it has to end later than his old contract does. The new salary replaces the old one at once, and the team's payroll can't pass the hard ceiling (an extension is like re-signing a player: no cap room is needed, only room under the ceiling).
 - **Whether he agrees.** He decides the way a free agent does: what the offer is worth to him is the salary raised or lowered by how he sees the team (winning, role, market and history, weighted by what he cares about), and the line is that worth being at least what he asks. There is no luck in it. The page shows each player's **ask**, **the least he will sign for** and how he feels (eager, willing or reluctant), and an offer under the line is turned down with the figure he would take. A player who already plays for the team counts it a little in its favour. In a league's first season there is no past to judge a team by, so every team looks average to its players.
 - **Open** in the regular season and from free agency to the preseason. It shows in the inbox ("You extended ...").
-- **Not yet:** the computer teams extending their own players (they still let contracts run out and re-sign in free agency), negotiating (asking for more years or a discount for them), and bonuses.
+- **Not yet:** negotiating (asking for more years or a discount for them), and bonuses.
+
+### Computer teams re-sign players
+
+A computer team doesn't let every contract run out. When a season has been played and archived, and before its contracts end, each computer team decides which of the players whose contracts end with that season it wants to keep.
+
+- **Who it wants.** Its best eight players by value, except that a player of 33 or more is kept only among its best five, and nobody of 35 or more is. A promising youngster (23 or under, potential at least 8 above his rating) is kept down to the eleventh player. Everybody else reaches free agency.
+- **What it pays.** The least he will sign for, by the same rule an owner's extension uses (what he asks, raised or lowered by how he sees the team: its finish, its city, its history, his role). If he would want more than 120% of his ask, the team lets him go. The contract runs as long as he asks (at least two years, at most what his age allows).
+- **What it can afford.** It goes best player first, and stops paying raises once its payroll would pass 110% of the cap, so it keeps room to fill its roster. A player re-signed for less than he earns now never counts against that.
+- **Not the owner's team.** The owner's own teams, including ones on AI Assist, are untouched: their players reach free agency and the team's own re-signing rights apply as before.
+- **Where it shows.** The new contract is recorded as an extension on "day 0" of the season that just ended, so it is in the league backup and the player's contract history; the player simply stays on his team into the next season.
+- **Not yet:** a computer team re-signing in free agency under a different price than an owner would pay, an owner seeing league-wide re-signings in a news feed, and a player refusing for reasons other than money and how he sees the team.
 
 ### Free agency day by day
 
