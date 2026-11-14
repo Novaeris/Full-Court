@@ -19,6 +19,55 @@ import type { OffseasonPlayer } from "./offseason";
  * but is never below the minimum. Free agency itself has no cap.
  */
 
+/**
+ * What each team pays its players: `salaries` by player id (a player with none
+ * counts for nothing), added up over the players on a team.
+ */
+export function payrollOf(
+  players: readonly { id: string; teamId: string | null }[],
+  salaries: ReadonlyMap<string, number>,
+): Map<string, number> {
+  const pay = new Map<string, number>();
+  for (const p of players) {
+    if (p.teamId)
+      pay.set(p.teamId, (pay.get(p.teamId) ?? 0) + (salaries.get(p.id) ?? 0));
+  }
+  return pay;
+}
+
+/**
+ * A team whose payroll leaves no room to fill its roster to the minimum with
+ * minimum contracts lets its best-paid players go until it can: the hard
+ * ceiling is never passed, and a roster is never left short. Only the teams in
+ * `teams` do this. The payrolls it was given no longer describe the result:
+ * work them out again with `payrollOf` before using them.
+ */
+export function shedPayroll<P extends { id: string; teamId: string | null }>(
+  players: readonly P[],
+  salaries: ReadonlyMap<string, number>,
+  payroll: ReadonlyMap<string, number>,
+  teams: ReadonlySet<string>,
+  cap: number,
+): P[] {
+  const ceiling = hardCeiling(cap);
+  const min = minSalary(cap);
+  let next = [...players];
+  for (const teamId of teams) {
+    let pay = payroll.get(teamId) ?? 0;
+    let roster = next.filter((p) => p.teamId === teamId);
+    const need = () => Math.max(0, ROSTER_LIMITS.min - roster.length) * min;
+    while (roster.length > 0 && pay + need() > ceiling) {
+      const drop = roster.reduce((a, b) =>
+        (salaries.get(b.id) ?? 0) > (salaries.get(a.id) ?? 0) ? b : a,
+      );
+      pay -= salaries.get(drop.id) ?? 0;
+      roster = roster.filter((p) => p.id !== drop.id);
+      next = next.map((p) => (p.id === drop.id ? { ...p, teamId: null } : p));
+    }
+  }
+  return next;
+}
+
 /** A player below this value is not worth a roster place a team doesn't need. */
 const REPLACEMENT_LEVEL = 57;
 

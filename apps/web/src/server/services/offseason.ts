@@ -5,6 +5,8 @@ import {
   chooseCamp,
   createRng,
   fillRosters,
+  payrollOf,
+  shedPayroll,
   generateStaff,
   hireStaff,
   coverRoster,
@@ -26,7 +28,6 @@ import {
 import {
   ROSTER_LIMITS,
   STAGE_LABELS,
-  hardCeiling,
   minSalary,
   staffBudget,
   campPlaces,
@@ -317,37 +318,6 @@ function freeNumber(players: readonly EnginePlayer[], teamId: string): number {
   return 0;
 }
 
-/**
- * A team whose payroll leaves no room to fill its roster to the minimum with
- * minimum contracts lets its best-paid players go until it can: the hard
- * ceiling is never passed, and a roster is never left short.
- */
-function shedPayroll(
-  players: readonly EnginePlayer[],
-  salaries: ReadonlyMap<string, number>,
-  payroll: ReadonlyMap<string, number>,
-  teams: ReadonlySet<string>,
-  cap: number,
-): EnginePlayer[] {
-  const ceiling = hardCeiling(cap);
-  const min = minSalary(cap);
-  let next = [...players];
-  for (const teamId of teams) {
-    let pay = payroll.get(teamId) ?? 0;
-    let roster = next.filter((p) => p.teamId === teamId);
-    const need = () => Math.max(0, ROSTER_LIMITS.min - roster.length) * min;
-    while (roster.length > 0 && pay + need() > ceiling) {
-      const drop = roster.reduce((a, b) =>
-        (salaries.get(b.id) ?? 0) > (salaries.get(a.id) ?? 0) ? b : a,
-      );
-      pay -= salaries.get(drop.id) ?? 0;
-      roster = roster.filter((p) => p.id !== drop.id);
-      next = next.map((p) => (p.id === drop.id ? { ...p, teamId: null } : p));
-    }
-  }
-  return next;
-}
-
 /** Applies coverRoster's releases and signings for one team to a working copy. */
 function withCoverage(
   players: readonly EnginePlayer[],
@@ -432,12 +402,14 @@ async function runFreeAgency(
       working = withCoverage(working, team.id);
     }
   }
+  // Teams that let players go to make room have a smaller payroll now: filling
+  // with the old figure would think they were still at the ceiling and sign nobody.
   const moves = fillRosters(rng, {
     teams: finish.standingsOrder,
     players: working,
     acting,
     cap: season.salary_cap,
-    payroll,
+    payroll: payrollOf(working, salaries),
   });
   const signed = new Map(moves.map((m) => [m.id, m]));
   const final = applyChanges(working, moves);

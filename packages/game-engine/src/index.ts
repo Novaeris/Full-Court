@@ -100,7 +100,13 @@ export {
   type Progressed,
   type Rookie,
 } from "./offseason/offseason";
-export { coverRoster, fillRosters, type RosterMove } from "./offseason/rosters";
+export {
+  coverRoster,
+  fillRosters,
+  payrollOf,
+  shedPayroll,
+  type RosterMove,
+} from "./offseason/rosters";
 export {
   chooseCamp,
   runCamp,
