@@ -18,6 +18,19 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+/**
+ * The limit is "3 requests in 10 minutes", counted in fixed windows that start
+ * on the 10-minute marks of the clock. Four requests that straddle a mark are
+ * split between two windows and none is refused, so a test of the limit starts
+ * only when there is time to send them inside one window (with room for the
+ * local database's clock being a few seconds off this machine's).
+ */
+async function startInsideAWindow(page: Page) {
+  const window = 10 * 60 * 1000;
+  const left = window - (Date.now() % window);
+  if (left < 45_000) await page.waitForTimeout(left + 1_000);
+}
+
 async function fillForm(
   page: Page,
   overrides: Partial<
@@ -82,6 +95,7 @@ test("signed-in players get their details filled in and are rate limited", async
   test.skip(testInfo.project.name !== "desktop", "flow runs on desktop");
   const { email, password } = await createConfirmedUser("support", "Pat Coach");
   await signInThroughUi(page, email, password);
+  await startInsideAWindow(page);
 
   for (let sent = 0; sent < 3; sent++) {
     await page.goto("/support");
