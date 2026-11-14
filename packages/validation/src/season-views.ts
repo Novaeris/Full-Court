@@ -938,3 +938,43 @@ export const InboxResponseSchema = z.object({
   items: z.array(InboxItemSchema),
 });
 export type InboxResponse = z.infer<typeof InboxResponseSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/stats?phase=: the league's leaders for the
+ * season being played (docs/DESIGN.md, "Statistics").
+ */
+export const StatsResponseSchema = z.object({
+  season: z
+    .object({
+      year: z.number().int(),
+      day: z.number().int(),
+      phase: z.string(),
+    })
+    .nullable(),
+  /** Whether these are playoff numbers. */
+  playoffs: z.boolean(),
+  /** The most games any player has played, which sets how many it takes to be ranked. */
+  games: z.number().int(),
+  boards: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      unit: z.enum(["per game", "percent"]),
+      leaders: z.array(
+        z.object({
+          rank: z.number().int(),
+          playerId: z.uuid(),
+          name: z.string(),
+          position: z.string(),
+          teamId: z.uuid(),
+          games: z.number().int(),
+          /** Per game, or a percentage. */
+          value: z.number(),
+          /** The season total, or the makes for a percentage. */
+          total: z.number().int(),
+        }),
+      ),
+    }),
+  ),
+});
+export type StatsResponse = z.infer<typeof StatsResponseSchema>;

@@ -9,6 +9,7 @@ const TABS = [
   { segment: "teams", label: "Teams" },
   { segment: "schedule", label: "Schedule" },
   { segment: "standings", label: "Standings" },
+  { segment: "stats", label: "Stats" },
   { segment: "playoffs", label: "Playoffs" },
   { segment: "history", label: "History" },
   { segment: "inbox", label: "Inbox" },

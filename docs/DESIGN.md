@@ -171,6 +171,14 @@ Nothing the AI does is hidden: what it did shows in the offseason report. Simula
 - **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
 - **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
 
+### Statistics
+
+The **Stats** tab shows how the season being played is going. Past seasons are on the History tab (their numbers live in the history tables once a season is archived).
+
+- **League leaders**, top ten in eight categories: points, rebounds, assists, steals and blocks per game, and field goal, three-point and free throw percentage. A player must have played at least half the games of the most-used player to be ranked, and a percentage needs enough attempts (3 field goals, 1 three and 1 free throw a game), so one lucky shot doesn't lead. A player traded in the season is one player, listed under the team he played most for. There is a regular-season view and a playoff view.
+- **A player's page** has a **season line** (games, starts, minutes, points, rebounds, assists, steals, blocks, turnovers and the three shooting percentages, per game) for the regular season and, once there are playoff games, the playoffs, and his **latest ten games** with the score and his points, rebounds and assists, each linking to the game.
+- **Not yet:** team statistics, sortable full tables, advanced measures, and splits (home and away, by month).
+
 ### The inbox
 
 The **Inbox** tab tells the owner what has happened to their team, newest first, so nothing slips by while a season is simulated in bulk. It lists:

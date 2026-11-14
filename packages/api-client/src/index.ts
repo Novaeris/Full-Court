@@ -13,6 +13,7 @@ import {
   HistoryResponseSchema,
   InboxResponseSchema,
   ShopResponseSchema,
+  StatsResponseSchema,
   StrategyResponseSchema,
   TradeEvaluationSchema,
   TradePartnerResponseSchema,
@@ -41,6 +42,7 @@ import {
   type HistoryResponse,
   type InboxResponse,
   type ShopRequest,
+  type StatsResponse,
   type StrategyResponse,
   type UpdateStrategyRequest,
   type ShopResponse,
@@ -496,6 +498,13 @@ export function createApiClient(options: ApiClientOptions) {
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
           input,
+        ),
+      /** The league's leaders for the season being played. */
+      stats: (id: string, playoffs = false): Promise<StatsResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/stats${playoffs ? "?phase=playoffs" : ""}`,
+          (b) => StatsResponseSchema.parse(b),
         ),
       /** What has happened to your team, newest first. */
       inbox: (id: string, teamId?: string): Promise<InboxResponse> =>

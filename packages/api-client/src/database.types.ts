@@ -2640,6 +2640,29 @@ export type Database = {
         }
       }
       league_limit: { Args: never; Returns: number }
+      player_season_totals: {
+        Args: { playoffs?: boolean; target_season: string }
+        Returns: {
+          assists: number
+          blocks: number
+          fga: number
+          fgm: number
+          fouls: number
+          fta: number
+          ftm: number
+          games: number
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          started: number
+          steals: number
+          team_id: string
+          tpa: number
+          tpm: number
+          turnovers: number
+        }[]
+      }
       rename_structure: {
         Args: {
           conference_names: Json
