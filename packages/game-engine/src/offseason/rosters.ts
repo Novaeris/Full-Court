@@ -68,6 +68,23 @@ export function shedPayroll<P extends { id: string; teamId: string | null }>(
   return next;
 }
 
+/**
+ * Whether a player who ends free agency on a team signs a new contract with it
+ * (the minimum one the engine set) or keeps the one he has. `now` is his team
+ * at the end, `afterShed` his team once teams had let players go to get under
+ * the ceiling, and `signedByEngine` whether the fill signed him. He is new to
+ * the team if he was a free agent, was let go (even by the team that signs him
+ * again) or was cut by one team and signed by another: in every case the engine
+ * counted him at the contract it set, so the saved result has to as well.
+ */
+export function getsNewContract(
+  now: string | null,
+  afterShed: string | null,
+  signedByEngine: boolean,
+): boolean {
+  return now !== null && (afterShed === null || signedByEngine);
+}
+
 /** A player below this value is not worth a roster place a team doesn't need. */
 const REPLACEMENT_LEVEL = 57;
 
@@ -115,6 +132,13 @@ export function fillRosters(
      * that would take it past the hard ceiling.
      */
     payroll?: ReadonlyMap<string, number>;
+    /**
+     * Players a team has just let go (to get under the hard ceiling), by the
+     * team that did. A team doesn't sign back someone it released to make
+     * room: it couldn't afford him, and the saved result would otherwise
+     * keep his old salary while the team believed it had shed it.
+     */
+    released?: ReadonlyMap<string, string>;
   },
 ): RosterMove[] {
   const teams = [...input.teams];
@@ -179,9 +203,11 @@ export function fillRosters(
         input.cap === undefined ||
         askingSalary(byId.get(id) as OffseasonPlayer, input.cap) <=
           minSalary(input.cap) * 1.6;
-      const cheap = pool.filter(wouldTakeMinimum);
+      const open = pool.filter((id) => input.released?.get(id) !== teamId);
+      if (open.length === 0) break;
+      const cheap = open.filter(wouldTakeMinimum);
       const candidates =
-        cheap.length > 0 && roster.length >= ROSTER_LIMITS.min ? cheap : pool;
+        cheap.length > 0 && roster.length >= ROSTER_LIMITS.min ? cheap : open;
       let best = 0;
       let bestScore = -Infinity;
       pool.forEach((id, i) => {

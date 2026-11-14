@@ -5,6 +5,7 @@ import {
   chooseCamp,
   createRng,
   fillRosters,
+  getsNewContract,
   payrollOf,
   shedPayroll,
   generateStaff,
@@ -284,6 +285,13 @@ export async function advanceOffseason(
       message === "staff_over_budget" ||
       message === "over_ceiling"
     ) {
+      // The database says which team broke which rule; keep that for the log.
+      console.error("Offseason step refused", {
+        leagueId: league.id,
+        stage: season.stage,
+        message,
+        details: (error as { details?: string }).details,
+      });
       throw new ApiError(
         409,
         message,
@@ -397,6 +405,17 @@ async function runFreeAgency(
     acting,
     season.salary_cap,
   );
+  // Who was let go to get under the ceiling, and by which team.
+  const released = new Map(
+    players
+      .filter(
+        (p) =>
+          p.teamId !== null &&
+          working.find((w) => w.id === p.id)?.teamId === null,
+      )
+      .map((p) => [p.id, p.teamId as string] as const),
+  );
+  const afterShed = new Map(working.map((p) => [p.id, p.teamId] as const));
   for (const team of owned) {
     if (team.assist.rosterCoverage && !team.assist.rosterManagement) {
       working = withCoverage(working, team.id);
@@ -410,15 +429,18 @@ async function runFreeAgency(
     acting,
     cap: season.salary_cap,
     payroll: payrollOf(working, salaries),
+    released,
   });
   const signed = new Map(moves.map((m) => [m.id, m]));
   const final = applyChanges(working, moves);
   checkOwnedRosters(final, owned);
 
   const before = new Map(players.map((p) => [p.id, p]));
+  const signedAnew = (p: EnginePlayer) =>
+    getsNewContract(p.teamId, afterShed.get(p.id) ?? null, signed.has(p.id));
   const changed = final.filter((p) => {
     const was = before.get(p.id) as EnginePlayer;
-    return was.teamId !== p.teamId || was.jersey !== p.jersey;
+    return was.teamId !== p.teamId || was.jersey !== p.jersey || signedAnew(p);
   });
 
   // The owner decides their own staff; the computer teams hire, worst first.
@@ -434,11 +456,10 @@ async function runFreeAgency(
   await applyRosters({
     seasonId: season.id,
     moves: changed.map((p) => {
-      const was = before.get(p.id) as EnginePlayer;
       const engine = signed.get(p.id);
       // A player who joins a team signs a minimum contract (unless the engine
       // already set his terms).
-      const joins = was.teamId === null && p.teamId !== null;
+      const joins = signedAnew(p);
       return {
         id: p.id,
         team_id: p.teamId,

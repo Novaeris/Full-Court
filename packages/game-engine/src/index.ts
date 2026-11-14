@@ -108,6 +108,7 @@ export {
 export {
   coverRoster,
   fillRosters,
+  getsNewContract,
   payrollOf,
   shedPayroll,
   type RosterMove,

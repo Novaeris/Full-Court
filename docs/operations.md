@@ -90,3 +90,21 @@ Every other failure should be a real one. Failing tests keep their traces in `te
 ## Checking that old leagues survive a migration
 
 `pnpm check:legacy-upgrade` resets the **local** Supabase database to the last migration before Owner Mode, creates an old-style league the way the old server did, applies the newer migrations, and checks what the old data became (config left empty, stable conference and division ids with the same display names, the chosen team as Player 1's, every player still on a team). It then resets the local database to the latest migrations. It needs Docker and `supabase start`, and never touches a hosted project. Run it whenever a migration changes how existing leagues are stored.
+
+## Soaking the offseason
+
+An offseason step the server refuses ("That step can't be taken as things
+stand") is a bug in how a team's roster or payroll was worked out, and it can
+depend on the draw. `e2e/soak-offseason.spec.ts` finds those: it is skipped
+unless `SOAK=1`, and plays leagues through four offseasons each.
+
+```
+SOAK=1 SOAK_LEAGUES=28 pnpm test:e2e --project=desktop --workers=5 --grep "offseason soak"
+```
+
+A refusal prints `SOAK-REFUSED league=... stage=... error=...`, and the web
+server's log has `Offseason step refused` with the team and the database's
+detail (for the hard ceiling, "ABC has a payroll of N"). The refused league is
+left in the local database to inspect. Before the fix above about three leagues
+in 28 were refused; a run with a failing `fetch failed` for every league means
+the test server did not start (see the Windows crash note above), not a bug.
