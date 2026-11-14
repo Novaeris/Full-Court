@@ -168,7 +168,21 @@ test.describe("strategy and starters", () => {
     await panel.getByRole("combobox").nth(0).selectOption("slow");
     await panel.getByRole("combobox").nth(2).selectOption("perimeter");
     await panel.getByLabel("Choose my starting five").check();
+    // Saving makes the page refresh itself (a request for the page's data).
+    const refreshed = page.waitForResponse(
+      (r) => r.request().headers()["rsc"] === "1" && r.url().includes("/moves"),
+    );
     await page.getByRole("button", { name: "Save strategy" }).click();
+    await expect(
+      page.getByText("Saved. It applies to your next game."),
+    ).toBeVisible();
+    // The message must outlast that refresh (the panel used to be rebuilt by
+    // it, which wiped the message at once).
+    await refreshed;
+    // The response arrives before the page shows it: let that render happen.
+    await page.evaluate(
+      () => new Promise((resolve) => setTimeout(resolve, 600)),
+    );
     await expect(
       page.getByText("Saved. It applies to your next game."),
     ).toBeVisible();

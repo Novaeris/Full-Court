@@ -53,7 +53,9 @@ async function Moves({
     <div className="flex flex-col gap-8">
       <TradePanel leagueId={league.id} data={trades} teams={teams} />
       <StrategyPanel
-        key={`${strategy.teamId}:${strategy.starters.join()}:${strategy.strategy.pace}:${strategy.rotation}`}
+        // Rebuilt for another team only: a save refreshes this page, and a panel
+        // keyed on what it saves would be rebuilt then, wiping its own message.
+        key={strategy.teamId ?? "none"}
         leagueId={league.id}
         data={strategy}
       />
