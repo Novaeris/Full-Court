@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   STYLE_PLAYERS,
+  describeStyle,
   STYLE_THRESHOLDS,
   chooseTeamStrategy,
   type StylePlayer,
@@ -114,6 +115,35 @@ describe("chooseTeamStrategy", () => {
     );
     expect(chooseTeamStrategy(roster)).toEqual(
       chooseTeamStrategy([...roster].reverse()),
+    );
+  });
+});
+
+describe("describeStyle", () => {
+  const style = (
+    pace: "slow" | "normal" | "fast",
+    threePointFocus: "low" | "normal" | "high",
+    defense: "balanced" | "perimeter" | "interior",
+  ) => ({ pace, threePointFocus, defense });
+
+  it("says a usual style is balanced", () => {
+    expect(describeStyle(style("normal", "normal", "balanced"))).toBe(
+      "Plays a balanced game.",
+    );
+  });
+
+  it("lists what a team leans on, in a sentence", () => {
+    expect(describeStyle(style("fast", "normal", "balanced"))).toBe(
+      "Runs the floor.",
+    );
+    expect(describeStyle(style("fast", "high", "balanced"))).toBe(
+      "Runs the floor and shoots a lot of threes.",
+    );
+    expect(describeStyle(style("fast", "high", "perimeter"))).toBe(
+      "Runs the floor, shoots a lot of threes and pressures the perimeter.",
+    );
+    expect(describeStyle(style("slow", "low", "interior"))).toBe(
+      "Slows the game down, works inside for its shots and protects the paint.",
     );
   });
 });

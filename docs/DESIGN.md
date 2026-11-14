@@ -114,6 +114,17 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### The team page
+
+Every team's page (reached from Teams, Standings or any link to a team) opens with an overview of its season, above the roster:
+
+- **Record and place:** wins and losses, rank among all teams, points scored and allowed per game, the current streak and the last ten games. Before a game is played it says so.
+- **How they play:** the pace, three-point focus and defence in words ("Runs the floor, shoots a lot of threes and protects the paint."), and whether the owner set it or the team chose it to suit its roster.
+- **Leaders:** the team's best player this season in points, rebounds and assists per game.
+- **Latest results** (the last five, with the score and a link to each game) and **next games** (the next three).
+
+It shows the team's regular-season record (the playoffs are on their own tab) and its results and next games include playoff games when there are some.
+
 ### Computer teams play to their strengths
 
 A computer team doesn't play the default style: it looks at its best eight players (the ones who play most) and picks the pace, the three-point focus and the defence that suit them.

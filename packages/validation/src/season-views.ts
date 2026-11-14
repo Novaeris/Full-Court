@@ -1077,3 +1077,62 @@ export const AllStarResponseSchema = z.object({
   game: AllStarGameSchema.nullable(),
 });
 export type AllStarResponse = z.infer<typeof AllStarResponseSchema>;
+
+/** A game in a team's recent results or upcoming games. */
+export const TeamGameSchema = z.object({
+  gameId: z.uuid(),
+  day: z.number().int(),
+  opponentId: z.uuid(),
+  home: z.boolean(),
+  /** For a played game: whether the team won, and its score first ("101-96"). */
+  won: z.boolean().nullable(),
+  score: z.string().nullable(),
+  /** The playoff round, for a playoff game. */
+  round: z.number().int().nullable(),
+});
+
+/**
+ * GET /api/v1/leagues/:leagueId/teams/:teamId/overview: how a team's season is
+ * going (docs/DESIGN.md, "The team page").
+ */
+export type TeamGame = z.infer<typeof TeamGameSchema>;
+
+export const TeamOverviewSchema = z.object({
+  teamId: z.uuid(),
+  /** Null before there is a season. */
+  season: z.object({ year: z.number().int(), phase: z.string() }).nullable(),
+  /** The regular-season record and where it stands; null before a game is played. */
+  record: z
+    .object({
+      rank: z.number().int(),
+      teams: z.number().int(),
+      wins: z.number().int(),
+      losses: z.number().int(),
+      pointsFor: z.number(),
+      pointsAgainst: z.number(),
+      streak: z.string(),
+      lastTen: z.string(),
+    })
+    .nullable(),
+  /** How the team plays, in words, and whether the owner set it. */
+  style: z.object({
+    pace: z.enum(["slow", "normal", "fast"]),
+    threePointFocus: z.enum(["low", "normal", "high"]),
+    defense: z.enum(["balanced", "perimeter", "interior"]),
+    words: z.string(),
+    setByOwner: z.boolean(),
+  }),
+  /** The latest five results, newest first, and the next three games. */
+  recent: z.array(TeamGameSchema),
+  upcoming: z.array(TeamGameSchema),
+  /** The team's best player in points, rebounds and assists per game, this season so far. */
+  leaders: z.array(
+    z.object({
+      category: z.enum(["points", "rebounds", "assists"]),
+      playerId: z.uuid(),
+      name: z.string(),
+      perGame: z.number(),
+    }),
+  ),
+});
+export type TeamOverview = z.infer<typeof TeamOverviewSchema>;

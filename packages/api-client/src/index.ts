@@ -16,6 +16,7 @@ import {
   ExtensionsResponseSchema,
   AllStarResponseSchema,
   ShopResponseSchema,
+  TeamOverviewSchema,
   StatsResponseSchema,
   StrategyResponseSchema,
   TradeEvaluationSchema,
@@ -49,6 +50,7 @@ import {
   type ExtensionsResponse,
   type AllStarResponse,
   type ShopRequest,
+  type TeamOverview,
   type StatsResponse,
   type StrategyResponse,
   type UpdateStrategyRequest,
@@ -505,6 +507,13 @@ export function createApiClient(options: ApiClientOptions) {
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
           input,
+        ),
+      /** How a team's season is going: record, style, results, leaders. */
+      teamOverview: (id: string, teamId: string): Promise<TeamOverview> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}/overview`,
+          (b) => TeamOverviewSchema.parse(b),
         ),
       /** A season's All-Star Game (the latest by default). */
       allStar: (id: string, year?: number): Promise<AllStarResponse> =>

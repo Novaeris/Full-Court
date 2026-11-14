@@ -77,3 +77,20 @@ export function chooseTeamStrategy(
           : "balanced",
   };
 }
+
+/** A style in words for a page: "Runs the floor, shoots a lot of threes and pressures the perimeter." */
+export function describeStyle(style: TeamStrategy): string {
+  const parts: string[] = [];
+  if (style.pace === "fast") parts.push("runs the floor");
+  if (style.pace === "slow") parts.push("slows the game down");
+  if (style.threePointFocus === "high") parts.push("shoots a lot of threes");
+  if (style.threePointFocus === "low") parts.push("works inside for its shots");
+  if (style.defense === "perimeter") parts.push("pressures the perimeter");
+  if (style.defense === "interior") parts.push("protects the paint");
+  if (parts.length === 0) return "Plays a balanced game.";
+  const text =
+    parts.length === 1
+      ? (parts[0] as string)
+      : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
