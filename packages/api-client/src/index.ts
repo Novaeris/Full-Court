@@ -97,6 +97,7 @@ import {
   type League,
   type LeagueList,
   type LeagueSettings,
+  type SeasonRulesRequest,
   type LeagueStructure,
   type RenameLeagueRequest,
   type RenameStructureRequest,
@@ -219,6 +220,17 @@ export function createApiClient(options: ApiClientOptions) {
           TeamListSchema.parse(b),
         ),
       /** The rules a league was created with (derived for older leagues). */
+      /** Sets the schedule and playoff format for the next season. */
+      setSeasonRules: (
+        id: string,
+        input: SeasonRulesRequest,
+      ): Promise<LeagueSettings> =>
+        request(
+          "PUT",
+          `/leagues/${encodeURIComponent(id)}/season-rules`,
+          (b) => LeagueSettingsSchema.parse(b),
+          input,
+        ),
       settings: (id: string): Promise<LeagueSettings> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/settings`, (b) =>
           LeagueSettingsSchema.parse(b),

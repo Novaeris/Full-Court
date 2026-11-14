@@ -1,3 +1,5 @@
+import type { SchedulePreset, ScheduleTiers } from "./season";
+
 /**
  * Owner Mode league settings: structure, playoffs, local players and
  * franchises. Types and plain data only; the rules live in @fullcourt/game-rules.
@@ -92,6 +94,18 @@ export type PlayoffConfig = {
   roundSeriesLengths: SeriesLength[];
 };
 
+/** How a league's regular season is scheduled: a preset and the meetings it stands for. */
+export type ScheduleRule = {
+  preset: SchedulePreset;
+  tiers: ScheduleTiers;
+};
+
+/** Rules that take over when the next season is created. */
+export type NextSeasonRules = {
+  schedule?: ScheduleRule;
+  playoffs?: PlayoffConfig;
+};
+
 /** Bump when the shape of LeagueConfig changes; mirrored in the database. */
 export const LEAGUE_CONFIG_SCHEMA_VERSION = 1;
 
@@ -106,6 +120,10 @@ export type LeagueConfig = {
   region: Region;
   fantasyDraft: boolean;
   playoffs: PlayoffConfig;
+  /** The schedule seasons are built with; the standard preset when absent. */
+  schedule?: ScheduleRule;
+  /** Rules waiting for the next season (the owner changed them after this one began). */
+  next?: NextSeasonRules;
 };
 
 export const AI_ASSIST_KEYS = [

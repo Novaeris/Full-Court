@@ -8,6 +8,7 @@ import {
   RenameStructureForm,
 } from "@/components/leagues/league-forms";
 import { LeagueRules } from "@/components/leagues/league-rules";
+import { SeasonRulesForm } from "@/components/leagues/season-rules-form";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { loadLeague } from "@/server/leagues/load";
 import { getSettings } from "@/server/services/leagues";
@@ -61,6 +62,18 @@ async function Settings({
       >
         <LeagueRules settings={settings} structure={structure} />
       </SettingsCard>
+      {settings.legacy ? null : (
+        <SettingsCard
+          title="Rules for the next season"
+          description="The season length and the playoff format. The season being played keeps the rules it began with; changes start when the next season is created."
+        >
+          <SeasonRulesForm
+            leagueId={league.id}
+            settings={settings}
+            structure={structure}
+          />
+        </SettingsCard>
+      )}
       <SettingsCard
         title="Conferences and divisions"
         description="Rename them whenever you like. Only the names change: teams, schedules and records stay exactly as they are."

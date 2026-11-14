@@ -8,6 +8,7 @@ import {
   NO_AI_ASSIST,
   PLAYOFF_SEEDINGS,
   REGIONS,
+  SCHEDULE_PRESETS,
   SERIES_LENGTHS,
   type AiAssistFlags,
 } from "@fullcourt/game-types";
@@ -82,6 +83,21 @@ export const PlayoffConfigSchema = z.object({
   roundSeriesLengths: z.array(seriesLength).min(1).max(5),
 });
 
+const tierCount = z.number().int().min(1).max(8);
+
+/** How often teams meet, by how they are related. */
+export const ScheduleTiersSchema = z.object({
+  division: tierCount,
+  conference: tierCount,
+  interconference: tierCount,
+});
+
+/** A schedule: a preset and the meetings it stands for (a named preset carries its own). */
+export const ScheduleRuleSchema = z.object({
+  preset: z.enum(SCHEDULE_PRESETS),
+  tiers: ScheduleTiersSchema,
+});
+
 /** One version of the stored config. Add a branch when the version changes. */
 const LeagueConfigV1Schema = z.object({
   schemaVersion: z.literal(LEAGUE_CONFIG_SCHEMA_VERSION),
@@ -89,6 +105,14 @@ const LeagueConfigV1Schema = z.object({
   region: RegionSchema,
   fantasyDraft: z.boolean(),
   playoffs: PlayoffConfigSchema,
+  schedule: ScheduleRuleSchema.optional(),
+  next: z
+    .object({
+      schedule: ScheduleRuleSchema.optional(),
+      playoffs: PlayoffConfigSchema.optional(),
+    })
+    .strict()
+    .optional(),
 });
 
 export const LeagueConfigSchema = z.discriminatedUnion("schemaVersion", [
@@ -197,5 +221,25 @@ export const LeagueSettingsSchema = z.object({
   region: RegionSchema.nullable(),
   fantasyDraft: z.boolean(),
   playoffs: PlayoffConfigSchema,
+  /** The schedule the league's seasons are built with. */
+  schedule: ScheduleRuleSchema,
+  /** Rules waiting for the next season, or null. */
+  next: z
+    .object({
+      schedule: ScheduleRuleSchema.optional(),
+      playoffs: PlayoffConfigSchema.optional(),
+    })
+    .nullable(),
 });
+
+/**
+ * PUT /api/v1/leagues/:leagueId/season-rules: the schedule and playoff format
+ * for the next season. Whether they fit the league is checked by
+ * `seasonRulesIssues` in @fullcourt/game-rules.
+ */
+export const SeasonRulesRequestSchema = z.object({
+  schedule: ScheduleRuleSchema,
+  playoffs: PlayoffConfigSchema,
+});
+export type SeasonRulesRequest = z.infer<typeof SeasonRulesRequestSchema>;
 export type LeagueSettings = z.infer<typeof LeagueSettingsSchema>;

@@ -317,6 +317,17 @@ Players get hurt, on every team, in the regular season and the playoffs.
 - **Where it shows.** The team page has a Status column ("Out 6 days"), the player page says what the injury is and how long is left, and the starters picker marks hurt players. Every injury is kept in a table for the league's history.
 - **Not yet:** a hurt player playing through it, injuries that last into the next season or lower ratings, rehab, and the AI taking injuries into account when it trades or signs.
 
+### Season rules
+
+The **Settings** page has a card, **Rules for the next season**, where the owner changes how long the season is and how the playoffs are played.
+
+- **What can change.** The **schedule** (the short, standard or long preset, or custom counts of 1 to 8 games against each division rival, each other team in the conference and each team in the other conference; the page shows the number of games every team will play) and the **playoff format** (how many teams, seeding by conference or league-wide, whether division leaders qualify automatically and how many are seeded first, and the length of the series in each round). The structure of the league (its teams and divisions) can't change.
+- **When it starts.** The season being played keeps the rules it began with. Changes are saved as _waiting_ and take over when the next season is created, which is also when the playoffs and the schedule for it are built. A banner on the card says changes are waiting. Rules changed before a league's first season exists (before its first day is played) apply to that first season. Saving rules that are the same as those in force clears anything waiting.
+- **What is refused.** A playoff format the league can't hold (too many teams, a bracket that doesn't split), counts outside 1 to 8, a named preset with game counts that aren't its own, and a schedule that doesn't give every team the same number of games.
+- **Old leagues.** A league created before league rules could be chosen has no stored rules and can't change them; its card is not shown.
+- **Same for everyone.** The rules are the league's, so they apply to every team alike.
+- **Not yet:** changing the rules of the season in progress, scheduling by a target number of games (an exact 82-game season isn't possible in every league), and changing the conference and division structure.
+
 ### Head to head
 
 A team's page has a **Head to head** section: its all-time record against every opponent it has met.

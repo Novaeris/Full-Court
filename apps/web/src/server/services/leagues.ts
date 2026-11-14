@@ -8,6 +8,7 @@ import {
   generateWorld,
 } from "@fullcourt/game-engine";
 import {
+  STANDARD_SCHEDULE,
   equalStructure,
   legacySettings,
   validateOwnerModeSetup,
@@ -120,7 +121,15 @@ export async function getSettings(
     const { legacy, preset, region, fantasyDraft, playoffs } = legacySettings(
       data.size === "standard" ? "standard" : "compact",
     );
-    return { legacy, preset, region, fantasyDraft, playoffs };
+    return {
+      legacy,
+      preset,
+      region,
+      fantasyDraft,
+      playoffs,
+      schedule: STANDARD_SCHEDULE,
+      next: null,
+    };
   }
   const config = LeagueConfigSchema.parse(data.config);
   return {
@@ -129,6 +138,8 @@ export async function getSettings(
     region: config.region,
     fantasyDraft: config.fantasyDraft,
     playoffs: config.playoffs,
+    schedule: config.schedule ?? STANDARD_SCHEDULE,
+    next: config.next ?? null,
   };
 }
 

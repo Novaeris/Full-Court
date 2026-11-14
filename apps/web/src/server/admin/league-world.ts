@@ -149,6 +149,25 @@ export async function insertOwnerLeagueWithWorld(input: {
 }
 
 /**
+ * Stores a league's config (its rules). The owner cannot write it themselves:
+ * only the name of a league is theirs to change. The caller has checked who
+ * owns the league and that the rules are valid; the database checks the shape.
+ */
+export async function storeLeagueConfig(
+  leagueId: string,
+  config: LeagueConfig,
+): Promise<void> {
+  const { error } = await createAdminClient()
+    .from("leagues")
+    .update({
+      config: config as never,
+      config_schema_version: config.schemaVersion,
+    })
+    .eq("id", leagueId);
+  if (error) throw error;
+}
+
+/**
  * Restores a backup document as a new league for the owner, in one
  * transaction, through public.admin_import_league() (service role only). Every
  * id in the file is replaced; the database checks the rest.
