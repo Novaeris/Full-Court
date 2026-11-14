@@ -317,6 +317,15 @@ Players get hurt, on every team, in the regular season and the playoffs.
 - **Where it shows.** The team page has a Status column ("Out 6 days"), the player page says what the injury is and how long is left, and the starters picker marks hurt players. Every injury is kept in a table for the league's history.
 - **Not yet:** a hurt player playing through it, injuries that last into the next season or lower ratings, rehab, and the AI taking injuries into account when it trades or signs.
 
+### Head to head
+
+A team's page has a **Head to head** section: its all-time record against every opponent it has met.
+
+- **What it counts.** Every finished game of every season, from the team's side: regular-season wins and losses, and playoff wins and losses kept apart, with the latest meeting (who won, the score, the year, and whether it was a playoff game). Most games first.
+- **Rivalries.** A pair of teams that has played **six or more playoff games** against each other (about one series) is marked as a rivalry, on both teams' pages.
+- **Same for everyone.** Every team's page has it, the owner's and the computer teams' alike, and the two sides of a record are always each other's mirror image.
+- **Not yet:** a rivalry that grows from close games or travel, a head-to-head view between any two teams, and per-season splits.
+
 ### The Hall of Fame
 
 A retired player can be inducted into the league's **Hall of Fame**, listed on its own page (a link at the top of the History tab).

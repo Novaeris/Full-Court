@@ -14,6 +14,7 @@ import {
   LeagueExportSchema,
   AwardRaceResponseSchema,
   HallOfFameResponseSchema,
+  HeadToHeadResponseSchema,
   InboxResponseSchema,
   NewsResponseSchema,
   ExtendResultSchema,
@@ -51,6 +52,7 @@ import {
   type LeagueExport,
   type AwardRaceResponse,
   type HallOfFameResponse,
+  type HeadToHeadResponse,
   type InboxResponse,
   type NewsResponse,
   type ExtendRequest,
@@ -587,6 +589,13 @@ export function createApiClient(options: ApiClientOptions) {
       awardRace: (id: string): Promise<AwardRaceResponse> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/award-race`, (b) =>
           AwardRaceResponseSchema.parse(b),
+        ),
+      /** A team's all-time record against each opponent. */
+      headToHead: (id: string, teamId: string): Promise<HeadToHeadResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}/head-to-head`,
+          (b) => HeadToHeadResponseSchema.parse(b),
         ),
       /** The retired players inducted into the Hall of Fame. */
       hallOfFame: (id: string): Promise<HallOfFameResponse> =>

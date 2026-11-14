@@ -1107,6 +1107,33 @@ export const HallOfFameResponseSchema = z.object({
 });
 export type HallOfFameResponse = z.infer<typeof HallOfFameResponseSchema>;
 
+const WinLossSchema = z.object({
+  wins: z.number().int(),
+  losses: z.number().int(),
+});
+
+/** GET /api/v1/leagues/:leagueId/teams/:teamId/head-to-head: a team's all-time record against each opponent (docs/DESIGN.md, "Head to head"). */
+export const HeadToHeadResponseSchema = z.object({
+  teamId: z.uuid(),
+  opponents: z.array(
+    z.object({
+      opponentId: z.uuid(),
+      regular: WinLossSchema,
+      playoffs: WinLossSchema,
+      /** The latest meeting, from this team's side. */
+      last: z.object({
+        year: z.number().int(),
+        won: z.boolean(),
+        score: z.string(),
+        playoff: z.boolean(),
+      }),
+      /** Whether their playoff meetings have made them rivals. */
+      rival: z.boolean(),
+    }),
+  ),
+});
+export type HeadToHeadResponse = z.infer<typeof HeadToHeadResponseSchema>;
+
 /** A player of your team who can be given a new contract (docs/DESIGN.md, "Extending a contract"). */
 export const ExtensionCandidateSchema = z.object({
   player: OffseasonPlayerSchema,

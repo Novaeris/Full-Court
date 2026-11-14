@@ -9,6 +9,7 @@ import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { ResponsiveTable, type Column } from "@/components/ui/responsive-table";
 import { ApiError } from "@/server/api/handler";
 import { loadLeague } from "@/server/leagues/load";
+import { getHeadToHead } from "@/server/services/head-to-head";
 import { getTeamOverview } from "@/server/services/team-overview";
 import { getTeam, listTeams } from "@/server/services/world";
 
@@ -40,9 +41,10 @@ async function TeamRoster({
     throw error;
   });
   const { team, players } = detail;
-  const [overview, allTeams] = await Promise.all([
+  const [overview, allTeams, h2h] = await Promise.all([
     getTeamOverview(ctx, league.id, teamId),
     listTeams(ctx, league.id),
+    getHeadToHead(ctx, league.id, teamId),
   ]);
   const opponent = (id: string) => {
     const t = allTeams.find((x) => x.id === id);
@@ -273,6 +275,52 @@ async function TeamRoster({
           </div>
         ) : null}
       </section>
+      {h2h.opponents.length > 0 ? (
+        <section
+          aria-labelledby="h2h-heading"
+          className="rounded-lg border border-border bg-surface p-5"
+        >
+          <h3 id="h2h-heading" className="text-lg font-bold">
+            Head to head
+          </h3>
+          <p className="text-sm text-text-muted">
+            All-time record against each opponent, most games first. A rivalry
+            is a pair that has played at least six playoff games.
+          </p>
+          <ul className="mt-2">
+            {h2h.opponents.map((o) => {
+              const other = allTeams.find((x) => x.id === o.opponentId);
+              return (
+                <li
+                  key={o.opponentId}
+                  className="flex flex-col gap-0.5 border-t border-border py-2 first:border-t-0"
+                >
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <Link
+                      href={`/leagues/${league.id}/teams/${o.opponentId}`}
+                      className="inline-flex min-h-touch items-center font-semibold text-accent underline underline-offset-4"
+                    >
+                      {other ? teamName(other) : "Unknown team"}
+                    </Link>
+                    <span className="font-bold tabular-nums">
+                      {o.regular.wins}-{o.regular.losses}
+                    </span>
+                  </p>
+                  <p className="text-sm text-text-muted">
+                    {o.rival ? "Rivalry · " : ""}
+                    {o.playoffs.wins + o.playoffs.losses > 0
+                      ? `Playoffs ${o.playoffs.wins}-${o.playoffs.losses} · `
+                      : ""}
+                    Last: {o.last.won ? "won" : "lost"} {o.last.score} (
+                    {o.last.year}
+                    {o.last.playoff ? ", playoffs" : ""})
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
       <ResponsiveTable
         caption={`${teamName(team)} roster`}
         columns={columns}
