@@ -135,4 +135,5 @@ export {
   AI_TRADE_EDGE,
   type AiTrade,
   type AiTradeTeam,
+  type PickAsset,
 } from "./offseason/ai-trades";

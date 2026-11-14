@@ -18,12 +18,16 @@ export type ShopTeam = {
   /** Player salaries. */
   payroll: number;
   roster: readonly TradeAsset[];
+  /** Picks the team would add to a package, worth `value` each. */
+  picks?: readonly { id: string; value: number }[] | undefined;
 };
 
 export type ShopOffer = {
   teamId: string;
   /** The players the computer team would send. */
   get: readonly TradeAsset[];
+  /** Picks it would add (at most one). */
+  getPicks: readonly { id: string; value: number }[];
   /** What it gets in value and what it gives. */
   receives: number;
   gives: number;
@@ -66,13 +70,20 @@ export function shopPlayers(input: {
       }
     }
     let best: ShopOffer | null = null;
-    for (const get of [...singles, ...pairs]) {
+    // A package is players, and may add one pick (or be a pick for the player).
+    const packages = [
+      ...[[], ...singles, ...pairs].flatMap((get) =>
+        [undefined, ...(team.picks ?? [])].map((pick) => ({ get, pick })),
+      ),
+    ].filter((p) => p.get.length > 0 || p.pick);
+    for (const { get, pick } of packages) {
       const verdict = answerTrade({
         team: team.roster,
         gives: get,
         receives: input.assets,
         cap,
         inSeason,
+        picksGiven: pick?.value ?? 0,
       });
       if (!verdict.accepts) continue;
       const problems = tradeProblems({
@@ -93,11 +104,12 @@ export function shopPlayers(input: {
         inSeason,
       });
       if (problems.length > 0) continue;
-      const worth = get.reduce((s, a) => s + value(a), 0);
+      const worth = get.reduce((s, a) => s + value(a), 0) + (pick?.value ?? 0);
       if (!best || worth > best.worth) {
         best = {
           teamId: team.id,
           get,
+          getPicks: pick ? [pick] : [],
           receives: verdict.receives,
           gives: verdict.gives,
           worth,

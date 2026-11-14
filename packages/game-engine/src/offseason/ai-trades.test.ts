@@ -121,3 +121,80 @@ describe("proposeOwnerOffers", () => {
     expect(make("x", 0)).toEqual([]);
   });
 });
+
+describe("picks in trades", () => {
+  const picks = (id: string) => [
+    { id: `${id}-p1`, value: 40 },
+    { id: `${id}-p2`, value: 150 },
+    { id: `${id}-p3`, value: 600 },
+  ];
+  // The same teams, but b is a little weaker, so a swap with b needs a sweetener.
+  const rich = [
+    { ...team("a", "C", "PG"), picks: picks("a") },
+    {
+      ...team("b", "PG", "C"),
+      roster: team("b", "PG", "C").roster.map((p) => ({
+        ...p,
+        overall: p.overall + 3,
+        potential: p.potential + 3,
+      })),
+      picks: picks("b"),
+    },
+    { ...team("c", "SF", "SG"), picks: picks("c") },
+  ];
+  const ask = (seed: string) =>
+    proposeAiTrades(createRng(seedState(seed)), {
+      teams: rich,
+      cap: CAP,
+      inSeason: false,
+      most: 3,
+    });
+  const seeds = Array.from({ length: 40 }, (_, i) => `p${i}`);
+
+  it("only trades picks the giving team holds, one at a time", () => {
+    for (const seed of seeds) {
+      for (const t of ask(seed)) {
+        expect(t.picksA.length + t.picksB.length).toBeLessThanOrEqual(1);
+        for (const id of t.picksA)
+          expect(id.startsWith(`${t.teamA}-`)).toBe(true);
+        for (const id of t.picksB)
+          expect(id.startsWith(`${t.teamB}-`)).toBe(true);
+      }
+    }
+  });
+
+  it("makes some trades only a pick makes possible", () => {
+    const withPicks = seeds
+      .flatMap(ask)
+      .filter((t) => t.picksA.length + t.picksB.length > 0);
+    expect(withPicks.length).toBeGreaterThan(0);
+  });
+
+  it("is the same for the same seed", () => {
+    expect(ask("q")).toEqual(ask("q"));
+  });
+});
+
+describe("owner offers with picks", () => {
+  it("may add a pick to a package", () => {
+    const owner = team("me", "C", "PG");
+    const rich = teams.map((t) => ({
+      ...t,
+      picks: [{ id: `${t.id}-pick`, value: 120 }],
+    }));
+    const offers = ["1", "2", "3", "4", "5", "6", "7", "8"].flatMap((seed) =>
+      proposeOwnerOffers(createRng(seedState(seed)), {
+        owner: { payroll: owner.payroll, roster: owner.roster },
+        teams: rich,
+        cap: CAP,
+        inSeason: false,
+        most: 2,
+      }),
+    );
+    expect(offers.length).toBeGreaterThan(0);
+    for (const o of offers) {
+      for (const id of o.getPicks) expect(id).toBe(`${o.partnerId}-pick`);
+    }
+    expect(offers.some((o) => o.getPicks.length > 0)).toBe(true);
+  });
+});

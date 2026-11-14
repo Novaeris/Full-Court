@@ -68,6 +68,33 @@ export function pickValue(input: {
 }
 
 /**
+ * How weak each team is, for valuing its picks: 0 for the strongest, 1 for the
+ * weakest, by the sum of its best eight players' overalls.
+ */
+export function teamWorstness(
+  teams: readonly { id: string; overalls: readonly number[] }[],
+): Map<string, number> {
+  const scored = teams
+    .map(
+      (t) =>
+        [
+          t.id,
+          [...t.overalls]
+            .sort((a, b) => b - a)
+            .slice(0, 8)
+            .reduce((s, x) => s + x, 0),
+        ] as const,
+    )
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return new Map(
+    scored.map(([id], i) => [
+      id,
+      scored.length > 1 ? i / (scored.length - 1) : 0.5,
+    ]),
+  );
+}
+
+/**
  * The salary-matching rule: a team that ends the trade over the cap may take
  * back at most 125% of the salary it sends out, plus the minimum salary; a
  * team that ends under the cap needs no matching.

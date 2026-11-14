@@ -80,6 +80,10 @@ export function DraftPanel({
   }
 
   const clockTeam = clock ? team(clock.teamId) : undefined;
+  const fromId = clock
+    ? draft.order.find((o) => o.pick === clock.pick)?.fromTeamId
+    : null;
+  const clockFrom = fromId ? team(fromId) : undefined;
   return (
     <section
       aria-labelledby="draft-panel-heading"
@@ -97,6 +101,12 @@ export function DraftPanel({
             <span className="inline-flex items-center gap-2">
               <TeamBadge team={clockTeam} size="sm" />
               {clockTeam.abbreviation}
+            </span>
+          ) : null}
+          {clockFrom ? (
+            <span className="text-text-muted">
+              {" "}
+              (from {clockFrom.abbreviation})
             </span>
           ) : null}{" "}
           {clock.yourPick ? (

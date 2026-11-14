@@ -25,6 +25,8 @@ export type TradeTeam = {
   id: string;
   payroll: number;
   roster: TradeAsset[];
+  /** Picks the team holds, valued. */
+  picks?: { id: string; value: number }[];
 };
 
 /** An offer to store: a computer team to an owner team. */
@@ -33,6 +35,7 @@ export type StoredOffer = {
   partner_id: string;
   give: string[];
   get: string[];
+  get_picks: string[];
 };
 
 /** The most offers one owner team has open at once. */
@@ -114,6 +117,7 @@ export async function runTradeRound(
           partner_id: o.partnerId,
           give: o.give,
           get: o.get,
+          get_picks: o.getPicks,
         })),
       );
       if (owners.length > 0) await store.replaceOffers(season.id, offers);

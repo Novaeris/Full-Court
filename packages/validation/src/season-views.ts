@@ -261,7 +261,9 @@ export const OffseasonResponseSchema = z.object({
       pick: z.number().int(),
       round: z.number().int(),
       teamId: z.uuid(),
-      /** Where the picking team finished, 1 = best. */
+      /** The team the pick came from, if it was traded; null for its own. */
+      fromTeamId: z.uuid().nullable(),
+      /** Where the team it came from finished, 1 = best. */
       finishRank: z.number().int(),
       /** The pick it would have had without the lottery. */
       expectedPick: z.number().int(),
@@ -395,6 +397,7 @@ export const DraftResponseSchema = z.object({
       pick: z.number().int(),
       round: z.number().int(),
       teamId: z.uuid(),
+      fromTeamId: z.uuid().nullable(),
       finishRank: z.number().int(),
       expectedPick: z.number().int(),
       lotteryOdds: z.number().nullable(),
@@ -660,6 +663,8 @@ export const TradeOfferSchema = z.object({
   partnerId: z.uuid(),
   give: z.array(TradePlayerSchema),
   get: z.array(TradePlayerSchema),
+  /** Picks the computer team adds to what it sends. */
+  getPicks: z.array(TradePickSchema),
   /** Whether it is still legal to accept, and if not why. */
   problems: z.array(z.string()),
 });

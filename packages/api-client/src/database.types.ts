@@ -1650,6 +1650,7 @@ export type Database = {
           created_at: string
           day: number
           get: string[]
+          get_picks: string[]
           give: string[]
           id: string
           league_id: string
@@ -1663,6 +1664,7 @@ export type Database = {
           created_at?: string
           day?: number
           get: string[]
+          get_picks?: string[]
           give: string[]
           id?: string
           league_id: string
@@ -1676,6 +1678,7 @@ export type Database = {
           created_at?: string
           day?: number
           get?: string[]
+          get_picks?: string[]
           give?: string[]
           id?: string
           league_id?: string

@@ -16,10 +16,15 @@ import { shopPlayers, type ShopTeam } from "./trades";
  * must be legal (rosters, the hard ceiling and salary matching).
  */
 
+/** A draft pick a team holds, worth `value` on the same scale as a player. */
+export type PickAsset = { id: string; value: number };
+
 export type AiTradeTeam = {
   id: string;
   payroll: number;
   roster: readonly TradeAsset[];
+  /** Picks the team could trade; leave out for a team with none. */
+  picks?: readonly PickAsset[] | undefined;
 };
 
 export type AiTrade = {
@@ -27,6 +32,8 @@ export type AiTrade = {
   teamB: string;
   fromA: string[];
   fromB: string[];
+  picksA: string[];
+  picksB: string[];
 };
 
 /** Each side must get at least this much more than it gives, by its own count. */
@@ -34,7 +41,8 @@ export const AI_TRADE_EDGE = 1.02;
 
 /**
  * Up to `most` trades for one round, in a seeded order. A team and a player
- * are used once per round, so the result applies in any order.
+ * are used once per round, so the result applies in any order. When a swap
+ * pleases only one team, the other may add a pick to close the gap.
  */
 export function proposeAiTrades(
   rng: Rng,
@@ -88,15 +96,40 @@ export function proposeAiTrades(
       order.filter((t) => t.id !== a.id && !used.has(t.id)),
     )) {
       const theirs = tradeable(b);
-      let found: [TradeAsset[], TradeAsset[]] | null = null;
+      let found: AiTrade | null = null;
       let best = 0;
       for (const x of mine) {
         for (const y of theirs) {
           const give = [x];
           const get = [y];
-          const gainA = worth(a, get, give) >= value(x) * AI_TRADE_EDGE;
-          const gainB = worth(b, give, get) >= value(y) * AI_TRADE_EDGE;
-          if (!gainA || !gainB) continue;
+          const outA = value(x);
+          const outB = value(y);
+          const inA = worth(a, get, give);
+          const inB = worth(b, give, get);
+          // Picks: the side that is content can pay the other's shortfall.
+          let pickA: PickAsset | undefined;
+          let pickB: PickAsset | undefined;
+          const gainA = inA >= outA * AI_TRADE_EDGE;
+          const gainB = inB >= outB * AI_TRADE_EDGE;
+          if (!gainA && gainB) {
+            pickB = cheapest(b.picks, (p) => {
+              return (
+                inA + p.value >= outA * AI_TRADE_EDGE &&
+                inB - p.value >= outB * AI_TRADE_EDGE
+              );
+            });
+            if (!pickB) continue;
+          } else if (gainA && !gainB) {
+            pickA = cheapest(a.picks, (p) => {
+              return (
+                inB + p.value >= outB * AI_TRADE_EDGE &&
+                inA - p.value >= outA * AI_TRADE_EDGE
+              );
+            });
+            if (!pickA) continue;
+          } else if (!gainA && !gainB) {
+            continue;
+          }
           const problems = tradeProblems({
             a: {
               payroll: a.payroll,
@@ -115,20 +148,24 @@ export function proposeAiTrades(
             inSeason,
           });
           if (problems.length > 0) continue;
-          const score = worth(a, get, give) / Math.max(1, value(x));
+          const score =
+            (inA + (pickB?.value ?? 0) - (pickA?.value ?? 0)) /
+            Math.max(1, outA);
           if (found === null || score > best) {
             best = score;
-            found = [give, get];
+            found = {
+              teamA: a.id,
+              teamB: b.id,
+              fromA: give.map((p) => p.id),
+              fromB: get.map((p) => p.id),
+              picksA: pickA ? [pickA.id] : [],
+              picksB: pickB ? [pickB.id] : [],
+            };
           }
         }
       }
       if (!found) continue;
-      trades.push({
-        teamA: a.id,
-        teamB: b.id,
-        fromA: found[0].map((p) => p.id),
-        fromB: found[1].map((p) => p.id),
-      });
+      trades.push(found);
       used.add(a.id);
       used.add(b.id);
       break;
@@ -137,12 +174,24 @@ export function proposeAiTrades(
   return trades;
 }
 
+/** The least valuable pick that passes `ok`. */
+function cheapest(
+  picks: readonly PickAsset[] | undefined,
+  ok: (p: PickAsset) => boolean,
+): PickAsset | undefined {
+  return [...(picks ?? [])]
+    .sort((x, y) => x.value - y.value || x.id.localeCompare(y.id))
+    .find(ok);
+}
+
 /** An offer a computer team makes to the owner. */
 export type OwnerOffer = {
   partnerId: string;
   /** What the owner would give and what he would get. */
   give: string[];
   get: string[];
+  /** Picks the computer team adds. */
+  getPicks: string[];
 };
 
 /**
@@ -183,6 +232,7 @@ export function proposeOwnerOffers(
       partnerId: best.teamId,
       give: [target.id],
       get: best.get.map((a) => a.id),
+      getPicks: best.getPicks.map((p) => p.id),
     });
   }
   return offers;

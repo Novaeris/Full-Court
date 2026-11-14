@@ -1,5 +1,6 @@
 import type { Database } from "@fullcourt/api-client";
 import type { AiTrade } from "@fullcourt/game-engine";
+import { pickValue, teamWorstness } from "@fullcourt/game-rules";
 import { createClient } from "@supabase/supabase-js";
 import type { WorkerConfig } from "./config";
 import { describeError } from "./errors";
@@ -40,7 +41,10 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
       .single();
     if (season.error) throw season.error;
     const leagueId = season.data.league_id;
-    const [teams, players] = await Promise.all([
+    // Picks are a bonus: a league without them yet (or a database that has
+    // not had the picks migration) still trades players.
+    await client.rpc("admin_ensure_pick_rights", { target_season: seasonId });
+    const [teams, players, rights] = await Promise.all([
       client
         .from("teams")
         .select("id, local_player_slot, ai_trades")
@@ -54,11 +58,19 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         .eq("status", "active")
         .not("team_id", "is", null)
         .limit(5000),
+      client
+        .from("pick_rights")
+        .select("id, season_year, round, original_team_id, team_id")
+        .eq("league_id", leagueId)
+        .gt("season_year", season.data.year),
     ]);
     if (teams.error) throw teams.error;
     if (players.error) throw players.error;
     const byTeam = new Map<string, TradeTeam>(
-      teams.data.map((t) => [t.id, { id: t.id, payroll: 0, roster: [] }]),
+      teams.data.map((t) => [
+        t.id,
+        { id: t.id, payroll: 0, roster: [], picks: [] },
+      ]),
     );
     for (const p of players.data) {
       const team = p.team_id ? byTeam.get(p.team_id) : undefined;
@@ -76,6 +88,23 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
           1,
           (p.contract_expires ?? season.data.year) - season.data.year + 1,
         ),
+      });
+    }
+    // A pick is worth more the weaker its original team is.
+    const worst = teamWorstness(
+      [...byTeam.values()].map((t) => ({
+        id: t.id,
+        overalls: t.roster.map((p) => p.overall),
+      })),
+    );
+    for (const r of rights.error ? [] : rights.data) {
+      byTeam.get(r.team_id)?.picks?.push({
+        id: r.id,
+        value: pickValue({
+          round: r.round,
+          yearsAway: r.season_year - season.data.year,
+          worstness: worst.get(r.original_team_id) ?? 0.5,
+        }),
       });
     }
     const sorted = (list: TradeTeam[]) =>
@@ -205,6 +234,8 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         trade_team_b: trade.teamB,
         from_a: trade.fromA,
         from_b: trade.fromB,
+        picks_a: trade.picksA,
+        picks_b: trade.picksB,
       });
       if (error) throw error;
     },

@@ -710,7 +710,7 @@ export async function getOffseason(
     ctx.supabase
       .from("draft_picks")
       .select(
-        "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds",
+        "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds, original_team_id",
       )
       .eq("league_id", league.id)
       .eq("season_year", year)
@@ -780,6 +780,7 @@ export async function getOffseason(
         pick: p.pick,
         round: p.round,
         teamId: p.team_id,
+        fromTeamId: p.original_team_id,
         finishRank: p.finish_rank,
         expectedPick: p.expected_pick,
         lotteryOdds: p.lottery_odds,

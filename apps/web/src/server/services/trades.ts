@@ -11,6 +11,7 @@ import {
   dealWords,
   hardCeiling,
   pickValue,
+  teamWorstness,
   tradeDeadlineDay,
   tradeProblems,
   tradeValue,
@@ -155,24 +156,24 @@ function worstnessOf(rows: readonly Row[]): Map<string, number> {
     if (!r.team_id) continue;
     overalls.set(r.team_id, [...(overalls.get(r.team_id) ?? []), r.overall]);
   }
-  const scored = [...overalls.entries()]
-    .map(
-      ([id, list]) =>
-        [
-          id,
-          [...list]
-            .sort((a, b) => b - a)
-            .slice(0, 8)
-            .reduce((s, x) => s + x, 0),
-        ] as const,
-    )
-    .sort((a, b) => b[1] - a[1]);
-  return new Map(
-    scored.map(([id], i) => [
-      id,
-      scored.length > 1 ? i / (scored.length - 1) : 0.5,
-    ]),
+  return teamWorstness(
+    [...overalls.entries()].map(([id, list]) => ({ id, overalls: list })),
   );
+}
+
+/** The picks each team holds, valued, for the computer's trades. */
+function picksByTeam(
+  picks: readonly PickRow[],
+  season: SeasonRow,
+  worst: ReadonlyMap<string, number>,
+): Map<string, { id: string; value: number }[]> {
+  const held = new Map<string, { id: string; value: number }[]>();
+  for (const p of picks) {
+    const list = held.get(p.team_id) ?? [];
+    list.push({ id: p.id, value: pickWorth(p, season, worst) });
+    held.set(p.team_id, list);
+  }
+  return held;
 }
 
 function pickWorth(
@@ -667,6 +668,11 @@ export async function runComputerTrades(
   const owned = await ownedTeams(ctx, leagueId);
   const held = new Set(owned.filter((t) => !t.assist.trades).map((t) => t.id));
   const rows = await rosterRows(ctx, leagueId);
+  const heldPicks = picksByTeam(
+    await pickRows(ctx, leagueId, season),
+    season,
+    worstnessOf(rows),
+  );
   const teamIds = [
     ...new Set(rows.flatMap((r) => (r.team_id ? [r.team_id] : []))),
   ]
@@ -685,6 +691,7 @@ export async function runComputerTrades(
         roster: rows
           .filter((r) => r.team_id === id)
           .map((r) => assetOf(r, season)),
+        picks: heldPicks.get(id) ?? [],
       })),
       cap: season.salary_cap,
       inSeason: w.inSeason,
@@ -700,6 +707,8 @@ export async function runComputerTrades(
         teamB: t.teamB,
         fromA: t.fromA,
         fromB: t.fromB,
+        picksA: t.picksA,
+        picksB: t.picksB,
       });
       made++;
     } catch {
@@ -722,7 +731,7 @@ async function openOffers(
   if (!season || !teamId) return [];
   const found = await ctx.supabase
     .from("trade_offers")
-    .select("id, day, team_id, partner_id, give, get")
+    .select("id, day, team_id, partner_id, give, get, get_picks")
     .eq("league_id", leagueId)
     .eq("season_id", season.id)
     .eq("team_id", teamId)
@@ -730,6 +739,11 @@ async function openOffers(
     .order("created_at");
   if (found.error) throw found.error;
   const byId = new Map(rows.map((r) => [r.id, r]));
+  const wanted = found.data.some((o) => o.get_picks.length > 0);
+  const pickById = new Map(
+    (wanted ? await pickRows(ctx, leagueId, season) : []).map((p) => [p.id, p]),
+  );
+  const worst = worstnessOf(rows);
   const sum = (list: readonly Row[]) =>
     list.reduce((s, r) => s + (r.salary ?? 0), 0);
   const cap = season.salary_cap;
@@ -738,8 +752,15 @@ async function openOffers(
     const get = o.get.flatMap((id) => byId.get(id) ?? []);
     const mine = rows.filter((r) => r.team_id === o.team_id);
     const theirs = rows.filter((r) => r.team_id === o.partner_id);
+    const getPicks = o.get_picks.flatMap((id) => pickById.get(id) ?? []);
     const problems: string[] = [];
     if (!w.open) problems.push(w.reason ?? "Trades are closed.");
+    if (
+      getPicks.length !== o.get_picks.length ||
+      getPicks.some((p) => p.team_id !== o.partner_id)
+    ) {
+      problems.push("A pick in this offer has moved.");
+    }
     if (
       give.length !== o.give.length ||
       get.length !== o.get.length ||
@@ -775,6 +796,7 @@ async function openOffers(
       partnerId: o.partner_id,
       give: give.map((r) => tradePlayer(r, season)),
       get: get.map((r) => tradePlayer(r, season)),
+      getPicks: getPicks.map((p) => pickView(p, season, worst)),
       problems,
     };
   });
@@ -823,6 +845,7 @@ export async function answerTradeOffer(
       message === "invalid_rosters" ||
       message === "over_ceiling" ||
       message === "player_not_on_team" ||
+      message === "pick_not_on_team" ||
       message === "offer_not_open"
     ) {
       throw new ApiError(
@@ -866,10 +889,16 @@ export async function refreshTradeOffers(
       ),
     ),
   ].sort();
+  const heldPicks = picksByTeam(
+    await pickRows(ctx, leagueId, season),
+    season,
+    worstnessOf(rows),
+  );
   const computer = teamIds.map((id) => ({
     id,
     payroll: payrollOf(rows, id),
     roster: rows.filter((r) => r.team_id === id).map((r) => assetOf(r, season)),
+    picks: heldPicks.get(id) ?? [],
   }));
   const offers = targets.flatMap((t) =>
     proposeOwnerOffers(
@@ -895,6 +924,7 @@ export async function refreshTradeOffers(
       partner_id: o.partnerId,
       give: o.give,
       get: o.get,
+      get_picks: o.getPicks,
     })),
   );
   await replaceTradeOffers({ seasonId: season.id, offers });

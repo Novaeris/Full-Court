@@ -335,6 +335,7 @@ export async function replaceTradeOffers(input: {
     partner_id: string;
     give: readonly string[];
     get: readonly string[];
+    get_picks?: readonly string[];
   }[];
 }): Promise<void> {
   const { error } = await createAdminClient().rpc(

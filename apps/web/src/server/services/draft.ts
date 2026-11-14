@@ -61,6 +61,7 @@ type Slot = {
   finish_rank: number;
   expected_pick: number;
   lottery_odds: number | null;
+  original_team_id: string | null;
 };
 
 type ProspectRow = {
@@ -136,7 +137,7 @@ async function loadSlots(ctx: UserContext, leagueId: string, year: number) {
   const { data, error } = await ctx.supabase
     .from("draft_picks")
     .select(
-      "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds",
+      "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds, original_team_id",
     )
     .eq("league_id", leagueId)
     .eq("season_year", year)
@@ -405,6 +406,7 @@ export async function getDraft(
       pick: s.pick,
       round: s.round,
       teamId: s.team_id,
+      fromTeamId: s.original_team_id,
       finishRank: s.finish_rank,
       expectedPick: s.expected_pick,
       lotteryOdds: s.lottery_odds,

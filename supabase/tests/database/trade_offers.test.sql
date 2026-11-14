@@ -3,7 +3,7 @@ begin;
 \ir helpers.psql
 \ir season_helpers.psql
 
-select plan(14);
+select plan(17);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -91,6 +91,34 @@ select is(
   (select count(*)::int from trade_offers where season_id = pg_temp.season() and status = 'declined'),
   1, 'an offer can be declined');
 
+-- An offer can carry a pick the computer team adds.
+select admin_ensure_pick_rights(pg_temp.season());
+create function pg_temp.pick(abbr text) returns uuid language sql as $$
+  select id from public.pick_rights
+  where league_id = pg_temp.league_id('Offers') and original_team_id = pg_temp.team(abbr)
+    and season_year = 2027 and round = 1;
+$$;
+grant execute on function pg_temp.pick(text) to service_role;
+select is(
+  admin_replace_trade_offers(pg_temp.season(), jsonb_build_array(jsonb_build_object(
+    'team_id', pg_temp.team('T01'), 'partner_id', pg_temp.team('T12'),
+    'give', jsonb_build_array(pg_temp.pl('T01', 4)),
+    'get', jsonb_build_array(pg_temp.pl('T12', 4)),
+    'get_picks', jsonb_build_array(pg_temp.pick('T12'))))),
+  1, 'an offer with a pick is stored');
+select admin_accept_trade_offer((select id from trade_offers
+  where season_id = pg_temp.season() and status = 'open'));
+select is(
+  (select team_id from pick_rights where id = pg_temp.pick('T12')),
+  pg_temp.team('T01'), 'accepting it moves the pick to the owner');
+select throws_ok(
+  $$select admin_replace_trade_offers(pg_temp.season(), jsonb_build_array(jsonb_build_object(
+      'team_id', pg_temp.team('T01'), 'partner_id', pg_temp.team('T12'),
+      'give', jsonb_build_array(pg_temp.pl('T01', 5)),
+      'get', jsonb_build_array(pg_temp.pl('T12', 5)),
+      'get_picks', jsonb_build_array(pg_temp.pick('T12')))))$$,
+  'P0001', 'pick_not_on_team', 'the computer team has to hold the pick it offers');
+
 reset role;
 select pg_temp.act_as('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 set local role authenticated;
@@ -101,7 +129,7 @@ select is(
 select pg_temp.act_as('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 select is(
   (select count(*)::int from public.trade_offers),
-  3, 'the league owner reads them');
+  4, 'the league owner reads them');
 select throws_ok(
   $$update public.trade_offers set status = 'open'$$,
   '42501', null, 'and cannot change them');

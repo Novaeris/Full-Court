@@ -432,9 +432,15 @@ export function TradePanel({
                     {teamLabel(teams, o.partnerId)}
                   </span>{" "}
                   offers{" "}
-                  {o.get
-                    .map((p) => `${p.name} (${p.overall}, ${money(p.salary)})`)
-                    .join(" and ")}{" "}
+                  {[
+                    ...o.get.map(
+                      (p) => `${p.name} (${p.overall}, ${money(p.salary)})`,
+                    ),
+                    ...o.getPicks.map(
+                      (p) =>
+                        `${p.seasonYear} round ${p.round} pick (${teamLabel(teams, p.originalTeamId)})`,
+                    ),
+                  ].join(" and ")}{" "}
                   for{" "}
                   {o.give
                     .map((p) => `${p.name} (${p.overall}, ${money(p.salary)})`)

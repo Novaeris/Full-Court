@@ -7,6 +7,7 @@ import {
   dealWords,
   minSalary,
   pickValue,
+  teamWorstness,
   salaryMatches,
   tradeDeadlineDay,
   tradeProblems,
@@ -287,5 +288,31 @@ describe("what a draft pick is worth", () => {
     expect(
       ask(pickValue({ round: 1, yearsAway: 1, worstness: 1 })).accepts,
     ).toBe(true);
+  });
+});
+
+describe("teamWorstness", () => {
+  it("is 0 for the strongest team and 1 for the weakest", () => {
+    const w = teamWorstness([
+      { id: "a", overalls: [60, 60, 60] },
+      { id: "b", overalls: [80, 70, 65] },
+      { id: "c", overalls: [50, 50, 50] },
+    ]);
+    expect(w.get("b")).toBe(0);
+    expect(w.get("a")).toBe(0.5);
+    expect(w.get("c")).toBe(1);
+  });
+
+  it("counts only a team's best eight players", () => {
+    const w = teamWorstness([
+      { id: "a", overalls: [...Array(8).fill(90), ...Array(20).fill(20)] },
+      { id: "b", overalls: Array(8).fill(95) },
+    ]);
+    expect(w.get("b")).toBe(0);
+    expect(w.get("a")).toBe(1);
+  });
+
+  it("puts a lone team in the middle", () => {
+    expect(teamWorstness([{ id: "a", overalls: [60] }]).get("a")).toBe(0.5);
   });
 });
