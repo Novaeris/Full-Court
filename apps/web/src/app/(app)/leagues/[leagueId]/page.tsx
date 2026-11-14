@@ -37,11 +37,17 @@ async function Overview({
 }) {
   const { leagueId } = await params;
   const { ctx, league } = await loadLeague(leagueId);
+  // A season that can't load shouldn't take the whole overview down with it.
+  let simFailed = false;
   const [teams, query, sim] = await Promise.all([
     listTeams(ctx, league.id),
     searchParams,
     league.status === "active"
-      ? getSimulation(ctx, league.id)
+      ? getSimulation(ctx, league.id).catch((error: unknown) => {
+          console.error("Season failed to load", { leagueId, error });
+          simFailed = true;
+          return null;
+        })
       : Promise.resolve(null),
   ]);
 
@@ -91,6 +97,15 @@ async function Overview({
         >
           You&apos;re now running the {first ? teamName(first) : "team"}. Good
           luck!
+        </p>
+      ) : null}
+      {simFailed ? (
+        <p
+          role="alert"
+          className="rounded-md border border-border bg-surface px-4 py-3"
+        >
+          The season couldn&apos;t load right now. Reload the page to try again.
+          If it keeps happening, tell us through Contact &amp; Support.
         </p>
       ) : null}
       {sim ? (
