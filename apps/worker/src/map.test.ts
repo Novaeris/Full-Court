@@ -63,6 +63,7 @@ describe("toSimTeams", () => {
         strategy_three_point: "high",
         strategy_defense: "interior",
         starters: five,
+        rotation_size: null,
       },
     ]);
     const t1 = teams.find((t) => t.id === "t1");
@@ -85,6 +86,7 @@ describe("toSimTeams", () => {
         strategy_three_point: "normal",
         strategy_defense: "balanced",
         starters: [],
+        rotation_size: null,
       },
     ]);
     expect(teams.find((t) => t.id === "t1")?.strategy.pace).toBe("normal");
@@ -126,6 +128,7 @@ describe("toSimTeams", () => {
         strategy_three_point: "normal",
         strategy_defense: "balanced",
         starters: named,
+        rotation_size: null,
       },
     ]).find((t) => t.id === "t1");
     expect(t1?.starters).toHaveLength(5);
@@ -134,6 +137,48 @@ describe("toSimTeams", () => {
     for (const id of t1?.starters ?? []) {
       expect(t1?.players.some((p) => p.id === id)).toBe(true);
     }
+  });
+
+  it("gives a team its head coach's bonus and its saved rotation size", () => {
+    const coach = {
+      id: "t1",
+      strategy_pace: "normal",
+      strategy_three_point: "normal",
+      strategy_defense: "balanced",
+      starters: [],
+      rotation_size: 8,
+    };
+    const teams = toSimTeams(
+      games,
+      fakePlayers(),
+      [coach],
+      [
+        { team_id: "t1", rating: 95 },
+        { team_id: "t2", rating: 30 },
+      ],
+    );
+    const t1 = teams.find((t) => t.id === "t1");
+    const t2 = teams.find((t) => t.id === "t2");
+    expect(t1?.coachBonus).toBe(2);
+    expect(t1?.rotation).toBe(8);
+    expect(t2?.coachBonus).toBe(-1.7);
+    expect(t2?.rotation).toBeUndefined();
+    // No head coach, no saved settings: nothing added.
+    expect(toSimTeams(games, fakePlayers())[0]?.coachBonus).toBe(0);
+  });
+
+  it("ignores a rotation size the game doesn't offer", () => {
+    const teams = toSimTeams(games, fakePlayers(), [
+      {
+        id: "t1",
+        strategy_pace: "normal",
+        strategy_three_point: "normal",
+        strategy_defense: "balanced",
+        starters: [],
+        rotation_size: 3,
+      },
+    ]);
+    expect(teams.find((t) => t.id === "t1")?.rotation).toBeUndefined();
   });
 
   it("rejects an unknown position", () => {

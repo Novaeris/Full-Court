@@ -1,4 +1,5 @@
 import "server-only";
+import { coachingBonus } from "@fullcourt/game-rules";
 import type { Position } from "@fullcourt/game-types";
 import type {
   StrategyResponse,
@@ -45,13 +46,17 @@ export async function getStrategy(
       defense: "balanced",
     },
     starters: [],
+    rotation: null,
+    coach: null,
     roster: [],
   };
   if (!teamId) return empty;
-  const [team, players] = await Promise.all([
+  const [team, players, head] = await Promise.all([
     ctx.supabase
       .from("teams")
-      .select("strategy_pace, strategy_three_point, strategy_defense, starters")
+      .select(
+        "strategy_pace, strategy_three_point, strategy_defense, starters, rotation_size",
+      )
       .eq("id", teamId)
       .single(),
     ctx.supabase
@@ -62,9 +67,18 @@ export async function getStrategy(
       .eq("status", "active")
       .order("overall", { ascending: false })
       .order("id"),
+    ctx.supabase
+      .from("staff_members")
+      .select("first_name, last_name, rating")
+      .eq("league_id", league.id)
+      .eq("team_id", teamId)
+      .eq("role", "head-coach")
+      .eq("status", "active")
+      .maybeSingle(),
   ]);
   if (team.error) throw team.error;
   if (players.error) throw players.error;
+  if (head.error) throw head.error;
   const onRoster = new Set(players.data.map((p) => p.id));
   return {
     teamId,
@@ -79,6 +93,14 @@ export async function getStrategy(
     starters: team.data.starters.every((id) => onRoster.has(id))
       ? team.data.starters
       : [],
+    rotation: team.data.rotation_size,
+    coach: head.data
+      ? {
+          name: `${head.data.first_name} ${head.data.last_name}`,
+          rating: head.data.rating,
+          bonus: coachingBonus(head.data.rating),
+        }
+      : null,
     roster: players.data.map((p) => ({
       id: p.id,
       name: `${p.first_name} ${p.last_name}`,
@@ -107,6 +129,7 @@ export async function updateStrategy(
       threePointFocus: input.strategy.threePointFocus,
       defense: input.strategy.defense,
       starters: input.starters,
+      rotation: input.rotation,
     });
   } catch (error) {
     if ((error as { message?: string }).message === "invalid_starters") {

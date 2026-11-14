@@ -1648,6 +1648,7 @@ export type Database = {
           logo_id: string | null
           nickname: string
           primary_color: string
+          rotation_size: number | null
           secondary_color: string
           starters: string[]
           strategy_defense: string
@@ -1671,6 +1672,7 @@ export type Database = {
           logo_id?: string | null
           nickname: string
           primary_color: string
+          rotation_size?: number | null
           secondary_color: string
           starters?: string[]
           strategy_defense?: string
@@ -1694,6 +1696,7 @@ export type Database = {
           logo_id?: string | null
           nickname?: string
           primary_color?: string
+          rotation_size?: number | null
           secondary_color?: string
           starters?: string[]
           strategy_defense?: string
@@ -2449,6 +2452,7 @@ export type Database = {
           logo_id: string | null
           nickname: string
           primary_color: string
+          rotation_size: number | null
           secondary_color: string
           starters: string[]
           strategy_defense: string
@@ -2474,6 +2478,7 @@ export type Database = {
         Args: {
           new_defense: string
           new_pace: string
+          new_rotation?: number
           new_starters: string[]
           new_three_point: string
           target_team: string
@@ -2495,6 +2500,7 @@ export type Database = {
           logo_id: string | null
           nickname: string
           primary_color: string
+          rotation_size: number | null
           secondary_color: string
           starters: string[]
           strategy_defense: string

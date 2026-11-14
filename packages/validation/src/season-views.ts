@@ -789,6 +789,16 @@ export const StrategyResponseSchema = z.object({
   strategy: TeamStrategySchema,
   /** Five player ids, or none when the best player at each position starts. */
   starters: z.array(z.uuid()),
+  /** How many players the coach uses (7 to 12), or null for everyone. */
+  rotation: z.number().int().nullable(),
+  /** Your head coach and what he adds to every player in your games; null with no head coach. */
+  coach: z
+    .object({
+      name: z.string(),
+      rating: z.number().int(),
+      bonus: z.number(),
+    })
+    .nullable(),
   roster: z.array(
     z.object({
       id: z.uuid(),
@@ -806,6 +816,8 @@ export type StrategyResponse = z.infer<typeof StrategyResponseSchema>;
 export const UpdateStrategyRequestSchema = z.object({
   teamId: z.uuid().optional(),
   strategy: TeamStrategySchema,
+  /** How many players the coach uses, 7 to 12; leave out or null for everyone. */
+  rotation: z.number().int().min(7).max(12).nullable().optional(),
   /** Five different players of the team, or empty for the automatic five. */
   starters: z
     .array(z.uuid())

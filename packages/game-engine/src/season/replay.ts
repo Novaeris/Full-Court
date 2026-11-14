@@ -36,6 +36,9 @@ export type ReplayTeam = {
   players: ReplayPlayer[];
   /** The coach's chosen five, when there were any (left out otherwise). */
   starters?: string[];
+  /** The head coach's bonus and the rotation size, when set (left out otherwise). */
+  coach?: number;
+  rotation?: number;
 };
 
 /**
@@ -57,8 +60,12 @@ function snapshotTeam(team: SimTeam): ReplayTeam {
   const starters = team.starters?.length
     ? { starters: [...team.starters] }
     : {};
+  const coach = team.coachBonus ? { coach: team.coachBonus } : {};
+  const rotation = team.rotation ? { rotation: team.rotation } : {};
   return {
     ...starters,
+    ...coach,
+    ...rotation,
     id: team.id,
     strategy: [
       team.strategy.pace,
@@ -125,8 +132,12 @@ function restoreTeam(team: ReplayTeam): SimTeam {
     team.starters.every((id) => typeof id === "string")
       ? { starters: [...team.starters] }
       : {};
+  const optional = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined;
   return {
     ...starters,
+    coachBonus: optional(team.coach),
+    rotation: optional(team.rotation),
     id: team.id,
     strategy: {
       pace: oneOf(PACE_LEVELS, team.strategy[0], "pace"),

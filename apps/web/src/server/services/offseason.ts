@@ -95,16 +95,14 @@ function staffInsert(s: NewStaff): StaffInsert {
 }
 
 /**
- * Starts the offseason after an archived season: every player ages (some
- * retire), staff contracts run down and the staff market is topped up. Each
- * step runs once, so a retry after a failure skips what already happened. The
- * league gets its staff the first time.
+ * Gives the league its staff the first time (a head coach, a development coach,
+ * a conditioning coach and a scout for every team, and a market). Safe to call
+ * again: it does nothing when there is staff.
  */
-export async function beginOffseason(
+export async function ensureLeagueStaff(
   ctx: UserContext,
   leagueId: string,
-  finished: SeasonRow,
-): Promise<void> {
+): Promise<EngineStaff[]> {
   let staff = await loadStaff(ctx, leagueId);
   if (staff.length === 0) {
     const teams = await allTeamIds(ctx, leagueId);
@@ -115,6 +113,21 @@ export async function beginOffseason(
     );
     staff = await loadStaff(ctx, leagueId);
   }
+  return staff;
+}
+
+/**
+ * Starts the offseason after an archived season: every player ages (some
+ * retire), staff contracts run down and the staff market is topped up. Each
+ * step runs once, so a retry after a failure skips what already happened. The
+ * league gets its staff the first time.
+ */
+export async function beginOffseason(
+  ctx: UserContext,
+  leagueId: string,
+  finished: SeasonRow,
+): Promise<void> {
+  let staff = await ensureLeagueStaff(ctx, leagueId);
 
   // A league made before contracts existed gets them now, so they can end.
   await ensureContracts(ctx, leagueId, finished);

@@ -177,7 +177,7 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
       if (teamIds.length === 0) {
         return { rngState: league.data.rng_state, games: [], players: [] };
       }
-      const [players, coaches] = await Promise.all([
+      const [players, coaches, headCoaches] = await Promise.all([
         client
           .from("players")
           .select(PLAYER_COLUMNS)
@@ -186,18 +186,29 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
         client
           .from("teams")
           .select(
-            "id, strategy_pace, strategy_three_point, strategy_defense, starters",
+            "id, strategy_pace, strategy_three_point, strategy_defense, starters, rotation_size",
           )
           .eq("league_id", season.league_id)
           .in("id", teamIds),
+        client
+          .from("staff_members")
+          .select("team_id, rating")
+          .eq("league_id", season.league_id)
+          .eq("role", "head-coach")
+          .eq("status", "active")
+          .in("team_id", teamIds),
       ]);
       if (players.error) throw players.error;
       if (coaches.error) throw coaches.error;
+      if (headCoaches.error) throw headCoaches.error;
       return {
         rngState: league.data.rng_state,
         games: games.data,
         players: players.data,
         coaches: coaches.data,
+        headCoaches: headCoaches.data.flatMap((c) =>
+          c.team_id ? [{ team_id: c.team_id, rating: c.rating }] : [],
+        ),
       };
     },
 

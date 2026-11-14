@@ -184,3 +184,17 @@ describe("a replay with chosen starters", () => {
     expect(restored.away.starters).toBeUndefined();
   });
 });
+
+describe("a replay with a coach and a rotation", () => {
+  it("keeps both in the snapshot, and leaves them out when unset", () => {
+    const home = { ...t(0), coachBonus: 1.2, rotation: 8 };
+    const snapshot = snapshotTeams(home, t(1));
+    expect(snapshot.home).toMatchObject({ coach: 1.2, rotation: 8 });
+    expect(snapshot.away.coach).toBeUndefined();
+    expect(snapshot.away.rotation).toBeUndefined();
+    const restored = restoreTeams(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored.home.coachBonus).toBe(1.2);
+    expect(restored.home.rotation).toBe(8);
+    expect(restored.away.coachBonus).toBeUndefined();
+  });
+});

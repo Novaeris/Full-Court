@@ -171,6 +171,12 @@ Nothing the AI does is hidden: what it did shows in the offseason report. Simula
 - **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
 - **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
 
+### Coaching and rotations
+
+- **The head coach matters in games.** Every team has a head coach (a staff member, rated 30 to 95) from its first season. In every game his rating adds to all of the team's players' effective ratings: nothing at 60, up to +2 at 95 and down to -1.7 at 30. That is small on one possession and shows up over a season as a few wins. Computer teams have head coaches too, so a good coach is worth hiring from the staff market. A team with no head coach gets nothing.
+- **Rotation size.** On the Moves page the owner can tell the coach to use 7 to 12 players (the starters count), or everyone (the default). The starters and the best of the rest by overall are the rotation; the others sit unless the rotation can't fill a place (fouls, injuries). A short rotation means heavy minutes for the starters, who tire sooner and play worse when spent; a long one rests them.
+- **Not yet:** setting minutes player by player, a bench order, the coach changing strategy on his own, and the development and conditioning coaches' effects beyond training camp.
+
 ### Injuries
 
 Players get hurt, on every team, in the regular season and the playoffs.
@@ -215,7 +221,7 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **4. Staff salaries (now part of the payroll under the cap, Phase 19).** Staff have salaries and contracts, but nothing is ever paid, because the league has no finances: no revenue (tickets, TV, merchandise), no payroll, no owner profit, no budget that changes with success or market size. Every team has the same $10 million, forever. The staff budget should become part of the same finances as player salaries (one payroll, one cap or tax rule, a budget that depends on the team).
 
-**5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); what is still missing is the head coach's effect on games, minutes and rotations, and a bench order.
+**5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); the head coach's effect and the rotation size came in Phase 25; what is still missing is player-by-player minutes and a bench order.
 
 **6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; no all-star game; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
 

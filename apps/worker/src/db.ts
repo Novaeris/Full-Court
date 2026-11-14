@@ -33,7 +33,12 @@ export type CoachRow = {
   strategy_three_point: string;
   strategy_defense: string;
   starters: string[];
+  /** How many players the coach uses, or null for everyone. */
+  rotation_size: number | null;
 };
+
+/** A team's head coach, whose rating adds to every player in its games. */
+export type HeadCoachRow = { team_id: string; rating: number };
 
 /** What a day needs from the database. */
 export type DayRows = {
@@ -45,6 +50,8 @@ export type DayRows = {
   players: PlayerRow[];
   /** The playing teams' strategies; a team missing here plays the default. */
   coaches?: CoachRow[];
+  /** The playing teams' head coaches; a team missing here has none. */
+  headCoaches?: HeadCoachRow[];
 };
 
 /** Rows for `admin_commit_sim_day`, in the snake_case the function expects. */

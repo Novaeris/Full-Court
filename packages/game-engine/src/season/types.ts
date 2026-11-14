@@ -26,6 +26,14 @@ export type SimTeam = {
    * Anything else (or nothing) and the best player at each position starts.
    */
   starters?: readonly string[] | undefined;
+  /** Rating points the head coach adds to every player's effective ratings (can be negative). */
+  coachBonus?: number | undefined;
+  /**
+   * How many players the coach uses: the starters and the best of the rest.
+   * Others play only if the rotation can't fill a spot (fouls, injuries).
+   * Leave out to use everyone.
+   */
+  rotation?: number | undefined;
 };
 
 /** Who started a game, by player id. */

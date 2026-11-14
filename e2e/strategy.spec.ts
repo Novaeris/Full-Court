@@ -94,6 +94,64 @@ test.describe("strategy and starters", () => {
     expect(reset.starters).toEqual([]);
   });
 
+  test("a rotation size limits who plays, and the head coach shows", async () => {
+    test.setTimeout(240_000);
+    const { api, league } = await startedLeague("rotation");
+    // The league's first season, and its staff, are made when it first simulates.
+    await api.leagues.simulate(league.id, { kind: "day" });
+    await finishJob(api, league.id);
+    const fresh = await api.leagues.strategy(league.id);
+    expect(fresh.rotation).toBeNull();
+    // Every team has a head coach, and his bonus follows his rating.
+    expect(fresh.coach).not.toBeNull();
+    const coach = fresh.coach as NonNullable<typeof fresh.coach>;
+    expect(coach.bonus).toBeGreaterThanOrEqual(-1.7);
+    expect(coach.bonus).toBeLessThanOrEqual(2);
+    expect(Math.sign(coach.bonus)).toBe(Math.sign(coach.rating - 60));
+
+    const saved = await api.leagues.updateStrategy(league.id, {
+      strategy: fresh.strategy,
+      starters: [],
+      rotation: 7,
+    });
+    expect(saved.rotation).toBe(7);
+    // The game only knows 7 to 12.
+    await expect(
+      api.leagues.updateStrategy(league.id, {
+        strategy: fresh.strategy,
+        starters: [],
+        rotation: 5,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect((await api.leagues.strategy(league.id)).rotation).toBe(7);
+
+    // A week of games: the team plays seven players (a couple more only when
+    // fouls or injuries leave the rotation short).
+    await api.leagues.simulate(league.id, { kind: "week" });
+    await finishJob(api, league.id);
+    const { games } = await api.leagues.schedule(league.id, {
+      team: league.userTeamId as string,
+    });
+    const played = games.filter((g) => g.status === "final");
+    expect(played.length).toBeGreaterThan(2);
+    let used = 0;
+    for (const g of played) {
+      const detail = await api.leagues.game(league.id, g.id);
+      used += detail.lines.filter(
+        (l) => l.teamId === league.userTeamId && l.minutes > 0,
+      ).length;
+    }
+    // Seven in the rotation: on average well under what a full bench would use.
+    expect(used / played.length).toBeLessThan(8.6);
+
+    // Back to everyone.
+    const reset = await api.leagues.updateStrategy(league.id, {
+      strategy: fresh.strategy,
+      starters: [],
+    });
+    expect(reset.rotation).toBeNull();
+  });
+
   test("the strategy panel saves, fits the screen and passes axe", async ({
     page,
   }) => {

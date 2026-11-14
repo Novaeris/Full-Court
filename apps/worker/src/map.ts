@@ -1,4 +1,5 @@
 import { sitOut } from "@fullcourt/game-engine";
+import { coachingBonus, isRotationSize } from "@fullcourt/game-rules";
 import type {
   GameReplay,
   RngState,
@@ -14,7 +15,7 @@ import {
   type Game,
   type PlayerGameLine,
 } from "@fullcourt/game-types";
-import type { CoachRow, GameRow, PlayerRow } from "./db";
+import type { CoachRow, GameRow, HeadCoachRow, PlayerRow } from "./db";
 
 /** A scheduled game row as the engine's `Game`. */
 export function toEngineGame(row: GameRow): Game {
@@ -79,8 +80,10 @@ export function toSimTeams(
   games: readonly GameRow[],
   players: readonly PlayerRow[],
   coaches: readonly CoachRow[] = [],
+  headCoaches: readonly HeadCoachRow[] = [],
 ): SimTeam[] {
   const coachOf = new Map(coaches.map((c) => [c.id, c]));
+  const headCoachOf = new Map(headCoaches.map((c) => [c.team_id, c.rating]));
   const teamIds = new Set(
     games.flatMap((g) => [g.home_team_id, g.away_team_id]),
   );
@@ -129,6 +132,11 @@ export function toSimTeams(
           DEFAULT_TEAM_STRATEGY.defense,
         ),
       },
+      coachBonus: coachingBonus(headCoachOf.get(id)),
+      rotation:
+        coach?.rotation_size && isRotationSize(coach.rotation_size)
+          ? coach.rotation_size
+          : undefined,
       starters:
         coach && coach.starters.length > 0
           ? coachStarters(coach.starters, roster)

@@ -371,6 +371,7 @@ export async function setTeamStrategy(input: {
   threePointFocus: string;
   defense: string;
   starters: readonly string[];
+  rotation?: number | null | undefined;
 }): Promise<void> {
   const { error } = await createAdminClient().rpc("admin_set_team_strategy", {
     target_team: input.teamId,
@@ -378,6 +379,7 @@ export async function setTeamStrategy(input: {
     new_three_point: input.threePointFocus,
     new_defense: input.defense,
     new_starters: [...input.starters],
+    ...(input.rotation ? { new_rotation: input.rotation } : {}),
   });
   if (error) throw error;
 }

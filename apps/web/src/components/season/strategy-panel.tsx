@@ -2,6 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  ROTATION_NOTES,
+  ROTATION_SIZES,
+  type RotationSize,
+} from "@fullcourt/game-rules";
 import type { StrategyResponse } from "@fullcourt/validation";
 import { Button } from "@/components/ui/button";
 
@@ -50,6 +55,7 @@ export function StrategyPanel({
       ? data.starters
       : data.roster.slice(0, 5).map((p) => p.id),
   );
+  const [rotation, setRotation] = useState<number | null>(data.rotation);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +75,7 @@ export function StrategyPanel({
           teamId: data.teamId,
           strategy,
           starters: custom ? starters : [],
+          rotation,
         }),
       });
       const json: unknown = await response.json().catch(() => null);
@@ -161,6 +168,48 @@ export function StrategyPanel({
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="font-semibold">Rotation</span>
+          <select
+            className={SELECT}
+            value={rotation ?? ""}
+            onChange={(e) =>
+              setRotation(e.target.value === "" ? null : Number(e.target.value))
+            }
+          >
+            <option value="">Everyone</option>
+            {ROTATION_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n} players
+              </option>
+            ))}
+          </select>
+          <span className="text-sm text-text-muted">
+            {rotation === null
+              ? "The coach uses the whole roster, best players most."
+              : ROTATION_NOTES[rotation as RotationSize]}
+          </span>
+        </label>
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold">Head coach</span>
+          {data.coach ? (
+            <span>
+              {data.coach.name} (rated {data.coach.rating}) adds{" "}
+              <span className="font-semibold tabular-nums">
+                {data.coach.bonus > 0 ? "+" : ""}
+                {data.coach.bonus.toFixed(1)}
+              </span>{" "}
+              to every player&apos;s ratings in your games.
+            </span>
+          ) : (
+            <span className="text-text-muted">
+              You have no head coach. Hire one from the staff market.
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-5">

@@ -3,7 +3,7 @@ begin;
 \ir helpers.psql
 \ir season_helpers.psql
 
-select plan(10);
+select plan(14);
 
 insert into auth.users (id, aud, role, email)
 values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'authenticated', 'authenticated', 'owner-a@example.test');
@@ -61,6 +61,23 @@ select throws_ok(
 select throws_ok(
   $$select admin_set_team_strategy(pg_temp.team('T01'), 'reckless', 'high', 'perimeter', '{}')$$,
   '23514', null, 'the strategy has to be one the game knows');
+
+select is(
+  (select (admin_set_team_strategy(pg_temp.team('T01'), 'normal', 'normal', 'balanced',
+     '{}', 9::smallint)).rotation_size::int),
+  9, 'a franchise can set how many players the coach uses');
+select is(
+  (select (admin_set_team_strategy(pg_temp.team('T01'), 'normal', 'normal', 'balanced',
+     '{}')).rotation_size),
+  null, 'and leaving it out means everyone');
+select throws_ok(
+  $$select admin_set_team_strategy(pg_temp.team('T01'), 'normal', 'normal', 'balanced',
+      '{}', 5::smallint)$$,
+  '23514', null, 'a rotation is 7 to 12 players');
+select throws_ok(
+  $$select admin_set_team_strategy(pg_temp.team('T02'), 'normal', 'normal', 'balanced',
+      '{}', 9::smallint)$$,
+  'P0002', 'team_not_found', 'and only a franchise someone runs has one');
 
 reset role;
 set local role authenticated;
