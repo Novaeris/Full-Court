@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { LeagueTabs } from "@/components/leagues/league-tabs";
+import { ScrollToTop } from "@/components/leagues/scroll-to-top";
 import { Page } from "@/components/layout/primitives";
 import { Icon } from "@/components/ui/icon";
 import { loadLeague } from "@/server/leagues/load";
@@ -12,6 +13,9 @@ export default function LeagueLayout({
 }: LayoutProps<"/leagues/[leagueId]">) {
   return (
     <Page>
+      <Suspense fallback={null}>
+        <ScrollToTop />
+      </Suspense>
       <Link
         href="/leagues"
         className="-ml-2 inline-flex min-h-touch items-center gap-1 rounded-md px-2 font-semibold text-text-muted hover:text-text"
