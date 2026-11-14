@@ -33,7 +33,8 @@ const DEFENSE: { value: Strategy["defense"]; label: string }[] = [
   { value: "interior", label: "Protect the paint" },
 ];
 
-const SELECT = "min-h-touch rounded-md border border-border bg-surface px-2";
+const SELECT =
+  "min-h-touch w-full min-w-0 rounded-md border border-border bg-surface px-2";
 
 /**
  * How your team plays: pace, three-point focus and defence, and optionally the
@@ -108,7 +109,7 @@ export function StrategyPanel({
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="font-semibold">Pace</span>
           <select
             className={SELECT}
@@ -130,7 +131,7 @@ export function StrategyPanel({
             {PACE.find((o) => o.value === strategy.pace)?.hint}
           </span>
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="font-semibold">Three-point shooting</span>
           <select
             className={SELECT}
@@ -149,7 +150,7 @@ export function StrategyPanel({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="font-semibold">Defence</span>
           <select
             className={SELECT}
@@ -171,7 +172,7 @@ export function StrategyPanel({
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="font-semibold">Rotation</span>
           <select
             className={SELECT}
@@ -193,10 +194,10 @@ export function StrategyPanel({
               : ROTATION_NOTES[rotation as RotationSize]}
           </span>
         </label>
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <span className="font-semibold">Head coach</span>
           {data.coach ? (
-            <span>
+            <span className="break-words">
               {data.coach.name} (rated {data.coach.rating}) adds{" "}
               <span className="font-semibold tabular-nums">
                 {data.coach.bonus > 0 ? "+" : ""}
@@ -232,7 +233,7 @@ export function StrategyPanel({
           <ol className="mt-3 grid gap-2 sm:grid-cols-2">
             {starters.map((id, i) => (
               <li key={i}>
-                <label className="flex flex-col gap-1">
+                <label className="flex min-w-0 flex-col gap-1">
                   <span className="text-sm text-text-muted">
                     Starter {i + 1}
                   </span>
