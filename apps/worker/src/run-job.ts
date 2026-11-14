@@ -1,8 +1,5 @@
 import {
-  createRng,
   replayGame,
-  rollInjuries,
-  seedState,
   simulateDay,
   type ReplaySnapshot,
   type SimulateDayResult,
@@ -83,8 +80,7 @@ export async function runJob(
     const rows = await db.loadDay(season, day);
 
     let commit;
-    let injuryCandidates:
-      { playerId: string; teamId: string; minutes: number }[] | undefined;
+    let hurt: SimulateDayResult["injuries"] | undefined;
     try {
       const games = rows.games.map(toEngineGame);
       const result = simulateDay({
@@ -93,13 +89,8 @@ export async function runJob(
         rngState: toRngState(rows.rngState),
       });
       verifyReplays(games, result);
-      injuryCandidates = result.boxScores.flatMap((b) =>
-        b.lines.map((l) => ({
-          playerId: l.playerId,
-          teamId: l.teamId,
-          minutes: l.minutes,
-        })),
-      );
+      // Players hurt in the games leave the game and, once it is committed, are out.
+      hurt = result.injuries;
       commit = {
         jobId: current.id,
         day,
@@ -138,28 +129,20 @@ export async function runJob(
     log(
       `job ${current.id}: day ${day} committed (${current.days_done}/${current.days_requested})`,
     );
-    // Injuries follow the day's games; a failure here never stops the job.
+    // Injuries that happened in the day's games; a failure here never stops the job.
     if (db.applyInjuries) {
       try {
-        const hurt = rollInjuries(
-          createRng(
-            seedState(
-              `${season.league_id}:injuries:${season.year}:${season.phase}:${day}`,
-            ),
-          ),
-          injuryCandidates ?? [],
-        );
         await db.applyInjuries(
           season.id,
           day,
-          hurt.map((i) => ({
+          (hurt ?? []).map((i) => ({
             player_id: i.playerId,
             team_id: i.teamId,
             days: i.days,
             kind: i.kind,
           })),
         );
-        if (hurt.length > 0) {
+        if (hurt && hurt.length > 0) {
           log(`job ${current.id}: ${hurt.length} injured on day ${day}`);
         }
       } catch (error) {

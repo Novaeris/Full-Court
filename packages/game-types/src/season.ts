@@ -155,6 +155,7 @@ export const PLAY_KINDS = [
   "turnover",
   "foul",
   "substitution",
+  "injury",
   "period-end",
 ] as const;
 export type PlayKind = (typeof PLAY_KINDS)[number];

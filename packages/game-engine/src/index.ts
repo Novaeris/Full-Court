@@ -140,9 +140,9 @@ export {
 export {
   INJURY_RATE_PER_MINUTE,
   MIN_HEALTHY,
-  rollInjuries,
+  injuryDetails,
   sitOut,
   type Injury,
-  type InjuryCandidate,
+  type InjuryDetails,
   type InjurySeverity,
 } from "./season/injuries";

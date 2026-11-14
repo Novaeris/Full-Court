@@ -1,67 +1,52 @@
 import { describe, expect, it } from "vitest";
 import { createRng, seedState } from "../rng/rng";
-import {
-  INJURY_RATE_PER_MINUTE,
-  MIN_HEALTHY,
-  rollInjuries,
-  sitOut,
-  type InjuryCandidate,
-} from "./injuries";
+import { MIN_HEALTHY, injuryDetails, sitOut } from "./injuries";
 
-const crowd = (n: number, minutes = 30): InjuryCandidate[] =>
-  Array.from({ length: n }, (_, i) => ({
-    playerId: `p${String(i).padStart(4, "0")}`,
-    teamId: `t${i % 10}`,
-    minutes,
-  }));
-const roll = (seed: string, list: InjuryCandidate[]) =>
-  rollInjuries(createRng(seedState(seed)), list);
+describe("injuryDetails", () => {
+  const many = (seed: string, n: number) => {
+    const rng = createRng(seedState(seed));
+    return Array.from({ length: n }, () => injuryDetails(rng));
+  };
 
-describe("rollInjuries", () => {
-  it("is the same for the same seed, whatever the order", () => {
-    const list = crowd(300);
-    expect(roll("a", list)).toEqual(roll("a", list));
-    expect(roll("a", list)).toEqual(roll("a", [...list].reverse()));
-    expect(roll("a", list)).not.toEqual(roll("b", list));
+  it("is the same for the same seed", () => {
+    expect(many("a", 50)).toEqual(many("a", 50));
+    expect(many("a", 50)).not.toEqual(many("b", 50));
   });
 
-  it("hurts about the expected share of the players who played", () => {
-    const list = crowd(20_000);
-    const hurt = roll("rate", list).length;
-    const expected = 20_000 * 30 * INJURY_RATE_PER_MINUTE;
-    expect(hurt).toBeGreaterThan(expected * 0.8);
-    expect(hurt).toBeLessThan(expected * 1.2);
-  });
-
-  it("never hurts a player who didn't play, and hurts the heavy minutes more", () => {
-    expect(roll("zero", crowd(5_000, 0))).toEqual([]);
-    const light = roll("m", crowd(20_000, 10)).length;
-    const heavy = roll("m", crowd(20_000, 40)).length;
-    expect(heavy).toBeGreaterThan(light * 2);
+  it("uses three draws each time, whatever it picks", () => {
+    const one = createRng(seedState("draws"));
+    const two = createRng(seedState("draws"));
+    for (let i = 0; i < 100; i++) injuryDetails(one);
+    for (let i = 0; i < 300; i++) two.next();
+    expect(one.state()).toEqual(two.state());
   });
 
   it("gives lengths in each severity's range, mostly short", () => {
-    const hurt = roll("len", crowd(60_000));
-    const by = (s: string) => hurt.filter((i) => i.severity === s);
+    const list = many("len", 20_000);
+    const by = (s: string) => list.filter((i) => i.severity === s);
     expect(by("minor").length).toBeGreaterThan(by("moderate").length);
     expect(by("moderate").length).toBeGreaterThan(by("major").length);
-    for (const i of by("minor")) expect(i.days).toBeGreaterThanOrEqual(1);
-    for (const i of by("minor")) expect(i.days).toBeLessThanOrEqual(5);
-    for (const i of by("major")) expect(i.days).toBeGreaterThanOrEqual(21);
-    for (const i of hurt) expect(i.kind.length).toBeGreaterThan(0);
+    const share = (s: string) => by(s).length / list.length;
+    expect(share("minor")).toBeGreaterThan(0.69);
+    expect(share("minor")).toBeLessThan(0.75);
+    expect(share("major")).toBeGreaterThan(0.03);
+    expect(share("major")).toBeLessThan(0.07);
+    for (const i of by("minor")) {
+      expect(i.days).toBeGreaterThanOrEqual(1);
+      expect(i.days).toBeLessThanOrEqual(5);
+    }
+    for (const i of by("moderate")) {
+      expect(i.days).toBeGreaterThanOrEqual(6);
+      expect(i.days).toBeLessThanOrEqual(20);
+    }
+    for (const i of by("major")) {
+      expect(i.days).toBeGreaterThanOrEqual(21);
+      expect(i.days).toBeLessThanOrEqual(80);
+    }
+    for (const i of list) expect(i.kind.length).toBeGreaterThan(0);
     const minors = by("minor");
     const short = minors.filter((i) => i.days <= 2).length;
     expect(short).toBeGreaterThan(minors.length / 2);
-  });
-
-  it("doesn't let one player's result move another's", () => {
-    const list = crowd(100);
-    const without = roll("same", list.slice(50));
-    const withAll = roll("same", list);
-    // The last 50 draw after the first 50, so they differ, but each run is
-    // still repeatable and uses the same draws per player.
-    expect(roll("same", list)).toEqual(withAll);
-    expect(without.every((i) => i.days > 0)).toBe(true);
   });
 });
 

@@ -1,3 +1,4 @@
+import type { Injury } from "./injuries";
 import type {
   BoxScore,
   Game,
@@ -36,4 +37,6 @@ export type SimulatedGame = {
   plays: PlayEvent[];
   boxScore: BoxScore;
   starters: Lineups;
+  /** Players hurt during the game, in the order it happened. */
+  injuries: Injury[];
 };

@@ -137,6 +137,7 @@ function fingerprint(text: string): string {
 const PINNED: Record<number, string> = {
   1: "5a7266a0",
   2: "92e4aef0",
+  3: "dcd4bc84",
 };
 
 describe("the engine's output", () => {

@@ -1,31 +1,31 @@
 import type { Rng } from "../rng/rng";
 
 /**
- * Injuries (docs/DESIGN.md, "Injuries"). They are rolled once a day, after the
- * day's games, from the minutes each player played: the more a player is on
- * the court, the likelier he is to be hurt. An injury keeps him out for some
- * days; it doesn't change his ratings.
+ * Injuries (docs/DESIGN.md, "Injuries"). A player can be hurt at any moment a
+ * game is played, and the longer he is on the court the likelier it is
+ * (`INJURY_RATE_PER_MINUTE`). The game rolls for every player on the court
+ * after each trip, takes a hurt player out for the rest of the game, and
+ * records the injury; this file decides what the injury is. It keeps him out
+ * for some days and doesn't change his ratings.
  */
 
 export type InjurySeverity = "minor" | "moderate" | "major";
 
-/** What a player who played that day is rolled for. */
-export type InjuryCandidate = {
-  playerId: string;
-  teamId: string;
-  minutes: number;
-};
-
-export type Injury = {
-  playerId: string;
-  teamId: string;
+/** What an injury is: how long it keeps a player out and what it is called. */
+export type InjuryDetails = {
   /** Days he is out, counting from the next day. */
   days: number;
   kind: string;
   severity: InjurySeverity;
 };
 
-/** The chance of an injury for each minute played: 36 minutes is about 0.6%. */
+/** An injury that happened in a game. */
+export type Injury = InjuryDetails & {
+  playerId: string;
+  teamId: string;
+};
+
+/** The chance of an injury for each minute on the court: 36 minutes is about 0.6%. */
 export const INJURY_RATE_PER_MINUTE = 0.00017;
 
 const SEVERITIES: readonly {
@@ -79,44 +79,27 @@ const SEVERITIES: readonly {
   },
 ];
 
-/**
- * The injuries of one day. `played` is everyone who took the court; the order
- * doesn't matter (candidates are rolled by player id), so the same day and
- * seed always give the same injuries.
- */
-export function rollInjuries(
-  rng: Rng,
-  played: readonly InjuryCandidate[],
-): Injury[] {
-  const out: Injury[] = [];
-  const ordered = [...played].sort((a, b) =>
-    a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0,
-  );
-  for (const p of ordered) {
-    // Every candidate uses the same number of draws whether hurt or not, so one
-    // player's result never moves another's.
-    const hurt = rng.next() < Math.max(0, p.minutes) * INJURY_RATE_PER_MINUTE;
-    const kindRoll = rng.next();
-    const lengthRoll = rng.next();
-    const pickRoll = rng.next();
-    if (!hurt) continue;
-    let acc = 0;
-    const band =
-      SEVERITIES.find((s) => (acc += s.share) > kindRoll) ??
-      (SEVERITIES[SEVERITIES.length - 1] as (typeof SEVERITIES)[number]);
-    // Shorter injuries are more common than longer ones within a band.
-    const span = band.max - band.min + 1;
-    const days = band.min + Math.floor(lengthRoll * lengthRoll * span);
-    const kind = band.kinds[Math.floor(pickRoll * band.kinds.length)] as string;
-    out.push({
-      playerId: p.playerId,
-      teamId: p.teamId,
-      days,
-      kind,
-      severity: band.severity,
-    });
+/** What a new injury is. Always three draws, so the rest of a game is unaffected by which. */
+export function injuryDetails(rng: Rng): InjuryDetails {
+  const kindRoll = rng.next();
+  const lengthRoll = rng.next();
+  const pickRoll = rng.next();
+  let acc = 0;
+  let band = SEVERITIES[SEVERITIES.length - 1] as (typeof SEVERITIES)[number];
+  for (const s of SEVERITIES) {
+    acc += s.share;
+    if (acc > kindRoll) {
+      band = s;
+      break;
+    }
   }
-  return out;
+  // Shorter injuries are more common than longer ones within a band.
+  const span = band.max - band.min + 1;
+  return {
+    days: band.min + Math.floor(lengthRoll * lengthRoll * span),
+    kind: band.kinds[Math.floor(pickRoll * band.kinds.length)] as string,
+    severity: band.severity,
+  };
 }
 
 /** How many healthy players a team always has: below this, injured players play. */

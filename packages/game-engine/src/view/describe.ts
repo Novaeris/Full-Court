@@ -56,6 +56,8 @@ export function describePlay(play: PlayEvent, nameOf: NameOf): string {
       return `${who} commits a foul`;
     case "substitution":
       return `${who} enters for ${nameOf(play.outPlayerId)}`;
+    case "injury":
+      return `${who} is injured and leaves the game`;
     default:
       return "";
   }

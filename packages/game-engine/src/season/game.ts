@@ -16,6 +16,7 @@ import { cos, pow15, sin } from "../rng/dmath";
 import { normalSum, pick, weighted } from "../rng/helpers";
 import type { Rng } from "../rng/rng";
 import { buildBoxScore } from "./boxscore";
+import { INJURY_RATE_PER_MINUTE, injuryDetails, type Injury } from "./injuries";
 import type { Lineups, SimPlayer, SimTeam, SimulatedGame } from "./types";
 
 /** Mean seconds a fresh trip down the court takes, by pace. */
@@ -69,6 +70,8 @@ type Side = {
   fouls: Map<string, number>;
   periodFouls: number;
   score: number;
+  /** Players hurt in this game: out for the rest of it. */
+  injured: Set<string>;
 };
 
 const clamp = (n: number, lo: number, hi: number): number =>
@@ -103,6 +106,7 @@ export function simulateGame(
   };
 
   const plays: PlayEvent[] = [];
+  const injuries: Injury[] = [];
   let period = 0;
   let clock = 0;
 
@@ -176,6 +180,7 @@ export function simulateGame(
       const candidates = side.bench.filter(
         (p) =>
           (side.fouls.get(p.id) ?? 0) < FOUL_OUT &&
+          !side.injured.has(p.id) &&
           (side.energy.get(p.id) ?? 1) >= FRESH,
       );
       if (candidates.length === 0) return;
@@ -195,7 +200,8 @@ export function simulateGame(
     // Fouled-out players leave first, then tired ones.
     for (;;) {
       const eligible = side.bench.filter(
-        (p) => (side.fouls.get(p.id) ?? 0) < FOUL_OUT,
+        (p) =>
+          (side.fouls.get(p.id) ?? 0) < FOUL_OUT && !side.injured.has(p.id),
       );
       if (eligible.length === 0) return;
       const out = [...side.onCourt]
@@ -219,6 +225,40 @@ export function simulateGame(
         playerId: incoming.id,
         outPlayerId: out.id,
       });
+    }
+  };
+
+  /**
+   * After a trip that took `seconds`, everyone on the court may be hurt, the
+   * more likely the longer the trip. A hurt player leaves at once and doesn't
+   * return; with nobody to replace him he plays on, un-hurt. Every player on
+   * the court takes one draw whatever happens, so the rest of the game is
+   * the same stream either way.
+   */
+  const rollInjuries = (seconds: number): void => {
+    for (const side of sides) {
+      for (const player of [...side.onCourt]) {
+        const hurt =
+          rng.next() < (INJURY_RATE_PER_MINUTE * Math.max(0, seconds)) / 60;
+        if (!hurt) continue;
+        const details = injuryDetails(rng);
+        const eligible = side.bench.filter(
+          (p) =>
+            (side.fouls.get(p.id) ?? 0) < FOUL_OUT && !side.injured.has(p.id),
+        );
+        if (eligible.length === 0) continue;
+        const incoming = eligible.reduce((best, p) =>
+          value(side, p) > value(side, best) ? p : best,
+        );
+        side.injured.add(player.id);
+        emit("injury", side, { playerId: player.id });
+        swap(side, player, incoming);
+        injuries.push({
+          playerId: player.id,
+          teamId: side.team.id,
+          ...details,
+        });
+      }
     }
   };
 
@@ -518,7 +558,9 @@ export function simulateGame(
     let origin: Origin = OTHER;
     while (clock > 0) {
       const defense = offense === homeSide ? awaySide : homeSide;
+      const before = clock;
       const outcome = trip(offense, defense, continuation, origin);
+      rollInjuries(before - clock);
       continuation = !outcome.deadBall && outcome.next === offense;
       origin = outcome.origin;
       offense = outcome.next;
@@ -546,6 +588,7 @@ export function simulateGame(
     plays,
     boxScore: buildBoxScore(game.id, plays, starters, teamOf),
     starters,
+    injuries,
   };
 }
 
@@ -574,6 +617,7 @@ function makeSide(team: SimTeam, home: boolean): Side {
     fouls: new Map(),
     periodFouls: 0,
     score: 0,
+    injured: new Set(),
   };
 }
 
