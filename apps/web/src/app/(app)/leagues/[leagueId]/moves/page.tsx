@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { RosterPanel } from "@/components/season/roster-panel";
+import { StrategyPanel } from "@/components/season/strategy-panel";
 import { TradePanel } from "@/components/season/trade-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { loadLeague } from "@/server/leagues/load";
 import { getRoster } from "@/server/services/roster";
+import { getStrategy } from "@/server/services/strategy";
 import { getTrades } from "@/server/services/trades";
 import { listTeams } from "@/server/services/world";
 
@@ -41,14 +43,20 @@ async function Moves({
       />
     );
   }
-  const [trades, roster, teams] = await Promise.all([
+  const [trades, roster, teams, strategy] = await Promise.all([
     getTrades(ctx, league.id),
     getRoster(ctx, league.id),
     listTeams(ctx, league.id),
+    getStrategy(ctx, league.id),
   ]);
   return (
     <div className="flex flex-col gap-8">
       <TradePanel leagueId={league.id} data={trades} teams={teams} />
+      <StrategyPanel
+        key={`${strategy.teamId}:${strategy.starters.join()}:${strategy.strategy.pace}`}
+        leagueId={league.id}
+        data={strategy}
+      />
       {roster.teamId ? (
         <RosterPanel
           leagueId={league.id}

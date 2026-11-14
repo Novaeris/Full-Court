@@ -175,16 +175,27 @@ export function createSupabaseDb(config: WorkerConfig): WorkerDb {
       if (teamIds.length === 0) {
         return { rngState: league.data.rng_state, games: [], players: [] };
       }
-      const players = await client
-        .from("players")
-        .select(PLAYER_COLUMNS)
-        .eq("league_id", season.league_id)
-        .in("team_id", teamIds);
+      const [players, coaches] = await Promise.all([
+        client
+          .from("players")
+          .select(PLAYER_COLUMNS)
+          .eq("league_id", season.league_id)
+          .in("team_id", teamIds),
+        client
+          .from("teams")
+          .select(
+            "id, strategy_pace, strategy_three_point, strategy_defense, starters",
+          )
+          .eq("league_id", season.league_id)
+          .in("id", teamIds),
+      ]);
       if (players.error) throw players.error;
+      if (coaches.error) throw coaches.error;
       return {
         rngState: league.data.rng_state,
         games: games.data,
         players: players.data,
+        coaches: coaches.data,
       };
     },
 

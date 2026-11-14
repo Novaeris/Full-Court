@@ -1,0 +1,132 @@
+import { expect, test } from "@playwright/test";
+import { signInThroughUi } from "./support/auth";
+import {
+  expectAccessible,
+  noOverflow,
+  startedLeague,
+  touchTargets,
+} from "./support/season";
+import { finishJob } from "./support/worker";
+
+/**
+ * Strategy and starters, against the real server: what is saved, what the
+ * rules refuse, and that the games played afterwards start the five named.
+ */
+
+test.describe("strategy and starters", () => {
+  test.beforeEach(({ browserName: _ }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "runs once, on desktop");
+  });
+
+  test("save a strategy and starters, and the next game starts them", async () => {
+    test.setTimeout(240_000);
+    const { api, league } = await startedLeague("strategy");
+    const fresh = await api.leagues.strategy(league.id);
+    expect(fresh.strategy).toEqual({
+      pace: "normal",
+      threePointFocus: "normal",
+      defense: "balanced",
+    });
+    expect(fresh.starters).toEqual([]);
+    expect(fresh.roster).toHaveLength(15);
+
+    // The five weakest players: nobody would choose them by themselves.
+    const weakest = [...fresh.roster]
+      .sort((a, b) => a.overall - b.overall)
+      .slice(0, 5)
+      .map((p) => p.id);
+    const saved = await api.leagues.updateStrategy(league.id, {
+      strategy: { pace: "fast", threePointFocus: "high", defense: "interior" },
+      starters: weakest,
+    });
+    expect(saved.strategy).toEqual({
+      pace: "fast",
+      threePointFocus: "high",
+      defense: "interior",
+    });
+    expect([...saved.starters].sort()).toEqual([...weakest].sort());
+
+    // The rules refuse starters that aren't five different players of the team.
+    const bad = {
+      strategy: saved.strategy,
+    };
+    await expect(
+      api.leagues.updateStrategy(league.id, {
+        ...bad,
+        starters: weakest.slice(0, 4),
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      api.leagues.updateStrategy(league.id, {
+        ...bad,
+        starters: [
+          ...weakest.slice(0, 4),
+          "11111111-1111-4111-8111-111111111111",
+        ],
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "invalid_starters" });
+    // Nothing changed.
+    expect((await api.leagues.strategy(league.id)).starters.length).toBe(5);
+
+    // The next game starts the five that were named.
+    await api.leagues.simulate(league.id, { kind: "day" });
+    await finishJob(api, league.id);
+    const { games } = await api.leagues.schedule(league.id, {
+      team: league.userTeamId as string,
+    });
+    const played = games.find((g) => g.status === "final");
+    expect(played).toBeDefined();
+    const plays = await api.leagues.gamePlays(
+      league.id,
+      (played as NonNullable<typeof played>).id,
+    );
+    const mine =
+      played?.homeTeamId === league.userTeamId
+        ? plays.starters.home
+        : plays.starters.away;
+    expect([...mine].sort()).toEqual([...weakest].sort());
+
+    // Back to automatic.
+    const reset = await api.leagues.updateStrategy(league.id, {
+      strategy: saved.strategy,
+      starters: [],
+    });
+    expect(reset.starters).toEqual([]);
+  });
+
+  test("the strategy panel saves, fits the screen and passes axe", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const { user, api, league } = await startedLeague("strategylayout");
+    await api.leagues.simulate(league.id, { kind: "day" });
+    await finishJob(api, league.id);
+    const path = `/leagues/${league.id}/moves`;
+    await signInThroughUi(page, user.email, user.password, path);
+    await expect(
+      page.getByRole("heading", { name: "Strategy and starters" }),
+    ).toBeVisible();
+    const panel = page.getByRole("region", { name: "Strategy and starters" });
+    await panel.getByRole("combobox").nth(0).selectOption("slow");
+    await panel.getByRole("combobox").nth(2).selectOption("perimeter");
+    await panel.getByLabel("Choose my starting five").check();
+    await page.getByRole("button", { name: "Save strategy" }).click();
+    await expect(
+      page.getByText("Saved. It applies to your next game."),
+    ).toBeVisible();
+    const after = await api.leagues.strategy(league.id);
+    expect(after.strategy.pace).toBe("slow");
+    expect(after.strategy.defense).toBe("perimeter");
+    expect(after.starters).toHaveLength(5);
+
+    await noOverflow(page);
+    await touchTargets(page);
+    await expectAccessible(page);
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Strategy and starters" }),
+    ).toBeVisible();
+    await noOverflow(page);
+  });
+});

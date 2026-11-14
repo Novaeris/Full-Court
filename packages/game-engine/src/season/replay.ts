@@ -34,6 +34,8 @@ export type ReplayTeam = {
   /** Pace, three-point focus and defence, in that order. */
   strategy: [Pace, ThreePointFocus, DefenseStyle];
   players: ReplayPlayer[];
+  /** The coach's chosen five, when there were any (left out otherwise). */
+  starters?: string[];
 };
 
 /**
@@ -52,7 +54,11 @@ export type GameReplay = {
 };
 
 function snapshotTeam(team: SimTeam): ReplayTeam {
+  const starters = team.starters?.length
+    ? { starters: [...team.starters] }
+    : {};
   return {
+    ...starters,
     id: team.id,
     strategy: [
       team.strategy.pace,
@@ -114,7 +120,13 @@ function restoreTeam(team: ReplayTeam): SimTeam {
   ) {
     throw new Error("Replay snapshot: invalid team.");
   }
+  const starters =
+    Array.isArray(team.starters) &&
+    team.starters.every((id) => typeof id === "string")
+      ? { starters: [...team.starters] }
+      : {};
   return {
+    ...starters,
     id: team.id,
     strategy: {
       pace: oneOf(PACE_LEVELS, team.strategy[0], "pace"),

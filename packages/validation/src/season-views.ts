@@ -3,7 +3,14 @@ import {
   OFFSEASON_STAGES,
   STAFF_ROLES,
 } from "@fullcourt/game-types";
-import { PLAY_KINDS, POSITIONS, SHOT_ZONES } from "@fullcourt/game-types";
+import {
+  DEFENSE_STYLES,
+  PACE_LEVELS,
+  PLAY_KINDS,
+  POSITIONS,
+  SHOT_ZONES,
+  THREE_POINT_FOCUS_LEVELS,
+} from "@fullcourt/game-types";
 import { z } from "zod";
 import { SeasonSchema } from "./simulation";
 
@@ -767,3 +774,45 @@ export const ShopResponseSchema = z.object({
   ),
 });
 export type ShopResponse = z.infer<typeof ShopResponseSchema>;
+
+/** How a team plays: what the coach sets (docs/DESIGN.md, "Strategy and lineups"). */
+export const TeamStrategySchema = z.object({
+  pace: z.enum(PACE_LEVELS),
+  threePointFocus: z.enum(THREE_POINT_FOCUS_LEVELS),
+  defense: z.enum(DEFENSE_STYLES),
+});
+export type TeamStrategyView = z.infer<typeof TeamStrategySchema>;
+
+/** GET /api/v1/leagues/:leagueId/strategy?team=: your team's strategy, starters and roster. */
+export const StrategyResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  strategy: TeamStrategySchema,
+  /** Five player ids, or none when the best player at each position starts. */
+  starters: z.array(z.uuid()),
+  roster: z.array(
+    z.object({
+      id: z.uuid(),
+      name: z.string(),
+      position: z.enum(POSITIONS),
+      overall: z.number().int(),
+    }),
+  ),
+});
+export type StrategyResponse = z.infer<typeof StrategyResponseSchema>;
+
+/** PATCH /api/v1/leagues/:leagueId/strategy: set the strategy and starters. */
+export const UpdateStrategyRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  strategy: TeamStrategySchema,
+  /** Five different players of the team, or empty for the automatic five. */
+  starters: z
+    .array(z.uuid())
+    .refine(
+      (s) => s.length === 0 || (s.length === 5 && new Set(s).size === 5),
+      {
+        message:
+          "Pick five different players, or leave the starters automatic.",
+      },
+    ),
+});
+export type UpdateStrategyRequest = z.infer<typeof UpdateStrategyRequestSchema>;

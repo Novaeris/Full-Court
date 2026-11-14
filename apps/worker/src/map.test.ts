@@ -50,6 +50,46 @@ describe("toSimTeams", () => {
     expect(teams.flatMap((t) => t.players)).toHaveLength(16);
   });
 
+  it("plays a team's saved strategy and starters, and the default for the rest", () => {
+    const players = fakePlayers();
+    const five = players
+      .filter((p) => p.team_id === "t1")
+      .slice(0, 5)
+      .map((p) => p.id);
+    const teams = toSimTeams(games, players, [
+      {
+        id: "t1",
+        strategy_pace: "fast",
+        strategy_three_point: "high",
+        strategy_defense: "interior",
+        starters: five,
+      },
+    ]);
+    const t1 = teams.find((t) => t.id === "t1");
+    expect(t1?.strategy).toEqual({
+      pace: "fast",
+      threePointFocus: "high",
+      defense: "interior",
+    });
+    expect(t1?.starters).toEqual(five);
+    const t2 = teams.find((t) => t.id === "t2");
+    expect(t2?.strategy.pace).toBe("normal");
+    expect(t2?.starters).toBeUndefined();
+  });
+
+  it("falls back to the default for a value it doesn't know", () => {
+    const teams = toSimTeams(games, fakePlayers(), [
+      {
+        id: "t1",
+        strategy_pace: "reckless",
+        strategy_three_point: "normal",
+        strategy_defense: "balanced",
+        starters: [],
+      },
+    ]);
+    expect(teams.find((t) => t.id === "t1")?.strategy.pace).toBe("normal");
+  });
+
   it("rejects an unknown position", () => {
     const players = fakePlayers().map((p) => ({ ...p, position: "G" }));
     expect(() => toSimTeams(games, players)).toThrow(/unknown position/);

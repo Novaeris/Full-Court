@@ -84,7 +84,7 @@ export async function runJob(
       const games = rows.games.map(toEngineGame);
       const result = simulateDay({
         games,
-        teams: toSimTeams(rows.games, rows.players),
+        teams: toSimTeams(rows.games, rows.players, rows.coaches),
         rngState: toRngState(rows.rngState),
       });
       verifyReplays(games, result);

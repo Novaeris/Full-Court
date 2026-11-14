@@ -11,6 +11,7 @@ import {
   CampResponseSchema,
   DraftResponseSchema,
   ShopResponseSchema,
+  StrategyResponseSchema,
   TradeEvaluationSchema,
   TradePartnerResponseSchema,
   TradeResultSchema,
@@ -36,6 +37,8 @@ import {
   type DraftResponse,
   type DraftSimRequest,
   type ShopRequest,
+  type StrategyResponse,
+  type UpdateStrategyRequest,
   type ShopResponse,
   type OfferAnswer,
   type TradeEvaluation,
@@ -488,6 +491,26 @@ export function createApiClient(options: ApiClientOptions) {
           "PUT",
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
+          input,
+        ),
+      /** How your team plays, its starters and its roster. */
+      strategy: (id: string, teamId?: string): Promise<StrategyResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/strategy${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+          }`,
+          (b) => StrategyResponseSchema.parse(b),
+        ),
+      /** Sets your team's pace, three-point focus, defence and starters. */
+      updateStrategy: (
+        id: string,
+        input: UpdateStrategyRequest,
+      ): Promise<StrategyResponse> =>
+        request(
+          "PATCH",
+          `/leagues/${encodeURIComponent(id)}/strategy`,
+          (b) => StrategyResponseSchema.parse(b),
           input,
         ),
       /** The game's plays, replayed by the server. */

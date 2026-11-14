@@ -363,3 +363,21 @@ export async function declineTradeOffer(offerId: string): Promise<void> {
   });
   if (error) throw error;
 }
+
+/** Sets a franchise's strategy and the five it starts (empty: automatic). */
+export async function setTeamStrategy(input: {
+  teamId: string;
+  pace: string;
+  threePointFocus: string;
+  defense: string;
+  starters: readonly string[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_set_team_strategy", {
+    target_team: input.teamId,
+    new_pace: input.pace,
+    new_three_point: input.threePointFocus,
+    new_defense: input.defense,
+    new_starters: [...input.starters],
+  });
+  if (error) throw error;
+}

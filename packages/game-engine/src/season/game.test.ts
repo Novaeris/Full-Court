@@ -553,3 +553,38 @@ describe("fouling out", () => {
     expect(sixes).toBeGreaterThan(0);
   });
 });
+
+describe("the coach's starters", () => {
+  const benchFive = (team: Team) =>
+    [...team.players]
+      .sort((a, b) => a.overall - b.overall)
+      .slice(0, 5)
+      .map((p) => p.id);
+
+  it("starts the five a coach names", () => {
+    const named = benchFive(teamA);
+    const game = play("starters", { ...teamA, starters: named });
+    expect([...game.starters.home].sort()).toEqual([...named].sort());
+  });
+
+  it("ignores a list that isn't five different players of the roster", () => {
+    const usual = play("starters").starters.home;
+    const first = teamA.players[0]?.id as string;
+    for (const bad of [
+      [first],
+      [first, first, first, first, first],
+      [...benchFive(teamA).slice(0, 4), "nobody"],
+    ]) {
+      expect(
+        play("starters", { ...teamA, starters: bad }).starters.home,
+      ).toEqual(usual);
+    }
+  });
+
+  it("changes the game, but not for a team that names nothing", () => {
+    const plain = play("starters");
+    const same = play("starters", { ...teamA, starters: undefined });
+    expect(same.game.homeScore).toBe(plain.game.homeScore);
+    expect(same.plays).toEqual(plain.plays);
+  });
+});

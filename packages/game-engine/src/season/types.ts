@@ -20,6 +20,11 @@ export type SimTeam = {
   id: string;
   players: readonly SimPlayer[];
   strategy: TeamStrategy;
+  /**
+   * Who the coach starts, by player id: five different players of the roster.
+   * Anything else (or nothing) and the best player at each position starts.
+   */
+  starters?: readonly string[] | undefined;
 };
 
 /** Who started a game, by player id. */

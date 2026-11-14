@@ -6,11 +6,14 @@ import type {
 } from "@fullcourt/game-engine";
 import {
   DEFAULT_TEAM_STRATEGY,
+  DEFENSE_STYLES,
+  PACE_LEVELS,
+  THREE_POINT_FOCUS_LEVELS,
   isPosition,
   type Game,
   type PlayerGameLine,
 } from "@fullcourt/game-types";
-import type { GameRow, PlayerRow } from "./db";
+import type { CoachRow, GameRow, PlayerRow } from "./db";
 
 /** A scheduled game row as the engine's `Game`. */
 export function toEngineGame(row: GameRow): Game {
@@ -67,14 +70,16 @@ function toSimPlayer(row: PlayerRow): SimPlayer {
 }
 
 /**
- * The teams in a day's games, with their rosters. Teams use the default
- * coaching strategy until strategies are stored. Players with no team are
- * free agents and don't play.
+ * The teams in a day's games, with their rosters. A team plays the strategy
+ * and starters its owner saved, or the default if there are none (or they
+ * aren't valid). Players with no team are free agents and don't play.
  */
 export function toSimTeams(
   games: readonly GameRow[],
   players: readonly PlayerRow[],
+  coaches: readonly CoachRow[] = [],
 ): SimTeam[] {
+  const coachOf = new Map(coaches.map((c) => [c.id, c]));
   const teamIds = new Set(
     games.flatMap((g) => [g.home_team_id, g.away_team_id]),
   );
@@ -85,11 +90,40 @@ export function toSimTeams(
       rosters.get(row.team_id)?.push(toSimPlayer(row));
     }
   }
-  return [...rosters].map(([id, roster]) => ({
-    id,
-    players: roster,
-    strategy: { ...DEFAULT_TEAM_STRATEGY },
-  }));
+  return [...rosters].map(([id, roster]) => {
+    const coach = coachOf.get(id);
+    const pick = <T extends string>(
+      options: readonly T[],
+      value: string | undefined,
+      fallback: T,
+    ): T =>
+      (options as readonly string[]).includes(value ?? "")
+        ? (value as T)
+        : fallback;
+    return {
+      id,
+      players: roster,
+      strategy: {
+        pace: pick(
+          PACE_LEVELS,
+          coach?.strategy_pace,
+          DEFAULT_TEAM_STRATEGY.pace,
+        ),
+        threePointFocus: pick(
+          THREE_POINT_FOCUS_LEVELS,
+          coach?.strategy_three_point,
+          DEFAULT_TEAM_STRATEGY.threePointFocus,
+        ),
+        defense: pick(
+          DEFENSE_STYLES,
+          coach?.strategy_defense,
+          DEFAULT_TEAM_STRATEGY.defense,
+        ),
+      },
+      // The engine ignores a list that isn't five of this roster.
+      starters: coach && coach.starters.length > 0 ? coach.starters : undefined,
+    };
+  });
 }
 
 /** A finished game as the row `admin_commit_sim_day` expects. */

@@ -563,7 +563,7 @@ const RESTED = 0.75;
 // ---- Helpers ----
 
 function makeSide(team: SimTeam, home: boolean): Side {
-  const starters = chooseStarters(team.players);
+  const starters = pickedStarters(team) ?? chooseStarters(team.players);
   const ids = new Set(starters.map((p) => p.id));
   return {
     team,
@@ -575,6 +575,15 @@ function makeSide(team: SimTeam, home: boolean): Side {
     periodFouls: 0,
     score: 0,
   };
+}
+
+/** The coach's own five, if the team names five different players it has. */
+function pickedStarters(team: SimTeam): SimPlayer[] | null {
+  const named = team.starters;
+  if (!named || named.length !== 5 || new Set(named).size !== 5) return null;
+  const byId = new Map(team.players.map((p) => [p.id, p]));
+  const chosen = named.map((id) => byId.get(id));
+  return chosen.every((p) => p !== undefined) ? (chosen as SimPlayer[]) : null;
 }
 
 /** The best player at each position, then the best of the rest. */

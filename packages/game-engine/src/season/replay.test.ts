@@ -164,3 +164,22 @@ describe("the engine's output", () => {
     ).toBe(pinned);
   });
 });
+
+describe("a replay with chosen starters", () => {
+  it("replays the same game and keeps the starters in the snapshot", () => {
+    const home = {
+      ...t(0),
+      starters: [...t(0).players]
+        .sort((a, b) => a.overall - b.overall)
+        .slice(0, 5)
+        .map((p) => p.id),
+    };
+    const away = t(1);
+    const snapshot = snapshotTeams(home, away);
+    expect(snapshot.home.starters).toEqual(home.starters);
+    expect(snapshot.away.starters).toBeUndefined();
+    const restored = restoreTeams(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored.home.starters).toEqual(home.starters);
+    expect(restored.away.starters).toBeUndefined();
+  });
+});

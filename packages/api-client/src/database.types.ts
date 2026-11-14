@@ -1575,6 +1575,10 @@ export type Database = {
           nickname: string
           primary_color: string
           secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
         }
         Insert: {
           abbreviation: string
@@ -1594,6 +1598,10 @@ export type Database = {
           nickname: string
           primary_color: string
           secondary_color: string
+          starters?: string[]
+          strategy_defense?: string
+          strategy_pace?: string
+          strategy_three_point?: string
         }
         Update: {
           abbreviation?: string
@@ -1613,6 +1621,10 @@ export type Database = {
           nickname?: string
           primary_color?: string
           secondary_color?: string
+          starters?: string[]
+          strategy_defense?: string
+          strategy_pace?: string
+          strategy_three_point?: string
         }
         Relationships: [
           {
@@ -2351,6 +2363,10 @@ export type Database = {
           nickname: string
           primary_color: string
           secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
         }
         SetofOptions: {
           from: "*"
@@ -2362,6 +2378,44 @@ export type Database = {
       admin_set_camp: {
         Args: { assignments: Json; camp_team: string; target_season: string }
         Returns: number
+      }
+      admin_set_team_strategy: {
+        Args: {
+          new_defense: string
+          new_pace: string
+          new_starters: string[]
+          new_three_point: string
+          target_team: string
+        }
+        Returns: {
+          abbreviation: string
+          ai_drafting: boolean
+          ai_roster_coverage: boolean
+          ai_roster_management: boolean
+          ai_scouting: boolean
+          ai_trades: boolean
+          city: string
+          city_id: string | null
+          conference_id: string
+          division_id: string
+          id: string
+          league_id: string
+          local_player_slot: number | null
+          logo_id: string | null
+          nickname: string
+          primary_color: string
+          secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "teams"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_sign_player: {
         Args: {

@@ -25,6 +25,15 @@ export type PlayerRow = Pick<
   | "stamina"
 >;
 
+/** How a team plays: its strategy and the starters its owner named. */
+export type CoachRow = {
+  id: string;
+  strategy_pace: string;
+  strategy_three_point: string;
+  strategy_defense: string;
+  starters: string[];
+};
+
 /** What a day needs from the database. */
 export type DayRows = {
   /** The league's RNG state before the day. */
@@ -33,6 +42,8 @@ export type DayRows = {
   games: GameRow[];
   /** Every player on a team that plays that day. */
   players: PlayerRow[];
+  /** The playing teams' strategies; a team missing here plays the default. */
+  coaches?: CoachRow[];
 };
 
 /** Rows for `admin_commit_sim_day`, in the snake_case the function expects. */
