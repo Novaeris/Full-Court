@@ -3,7 +3,7 @@ begin;
 \ir helpers.psql
 \ir season_helpers.psql
 
-select plan(14);
+select plan(12);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -66,17 +66,6 @@ update seasons set phase = 'playoffs', day = last_day + 1 where id = pg_temp.sea
 select throws_ok(
   $$select admin_extend_contract(pg_temp.season(), pg_temp.pl('T03', 1), 5000, 2)$$,
   'P0001', 'extensions_closed', 'not during the playoffs');
--- Once the playoffs are over, before the offseason begins, a computer team
--- can still re-sign a player (his contract ends with the season).
-update seasons set phase = 'complete', day = last_day + 1 where id = pg_temp.season();
-select lives_ok(
-  $$select admin_extend_contract(pg_temp.season(), pg_temp.pl('T03', 1), 5000, 2)$$,
-  'a player can be re-signed once the season is complete');
-select is(
-  (select day::int from player_transactions
-   where player_id = pg_temp.pl('T03', 1) and kind = 'extended'
-   order by id desc limit 1),
-  0, 'and it is recorded before the new season (day 0)');
 update seasons set phase = 'offseason', stage = 'draft', day = 1 where id = pg_temp.season();
 select throws_ok(
   $$select admin_extend_contract(pg_temp.season(), pg_temp.pl('T03', 1), 5000, 2)$$,

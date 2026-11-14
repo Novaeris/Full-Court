@@ -52,7 +52,6 @@ import {
 } from "@/server/admin/offseason";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
-import { resignComputerPlayers } from "./ai-resigning";
 import { getLeague, parseLeagueId } from "./leagues";
 import {
   PAGE,
@@ -135,13 +134,6 @@ export async function beginOffseason(
   await ensureContracts(ctx, leagueId, finished);
 
   if (!finished.offseason_done_at) {
-    // Before contracts end, the computer teams keep the players they want.
-    // A failure here only means those players reach free agency instead.
-    try {
-      await resignComputerPlayers(ctx, leagueId, finished);
-    } catch (error) {
-      console.error("Computer re-signing failed", { leagueId, error });
-    }
     const players = await loadActivePlayers(ctx, leagueId);
     const rng = createRng(seedState(`${leagueId}:ageing:${finished.year}`));
     const aged = ageAndRetire(rng, players);
