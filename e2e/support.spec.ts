@@ -4,6 +4,12 @@ import { createConfirmedUser, signInThroughUi } from "./support/auth";
 /**
  * Contact & Support form. Visitors are rate limited per IP address, so each
  * test claims its own address; signed-in players are limited per account.
+ *
+ * There is also a global guard of 200 requests a day (`support:all` in
+ * `app_private.rate_limits`), and one full run sends about ten. Run the whole
+ * suite more than about twenty times in a UTC day and these tests fail with the
+ * form refusing every message. To start again on a local database:
+ *   delete from app_private.rate_limits where bucket like 'support:%';
  */
 test.beforeEach(async ({ page }) => {
   const octet = () => Math.floor(Math.random() * 250) + 1;
@@ -11,6 +17,19 @@ test.beforeEach(async ({ page }) => {
     "x-forwarded-for": `198.51.${octet()}.${octet()}`,
   });
 });
+
+/**
+ * The limit is "3 requests in 10 minutes", counted in fixed windows that start
+ * on the 10-minute marks of the clock. Four requests that straddle a mark are
+ * split between two windows and none is refused, so a test of the limit starts
+ * only when there is time to send them inside one window (with room for the
+ * local database's clock being a few seconds off this machine's).
+ */
+async function startInsideAWindow(page: Page) {
+  const window = 10 * 60 * 1000;
+  const left = window - (Date.now() % window);
+  if (left < 45_000) await page.waitForTimeout(left + 1_000);
+}
 
 async function fillForm(
   page: Page,
@@ -74,8 +93,12 @@ test("signed-in players get their details filled in and are rate limited", async
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "flow runs on desktop");
+  // Four requests with their waits, and up to a minute of waiting for the next
+  // ten-minute window to begin (see startInsideAWindow).
+  test.setTimeout(120_000);
   const { email, password } = await createConfirmedUser("support", "Pat Coach");
   await signInThroughUi(page, email, password);
+  await startInsideAWindow(page);
 
   for (let sent = 0; sent < 3; sent++) {
     await page.goto("/support");

@@ -1,3 +1,9 @@
+import { sitOut } from "@fullcourt/game-engine";
+import {
+  chooseTeamStrategy,
+  coachingBonus,
+  isRotationSize,
+} from "@fullcourt/game-rules";
 import type {
   GameReplay,
   RngState,
@@ -6,11 +12,14 @@ import type {
 } from "@fullcourt/game-engine";
 import {
   DEFAULT_TEAM_STRATEGY,
+  DEFENSE_STYLES,
+  PACE_LEVELS,
+  THREE_POINT_FOCUS_LEVELS,
   isPosition,
   type Game,
   type PlayerGameLine,
 } from "@fullcourt/game-types";
-import type { GameRow, PlayerRow } from "./db";
+import type { CoachRow, GameRow, HeadCoachRow, PlayerRow } from "./db";
 
 /** A scheduled game row as the engine's `Game`. */
 export function toEngineGame(row: GameRow): Game {
@@ -40,7 +49,7 @@ export function toRngState(values: readonly number[]): RngState {
   ];
 }
 
-function toSimPlayer(row: PlayerRow): SimPlayer {
+export function toSimPlayer(row: PlayerRow): SimPlayer {
   if (!isPosition(row.position)) {
     throw new Error(`Player ${row.id} has an unknown position.`);
   }
@@ -67,29 +76,119 @@ function toSimPlayer(row: PlayerRow): SimPlayer {
 }
 
 /**
- * The teams in a day's games, with their rosters. Teams use the default
- * coaching strategy until strategies are stored. Players with no team are
- * free agents and don't play.
+ * The teams in a day's games, with their rosters. A team plays the strategy
+ * and starters its owner saved, or the default if there are none (or they
+ * aren't valid). Players with no team are free agents and don't play.
  */
 export function toSimTeams(
   games: readonly GameRow[],
   players: readonly PlayerRow[],
+  coaches: readonly CoachRow[] = [],
+  headCoaches: readonly HeadCoachRow[] = [],
 ): SimTeam[] {
+  const coachOf = new Map(coaches.map((c) => [c.id, c]));
+  const headCoachOf = new Map(headCoaches.map((c) => [c.team_id, c.rating]));
   const teamIds = new Set(
     games.flatMap((g) => [g.home_team_id, g.away_team_id]),
   );
-  const rosters = new Map<string, SimPlayer[]>();
-  for (const id of teamIds) rosters.set(id, []);
+  // Injured players sit out, unless that would leave a team too short.
+  const byTeam = new Map<string, PlayerRow[]>();
+  for (const id of teamIds) byTeam.set(id, []);
   for (const row of players) {
-    if (row.team_id && rosters.has(row.team_id)) {
-      rosters.get(row.team_id)?.push(toSimPlayer(row));
+    if (row.team_id && byTeam.has(row.team_id)) {
+      byTeam.get(row.team_id)?.push(row);
     }
   }
-  return [...rosters].map(([id, roster]) => ({
-    id,
-    players: roster,
-    strategy: { ...DEFAULT_TEAM_STRATEGY },
-  }));
+  const rosters = new Map<string, SimPlayer[]>();
+  for (const [id, rows] of byTeam) {
+    const out = sitOut(
+      rows.map((r) => ({ id: r.id, injuryDays: r.injury_days })),
+    );
+    rosters.set(id, rows.filter((r) => !out.has(r.id)).map(toSimPlayer));
+  }
+  return [...rosters].map(([id, roster]) => {
+    const coach = coachOf.get(id);
+    const pick = <T extends string>(
+      options: readonly T[],
+      value: string | undefined,
+      fallback: T,
+    ): T =>
+      (options as readonly string[]).includes(value ?? "")
+        ? (value as T)
+        : fallback;
+    // An owner's team plays the strategy they saved (the usual one if they never
+    // set it). A computer team picks the style its whole roster suits, hurt
+    // players included, so its style doesn't change with every injury.
+    const ownerRun = coach !== undefined && coach.local_player_slot !== null;
+    const style = ownerRun
+      ? {
+          pace: pick(
+            PACE_LEVELS,
+            coach?.strategy_pace,
+            DEFAULT_TEAM_STRATEGY.pace,
+          ),
+          threePointFocus: pick(
+            THREE_POINT_FOCUS_LEVELS,
+            coach?.strategy_three_point,
+            DEFAULT_TEAM_STRATEGY.threePointFocus,
+          ),
+          defense: pick(
+            DEFENSE_STYLES,
+            coach?.strategy_defense,
+            DEFAULT_TEAM_STRATEGY.defense,
+          ),
+        }
+      : chooseTeamStrategy(
+          (byTeam.get(id) ?? []).map((r) => {
+            const p = toSimPlayer(r);
+            return {
+              overall: p.overall,
+              threePoint: p.ratings.threePoint,
+              speed: p.ratings.speed,
+              stamina: p.ratings.stamina,
+              perimeterD: p.ratings.perimeterD,
+              interiorD: p.ratings.interiorD,
+            };
+          }),
+        );
+    return {
+      id,
+      players: roster,
+      strategy: style,
+      coachBonus: coachingBonus(headCoachOf.get(id)),
+      rotation:
+        coach?.rotation_size && isRotationSize(coach.rotation_size)
+          ? coach.rotation_size
+          : undefined,
+      starters:
+        coach && coach.starters.length > 0
+          ? coachStarters(coach.starters, roster)
+          : undefined,
+    };
+  });
+}
+
+/**
+ * The starters the owner named, with any who is out hurt (or gone) replaced by
+ * the best healthy player not already starting. Left as named if they can't be
+ * made five (the engine then uses its own five).
+ */
+function coachStarters(
+  named: readonly string[],
+  roster: readonly SimPlayer[],
+): string[] {
+  const here = new Set(roster.map((p) => p.id));
+  const keep = named.filter((id) => here.has(id));
+  if (keep.length === named.length) return [...named];
+  const spare = [...roster]
+    .filter((p) => !keep.includes(p.id))
+    .sort((a, b) => b.overall - a.overall || (a.id < b.id ? -1 : 1));
+  const filled = [...keep];
+  for (const p of spare) {
+    if (filled.length >= named.length) break;
+    filled.push(p.id);
+  }
+  return filled;
 }
 
 /** A finished game as the row `admin_commit_sim_day` expects. */

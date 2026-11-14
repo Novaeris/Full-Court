@@ -5,6 +5,9 @@ import {
   chooseCamp,
   createRng,
   fillRosters,
+  getsNewContract,
+  payrollOf,
+  shedPayroll,
   generateStaff,
   hireStaff,
   coverRoster,
@@ -26,7 +29,6 @@ import {
 import {
   ROSTER_LIMITS,
   STAGE_LABELS,
-  hardCeiling,
   minSalary,
   staffBudget,
   campPlaces,
@@ -95,16 +97,14 @@ function staffInsert(s: NewStaff): StaffInsert {
 }
 
 /**
- * Starts the offseason after an archived season: every player ages (some
- * retire), staff contracts run down and the staff market is topped up. Each
- * step runs once, so a retry after a failure skips what already happened. The
- * league gets its staff the first time.
+ * Gives the league its staff the first time (a head coach, a development coach,
+ * a conditioning coach and a scout for every team, and a market). Safe to call
+ * again: it does nothing when there is staff.
  */
-export async function beginOffseason(
+export async function ensureLeagueStaff(
   ctx: UserContext,
   leagueId: string,
-  finished: SeasonRow,
-): Promise<void> {
+): Promise<EngineStaff[]> {
   let staff = await loadStaff(ctx, leagueId);
   if (staff.length === 0) {
     const teams = await allTeamIds(ctx, leagueId);
@@ -115,6 +115,21 @@ export async function beginOffseason(
     );
     staff = await loadStaff(ctx, leagueId);
   }
+  return staff;
+}
+
+/**
+ * Starts the offseason after an archived season: every player ages (some
+ * retire), staff contracts run down and the staff market is topped up. Each
+ * step runs once, so a retry after a failure skips what already happened. The
+ * league gets its staff the first time.
+ */
+export async function beginOffseason(
+  ctx: UserContext,
+  leagueId: string,
+  finished: SeasonRow,
+): Promise<void> {
+  let staff = await ensureLeagueStaff(ctx, leagueId);
 
   // A league made before contracts existed gets them now, so they can end.
   await ensureContracts(ctx, leagueId, finished);
@@ -270,6 +285,13 @@ export async function advanceOffseason(
       message === "staff_over_budget" ||
       message === "over_ceiling"
     ) {
+      // The database says which team broke which rule; keep that for the log.
+      console.error("Offseason step refused", {
+        leagueId: league.id,
+        stage: season.stage,
+        message,
+        details: (error as { details?: string }).details,
+      });
       throw new ApiError(
         409,
         message,
@@ -302,37 +324,6 @@ function freeNumber(players: readonly EnginePlayer[], teamId: string): number {
   );
   for (let n = 0; n < 100; n++) if (!used.has(n)) return n;
   return 0;
-}
-
-/**
- * A team whose payroll leaves no room to fill its roster to the minimum with
- * minimum contracts lets its best-paid players go until it can: the hard
- * ceiling is never passed, and a roster is never left short.
- */
-function shedPayroll(
-  players: readonly EnginePlayer[],
-  salaries: ReadonlyMap<string, number>,
-  payroll: ReadonlyMap<string, number>,
-  teams: ReadonlySet<string>,
-  cap: number,
-): EnginePlayer[] {
-  const ceiling = hardCeiling(cap);
-  const min = minSalary(cap);
-  let next = [...players];
-  for (const teamId of teams) {
-    let pay = payroll.get(teamId) ?? 0;
-    let roster = next.filter((p) => p.teamId === teamId);
-    const need = () => Math.max(0, ROSTER_LIMITS.min - roster.length) * min;
-    while (roster.length > 0 && pay + need() > ceiling) {
-      const drop = roster.reduce((a, b) =>
-        (salaries.get(b.id) ?? 0) > (salaries.get(a.id) ?? 0) ? b : a,
-      );
-      pay -= salaries.get(drop.id) ?? 0;
-      roster = roster.filter((p) => p.id !== drop.id);
-      next = next.map((p) => (p.id === drop.id ? { ...p, teamId: null } : p));
-    }
-  }
-  return next;
 }
 
 /** Applies coverRoster's releases and signings for one team to a working copy. */
@@ -414,26 +405,42 @@ async function runFreeAgency(
     acting,
     season.salary_cap,
   );
+  // Who was let go to get under the ceiling, and by which team.
+  const released = new Map(
+    players
+      .filter(
+        (p) =>
+          p.teamId !== null &&
+          working.find((w) => w.id === p.id)?.teamId === null,
+      )
+      .map((p) => [p.id, p.teamId as string] as const),
+  );
+  const afterShed = new Map(working.map((p) => [p.id, p.teamId] as const));
   for (const team of owned) {
     if (team.assist.rosterCoverage && !team.assist.rosterManagement) {
       working = withCoverage(working, team.id);
     }
   }
+  // Teams that let players go to make room have a smaller payroll now: filling
+  // with the old figure would think they were still at the ceiling and sign nobody.
   const moves = fillRosters(rng, {
     teams: finish.standingsOrder,
     players: working,
     acting,
     cap: season.salary_cap,
-    payroll,
+    payroll: payrollOf(working, salaries),
+    released,
   });
   const signed = new Map(moves.map((m) => [m.id, m]));
   const final = applyChanges(working, moves);
   checkOwnedRosters(final, owned);
 
   const before = new Map(players.map((p) => [p.id, p]));
+  const signedAnew = (p: EnginePlayer) =>
+    getsNewContract(p.teamId, afterShed.get(p.id) ?? null, signed.has(p.id));
   const changed = final.filter((p) => {
     const was = before.get(p.id) as EnginePlayer;
-    return was.teamId !== p.teamId || was.jersey !== p.jersey;
+    return was.teamId !== p.teamId || was.jersey !== p.jersey || signedAnew(p);
   });
 
   // The owner decides their own staff; the computer teams hire, worst first.
@@ -449,11 +456,10 @@ async function runFreeAgency(
   await applyRosters({
     seasonId: season.id,
     moves: changed.map((p) => {
-      const was = before.get(p.id) as EnginePlayer;
       const engine = signed.get(p.id);
       // A player who joins a team signs a minimum contract (unless the engine
       // already set his terms).
-      const joins = was.teamId === null && p.teamId !== null;
+      const joins = signedAnew(p);
       return {
         id: p.id,
         team_id: p.teamId,
@@ -710,7 +716,7 @@ export async function getOffseason(
     ctx.supabase
       .from("draft_picks")
       .select(
-        "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds",
+        "pick, round, team_id, player_id, finish_rank, expected_pick, lottery_odds, original_team_id",
       )
       .eq("league_id", league.id)
       .eq("season_year", year)
@@ -780,6 +786,7 @@ export async function getOffseason(
         pick: p.pick,
         round: p.round,
         teamId: p.team_id,
+        fromTeamId: p.original_team_id,
         finishRank: p.finish_rank,
         expectedPick: p.expected_pick,
         lotteryOdds: p.lottery_odds,

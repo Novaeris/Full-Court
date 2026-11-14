@@ -159,6 +159,12 @@ test.describe("server: every region and shape", () => {
       region: "south-america",
       fantasyDraft: true,
       playoffs: config.playoffs,
+      // No schedule was chosen, so the standard one is in force; nothing waits.
+      schedule: {
+        preset: "standard",
+        tiers: { division: 4, conference: 3, interconference: 2 },
+      },
+      next: null,
     });
 
     // Leagues made the original way have no stored rules: they get a derived view.

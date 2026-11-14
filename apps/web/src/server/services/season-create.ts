@@ -1,11 +1,12 @@
 import "server-only";
 import { createRng, generateSchedule, seedState } from "@fullcourt/game-engine";
 import { validateScheduleTiers } from "@fullcourt/game-rules";
-import { DEFAULT_SCHEDULE_TIERS } from "@fullcourt/game-types";
 import { insertSeason } from "@/server/admin/season";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { capForYear, ensureContracts } from "./finance";
+import { ensureLeagueStaff } from "./offseason";
+import { promoteSeasonRules } from "./season-rules";
 import { latestSeason } from "./season-shared";
 import { getStructure } from "./world";
 
@@ -22,7 +23,9 @@ export async function createSeason(
   year: number,
   options: { inOffseason?: boolean } = {},
 ): Promise<void> {
-  const tiers = DEFAULT_SCHEDULE_TIERS;
+  // Rules the owner set for this season take over now.
+  const schedule = await promoteSeasonRules(ctx, league.id);
+  const tiers = schedule.tiers;
   const structure = await getStructure(ctx, league.id);
   const problems = validateScheduleTiers(structure, tiers);
   if (problems.length > 0) {
@@ -55,14 +58,18 @@ export async function createSeason(
     const created = await insertSeason({
       leagueId: league.id,
       year,
-      preset: "standard",
+      preset: schedule.preset,
       tiers,
       games,
       inOffseason: options.inOffseason ?? false,
       salaryCap: await capForYear(ctx, league.id, year),
     });
     // A new league has no contracts yet: its first season gives everyone one.
-    if (!options.inOffseason) await ensureContracts(ctx, league.id, created);
+    if (!options.inOffseason) {
+      await ensureContracts(ctx, league.id, created);
+      // ...and its staff, so every team has a head coach from the start.
+      await ensureLeagueStaff(ctx, league.id);
+    }
   } catch (e) {
     // Two requests can race to create the same season: the loser is fine.
     if ((e as { code?: string }).code !== "23505") throw e;

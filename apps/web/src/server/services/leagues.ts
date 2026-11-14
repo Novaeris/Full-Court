@@ -8,6 +8,7 @@ import {
   generateWorld,
 } from "@fullcourt/game-engine";
 import {
+  STANDARD_SCHEDULE,
   equalStructure,
   legacySettings,
   validateOwnerModeSetup,
@@ -18,6 +19,7 @@ import {
   LeagueConfigSchema,
   LeagueIdSchema,
   type CreateLeagueInput,
+  type LeagueExport,
   type League,
   type LeagueList,
   type LeagueSettings,
@@ -25,6 +27,8 @@ import {
   type RenameLeagueRequest,
 } from "@fullcourt/validation";
 import {
+  importLeagueBackup,
+  replaceLeagueWithBackup,
   insertLeagueWithWorld,
   insertOwnerLeagueWithWorld,
 } from "@/server/admin/league-world";
@@ -118,7 +122,15 @@ export async function getSettings(
     const { legacy, preset, region, fantasyDraft, playoffs } = legacySettings(
       data.size === "standard" ? "standard" : "compact",
     );
-    return { legacy, preset, region, fantasyDraft, playoffs };
+    return {
+      legacy,
+      preset,
+      region,
+      fantasyDraft,
+      playoffs,
+      schedule: STANDARD_SCHEDULE,
+      next: null,
+    };
   }
   const config = LeagueConfigSchema.parse(data.config);
   return {
@@ -127,6 +139,8 @@ export async function getSettings(
     region: config.region,
     fantasyDraft: config.fantasyDraft,
     playoffs: config.playoffs,
+    schedule: config.schedule ?? STANDARD_SCHEDULE,
+    next: config.next ?? null,
   };
 }
 
@@ -172,6 +186,81 @@ export async function createLeague(
     });
     return toLeague(row, 0);
   } catch (error) {
+    if (isLimitError(error)) throw limitReached();
+    throw error;
+  }
+}
+
+/**
+ * Restores a backup (see export.ts) as a new league. The league keeps its
+ * name with "(restored)" after it, so it can sit next to the one it came from.
+ */
+export async function importLeague(
+  ctx: UserContext,
+  backup: LeagueExport,
+): Promise<League> {
+  const name = String(backup.league.name ?? "League")
+    .slice(0, 28)
+    .trim();
+  try {
+    const row = await importLeagueBackup({
+      ownerId: ctx.user.id,
+      backup: {
+        ...backup,
+        league: { ...backup.league, name: `${name || "League"} (restored)` },
+      },
+    });
+    return toLeague(row, (backup.tables.league_local_players ?? []).length);
+  } catch (error) {
+    if (isLimitError(error)) throw limitReached();
+    if (
+      error instanceof Object &&
+      "message" in error &&
+      error.message === "invalid_backup"
+    ) {
+      throw new ApiError(
+        422,
+        "invalid_backup",
+        "That file isn't a backup this version can restore.",
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Restores a backup over one of the owner's leagues: the league is replaced
+ * (all or nothing) by one made from the backup, which keeps the old league's
+ * name. Every id is new, as in any restore.
+ */
+export async function replaceLeague(
+  ctx: UserContext,
+  leagueIdParam: string,
+  backup: LeagueExport,
+): Promise<League> {
+  const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
+  try {
+    const row = await replaceLeagueWithBackup({
+      ownerId: ctx.user.id,
+      leagueId: league.id,
+      backup: {
+        ...backup,
+        league: { ...backup.league, name: league.name },
+      },
+    });
+    return toLeague(row, (backup.tables.league_local_players ?? []).length);
+  } catch (error) {
+    if (
+      error instanceof Object &&
+      "message" in error &&
+      error.message === "invalid_backup"
+    ) {
+      throw new ApiError(
+        422,
+        "invalid_backup",
+        "That file isn't a backup this version can restore. Your league has not been changed.",
+      );
+    }
     if (isLimitError(error)) throw limitReached();
     throw error;
   }

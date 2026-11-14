@@ -14,6 +14,83 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "0.12.0-alpha",
+    date: "2026-11-14",
+    title: "History, stats and the All-Star Game",
+    added: [
+      "Awards at the end of every season: most valuable player, finals MVP, defensive player, rookie, sixth man, most improved, the scoring, rebounding, assists, steals and blocks titles, and three all-league teams.",
+      "A History tab with every season's champion, awards and all-league teams, how many titles each team has, and a record book of the best single games, seasons and team records. A player's page lists his awards and his seasons.",
+      "A Stats tab with the league leaders in eight categories, for the regular season and the playoffs, and a season line and latest games on every player's page.",
+      "An All-Star Game half way through the season: the 24 best players so far, drafted into two squads by the two best, play a real game with a most valuable player.",
+      "A written recap on every finished game: who won, who led each team, standout lines like a triple-double, and what kind of game it was.",
+      "An overview on every team's page: record and rank, scoring, streak, last ten, how the team plays, its leaders, its latest results and its next games.",
+      "An Inbox tab that tells you what happened to your team: injuries, signings and releases, trades, awards, open trade offers and which contracts end.",
+      "Restore a backup over a league from its settings: it replaces the league, and only if the backup can be restored.",
+      "Season rules: change the season length and the playoff format for the next season from the league settings.",
+      "Fixed: ending free agency could be refused for a computer team that had to shed salary and then refill its roster.",
+      "Head to head on every team page: its all-time record against each opponent, with rivalries marked.",
+      "A Hall of Fame: great players are inducted three seasons after they retire. The page lists their careers, the news announces each induction, and a member's own page carries the mark.",
+      "An award race on the Stats tab: who leads the MVP, defensive player, sixth man, rookie and most improved awards as the season goes.",
+      "Players develop during the season, not only in the offseason: the young improve and the old decline a little at two points of the year, for every team alike.",
+      "A News tab with the moves of every team: signings, trades, serious injuries, retirements and each season's champion.",
+      "Download a backup of a league from its Settings page, and restore a backup as a new league from the Leagues page.",
+      "A trading block: put up to five of your players on it and computer teams make offers for them.",
+      "Power rankings on the Standings tab: every team ranked by its record, how much it wins and loses by, and its last ten games.",
+      "A cap outlook on your roster: what your contracts commit in each of the next five seasons, the cap, your room and how many contracts end, for planning extensions and free agency.",
+      "Contract extensions: give a player with two years or fewer left a new contract from the Moves page. He signs if the offer is worth enough to him, and you can see the least he will take.",
+    ],
+    improved: [
+      "A league page you reach by following a link now opens at the top, so its first link is never hidden under the header on a phone.",
+    ],
+  },
+  {
+    version: "0.11.0-alpha",
+    date: "2026-11-14",
+    title: "Coaching and injuries",
+    added: [
+      "Set how your team plays: pace, three-point focus and defence, and name your starting five, from the Moves page. Computer teams now choose a style that suits their roster, so the league has a mix of fast teams, shooting teams and defensive teams.",
+      "Head coaches matter: every team has one from its first season, and a better coach adds a little to every player in your games. Choose how many players the coach uses, from seven to twelve.",
+      "Injuries during games: a hurt player leaves the game at once and is out for some days (a few for a sprain, weeks for something worse). The team and player pages say who is out and for how long, and the offseason heals everyone.",
+      "Draft picks are trade assets, valued by round, how far away they are and how weak the original team is, and the draft shows where a traded pick came from. Computer teams trade with each other, offer you trades, and add picks to close a deal.",
+    ],
+    improved: [
+      "A named starter who is hurt is replaced by the best healthy player on game day.",
+    ],
+    fixed: [
+      "A computer team that had to let players go to stay under the hard ceiling could end free agency with too few players. It is filled properly now.",
+      "Saving your strategy no longer wipes its own confirmation message.",
+    ],
+  },
+  {
+    version: "0.10.0-alpha",
+    date: "2026-11-13",
+    title: "Contracts, free agency and trades",
+    added: [
+      "A salary cap with a hard ceiling. Every player has a salary and a contract length, and free agency lasts 21 days of offers: players weigh the money against how a team wins, the role they would play, its city and its history.",
+      "Trades with the computer teams, shopping a player to see what teams would give, and roster moves (release and sign) through the season, with a trade deadline two thirds of the way through.",
+    ],
+  },
+  {
+    version: "0.9.0-alpha",
+    date: "2026-11-13",
+    title: "The offseason",
+    added: [
+      "A full offseason after every season: players age and some retire, a draft lottery that follows how teams finished, a draft board you can scout and pick from, free agency, training camp and a calendar that runs from the finals to opening night.",
+      "Staff: a head coach, a development coach, a conditioning coach and a scout for every team, with a market to hire from.",
+      "AI Assist now does its jobs: it makes your picks, keeps your roster legal and covers the work you leave undone, and you can always act first.",
+    ],
+  },
+  {
+    version: "0.8.0-alpha",
+    date: "2026-11-12",
+    title: "Seasons and playoffs",
+    added: [
+      "Play a season: a schedule for every team, games simulated play by play, standings, box scores and a game viewer where you can watch any game on the court.",
+      "Simulate a day, a week or a whole season, with live progress.",
+      "The playoffs, drawn as a bracket, a champion, and starting the next season. A league can play up to 50 seasons.",
+    ],
+  },
+  {
     version: "0.7.0-alpha",
     date: "2026-11-12",
     title: "League setup",

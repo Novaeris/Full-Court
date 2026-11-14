@@ -304,6 +304,8 @@ export async function applyTrade(input: {
   teamB: string;
   fromA: readonly string[];
   fromB: readonly string[];
+  picksA?: readonly string[];
+  picksB?: readonly string[];
 }): Promise<void> {
   const { error } = await createAdminClient().rpc("admin_apply_trade", {
     target_season: input.seasonId,
@@ -311,6 +313,101 @@ export async function applyTrade(input: {
     trade_team_b: input.teamB,
     from_a: [...input.fromA],
     from_b: [...input.fromB],
+    picks_a: [...(input.picksA ?? [])],
+    picks_b: [...(input.picksB ?? [])],
+  });
+  if (error) throw error;
+}
+
+/** Gives every team its picks for the next two drafts, if it doesn't have them. */
+export async function ensurePickRights(seasonId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_ensure_pick_rights", {
+    target_season: seasonId,
+  });
+  if (error) throw error;
+}
+
+/** Replaces a season's open trade offers with a new set (the old ones expire). */
+export async function replaceTradeOffers(input: {
+  seasonId: string;
+  offers: readonly {
+    team_id: string;
+    partner_id: string;
+    give: readonly string[];
+    get: readonly string[];
+    get_picks?: readonly string[];
+  }[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc(
+    "admin_replace_trade_offers",
+    {
+      target_season: input.seasonId,
+      new_offers: input.offers as never,
+    },
+  );
+  if (error) throw error;
+}
+
+/** Accepts an open offer: the trade is made and the offer marked accepted. */
+export async function acceptTradeOffer(offerId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_accept_trade_offer", {
+    target_offer: offerId,
+  });
+  if (error) throw error;
+}
+
+/** Declines an open offer. */
+export async function declineTradeOffer(offerId: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_decline_trade_offer", {
+    target_offer: offerId,
+  });
+  if (error) throw error;
+}
+
+/** Sets a franchise's strategy and the five it starts (empty: automatic). */
+export async function setTeamStrategy(input: {
+  teamId: string;
+  pace: string;
+  threePointFocus: string;
+  defense: string;
+  starters: readonly string[];
+  rotation?: number | null | undefined;
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_set_team_strategy", {
+    target_team: input.teamId,
+    new_pace: input.pace,
+    new_three_point: input.threePointFocus,
+    new_defense: input.defense,
+    new_starters: [...input.starters],
+    ...(input.rotation ? { new_rotation: input.rotation } : {}),
+  });
+  if (error) throw error;
+}
+
+/** Replaces a player's contract with a longer one, through admin_extend_contract. */
+export async function extendContract(input: {
+  seasonId: string;
+  playerId: string;
+  salary: number;
+  years: number;
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_extend_contract", {
+    target_season: input.seasonId,
+    target_player: input.playerId,
+    new_salary: input.salary,
+    new_years: input.years,
+  });
+  if (error) throw error;
+}
+
+/** Sets a franchise's trading block: up to five of its players (none clears it). */
+export async function setTradingBlock(input: {
+  teamId: string;
+  playerIds: readonly string[];
+}): Promise<void> {
+  const { error } = await createAdminClient().rpc("admin_set_trading_block", {
+    target_team: input.teamId,
+    block: [...input.playerIds],
   });
   if (error) throw error;
 }

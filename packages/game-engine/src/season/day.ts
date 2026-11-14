@@ -1,5 +1,6 @@
 import type { BoxScore, Game, PlayEvent } from "@fullcourt/game-types";
 import { createRng, type RngState } from "../rng/rng";
+import type { Injury } from "./injuries";
 import { simulateGame } from "./game";
 import { ENGINE_VERSION, snapshotTeams, type GameReplay } from "./replay";
 import type { SimTeam } from "./types";
@@ -20,6 +21,8 @@ export type SimulateDayResult = {
   boxScores: BoxScore[];
   /** What to store to replay each game later, in the order of `games`. */
   replays: GameReplay[];
+  /** Everyone hurt in the day's games. */
+  injuries: Injury[];
   /** The league's RNG state after this day; save it for the next one. */
   rngState: RngState;
 };
@@ -41,6 +44,7 @@ export function simulateDay(input: SimulateDayInput): SimulateDayResult {
   const plays: PlayEvent[] = [];
   const boxScores: BoxScore[] = [];
   const replays: GameReplay[] = [];
+  const injuries: Injury[] = [];
   for (const game of input.games) {
     if (game.status !== "scheduled") {
       throw new Error(`Game ${game.id} has already been played.`);
@@ -63,6 +67,7 @@ export function simulateDay(input: SimulateDayInput): SimulateDayResult {
     games.push(result.game);
     plays.push(...result.plays);
     boxScores.push(result.boxScore);
+    injuries.push(...result.injuries);
   }
-  return { games, plays, boxScores, replays, rngState: rng.state() };
+  return { games, plays, boxScores, replays, injuries, rngState: rng.state() };
 }

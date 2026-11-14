@@ -147,3 +147,61 @@ export async function insertOwnerLeagueWithWorld(input: {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Replaces one of an owner's leagues with a restored backup, in one
+ * transaction (public.admin_replace_league, service role only): the league is
+ * removed and the backup restored in its place, or nothing changes.
+ */
+export async function replaceLeagueWithBackup(input: {
+  ownerId: string;
+  leagueId: string;
+  backup: unknown;
+}): Promise<LeagueRow> {
+  const { data, error } = await createAdminClient().rpc(
+    "admin_replace_league",
+    {
+      owner: input.ownerId,
+      old_league: input.leagueId,
+      payload: input.backup as never,
+    },
+  );
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Stores a league's config (its rules). The owner cannot write it themselves:
+ * only the name of a league is theirs to change. The caller has checked who
+ * owns the league and that the rules are valid; the database checks the shape.
+ */
+export async function storeLeagueConfig(
+  leagueId: string,
+  config: LeagueConfig,
+): Promise<void> {
+  const { error } = await createAdminClient()
+    .from("leagues")
+    .update({
+      config: config as never,
+      config_schema_version: config.schemaVersion,
+    })
+    .eq("id", leagueId);
+  if (error) throw error;
+}
+
+/**
+ * Restores a backup document as a new league for the owner, in one
+ * transaction, through public.admin_import_league() (service role only). Every
+ * id in the file is replaced; the database checks the rest.
+ */
+export async function importLeagueBackup(input: {
+  ownerId: string;
+  backup: unknown;
+}): Promise<LeagueRow> {
+  const { data, error } = await createAdminClient().rpc("admin_import_league", {
+    owner: input.ownerId,
+    payload: input.backup as never,
+  });
+  if (error) throw error;
+  return data;
+}

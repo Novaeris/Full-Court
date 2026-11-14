@@ -70,6 +70,7 @@ const DWELL: Record<PlayEvent["kind"], number> = {
   turnover: 1.1,
   foul: 0.9,
   substitution: 0.9,
+  injury: 1.4,
 };
 const BALL_IN_FLIGHT = 0.35;
 

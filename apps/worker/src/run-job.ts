@@ -5,6 +5,9 @@ import {
   type SimulateDayResult,
 } from "@fullcourt/game-engine";
 import type { Game } from "@fullcourt/game-types";
+import { isAllStarDay, runAllStarGame } from "./all-star";
+import { developmentStep, runDevelopmentStep } from "./development";
+import { isTradeDay, runTradeRound } from "./trade-round";
 import {
   CommitRefused,
   CommitRejected,
@@ -52,17 +55,104 @@ export async function runJob(
     }
 
     const day = season.day;
+    // Computer teams may trade before a day's games, until the deadline.
+    if (
+      db.loadTradeTeams &&
+      db.applyTrade &&
+      isTradeDay(day, season.last_day)
+    ) {
+      try {
+        const made = await runTradeRound(
+          {
+            loadTradeTeams: db.loadTradeTeams,
+            applyTrade: db.applyTrade,
+            loadOfferTeams: db.loadOfferTeams,
+            replaceOffers: db.replaceOffers,
+          },
+          season,
+        );
+        if (made > 0)
+          log(`job ${current.id}: ${made} trade(s) before day ${day}`);
+      } catch (error) {
+        log(
+          `job ${current.id}: trades skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
+    // A third and two thirds of the way through the season, before that day's
+    // games: the players develop a little (each step happens once).
+    const step = developmentStep(day, season.last_day);
+    if (
+      step !== null &&
+      db.loadDevelopingPlayers &&
+      db.applyDevelopment &&
+      season.phase === "regular-season"
+    ) {
+      try {
+        const changed = await runDevelopmentStep(
+          {
+            loadDevelopingPlayers: db.loadDevelopingPlayers,
+            applyDevelopment: db.applyDevelopment,
+          },
+          season,
+          step,
+        );
+        if (changed > 0)
+          log(
+            `job ${current.id}: development step ${step}, ${changed} player(s), before day ${day}`,
+          );
+      } catch (error) {
+        log(
+          `job ${current.id}: development step ${step} skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
+    // Half way through the season, before that day's games: the All-Star Game.
+    if (
+      db.hasAllStarGame &&
+      db.loadAllStarLines &&
+      db.loadAllStarPlayers &&
+      db.recordAllStarGame &&
+      season.phase === "regular-season" &&
+      isAllStarDay(day, season.last_day)
+    ) {
+      try {
+        const played = await runAllStarGame(
+          {
+            hasAllStarGame: db.hasAllStarGame,
+            loadAllStarLines: db.loadAllStarLines,
+            loadAllStarPlayers: db.loadAllStarPlayers,
+            recordAllStarGame: db.recordAllStarGame,
+          },
+          season,
+        );
+        if (played)
+          log(`job ${current.id}: the All-Star Game, before day ${day}`);
+      } catch (error) {
+        log(
+          `job ${current.id}: the All-Star Game was skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
     const rows = await db.loadDay(season, day);
 
     let commit;
+    let hurt: SimulateDayResult["injuries"] | undefined;
     try {
       const games = rows.games.map(toEngineGame);
       const result = simulateDay({
         games,
-        teams: toSimTeams(rows.games, rows.players),
+        teams: toSimTeams(
+          rows.games,
+          rows.players,
+          rows.coaches,
+          rows.headCoaches,
+        ),
         rngState: toRngState(rows.rngState),
       });
       verifyReplays(games, result);
+      // Players hurt in the games leave the game and, once it is committed, are out.
+      hurt = result.injuries;
       commit = {
         jobId: current.id,
         day,
@@ -101,6 +191,28 @@ export async function runJob(
     log(
       `job ${current.id}: day ${day} committed (${current.days_done}/${current.days_requested})`,
     );
+    // Injuries that happened in the day's games; a failure here never stops the job.
+    if (db.applyInjuries) {
+      try {
+        await db.applyInjuries(
+          season.id,
+          day,
+          (hurt ?? []).map((i) => ({
+            player_id: i.playerId,
+            team_id: i.teamId,
+            days: i.days,
+            kind: i.kind,
+          })),
+        );
+        if (hurt && hurt.length > 0) {
+          log(`job ${current.id}: ${hurt.length} injured on day ${day}`);
+        }
+      } catch (error) {
+        log(
+          `job ${current.id}: injuries skipped on day ${day}: ${String(error)}`,
+        );
+      }
+    }
   }
 }
 

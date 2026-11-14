@@ -47,6 +47,7 @@ import {
 import { getLeague, parseLeagueId } from "./leagues";
 import { PAGE, ownedTeams } from "./offseason-data";
 import { latestSeason, type SeasonRow } from "./season-shared";
+import { runComputerTrades } from "./trades";
 
 /**
  * Free agency, a day at a time (docs/DESIGN.md, "Free agency day by day"). The
@@ -519,6 +520,10 @@ export async function runFaDay(
       status: l.reason === "signed-elsewhere" ? "outbid" : "void",
     })),
   });
+  // Every third day, the computer teams look for trades.
+  if (day % 3 === 0) {
+    await runComputerTrades(ctx, leagueId, season, day);
+  }
 }
 
 /** Plays days of free agency until the 21st (or the number asked for). */

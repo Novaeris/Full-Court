@@ -9,6 +9,126 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      all_star_games: {
+        Row: {
+          created_at: string
+          day: number
+          id: string
+          league_id: string
+          mvp_player_id: string | null
+          name_a: string
+          name_b: string
+          overtimes: number
+          score_a: number
+          score_b: number
+          season_id: string
+        }
+        Insert: {
+          created_at?: string
+          day: number
+          id?: string
+          league_id: string
+          mvp_player_id?: string | null
+          name_a: string
+          name_b: string
+          overtimes?: number
+          score_a: number
+          score_b: number
+          season_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          id?: string
+          league_id?: string
+          mvp_player_id?: string | null
+          name_a?: string
+          name_b?: string
+          overtimes?: number
+          score_a?: number
+          score_b?: number
+          season_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "all_star_games_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "all_star_games_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: true
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      all_star_players: {
+        Row: {
+          assists: number
+          blocks: number
+          captain: boolean
+          game_id: string
+          league_id: string
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          squad: string
+          starter: boolean
+          steals: number
+          team_id: string | null
+        }
+        Insert: {
+          assists: number
+          blocks: number
+          captain?: boolean
+          game_id: string
+          league_id: string
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          squad: string
+          starter: boolean
+          steals: number
+          team_id?: string | null
+        }
+        Update: {
+          assists?: number
+          blocks?: number
+          captain?: boolean
+          game_id?: string
+          league_id?: string
+          minutes?: number
+          player_id?: string
+          points?: number
+          rebounds?: number
+          squad?: string
+          starter?: boolean
+          steals?: number
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "all_star_players_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "all_star_games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "all_star_players_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
       box_score_lines: {
         Row: {
           assists: number
@@ -215,6 +335,7 @@ export type Database = {
           finish_rank: number
           league_id: string
           lottery_odds: number | null
+          original_team_id: string | null
           pick: number
           player_id: string | null
           round: number
@@ -226,6 +347,7 @@ export type Database = {
           finish_rank: number
           league_id: string
           lottery_odds?: number | null
+          original_team_id?: string | null
           pick: number
           player_id?: string | null
           round: number
@@ -237,6 +359,7 @@ export type Database = {
           finish_rank?: number
           league_id?: string
           lottery_odds?: number | null
+          original_team_id?: string | null
           pick?: number
           player_id?: string | null
           round?: number
@@ -595,6 +718,120 @@ export type Database = {
           },
         ]
       }
+      pick_rights: {
+        Row: {
+          id: string
+          league_id: string
+          original_team_id: string
+          round: number
+          season_year: number
+          team_id: string
+        }
+        Insert: {
+          id?: string
+          league_id: string
+          original_team_id: string
+          round: number
+          season_year: number
+          team_id: string
+        }
+        Update: {
+          id?: string
+          league_id?: string
+          original_team_id?: string
+          round?: number
+          season_year?: number
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pick_rights_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pick_rights_league_id_original_team_id_fkey"
+            columns: ["league_id", "original_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "pick_rights_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+        ]
+      }
+      player_injuries: {
+        Row: {
+          created_at: string
+          day: number
+          days: number
+          id: string
+          kind: string
+          league_id: string
+          player_id: string
+          season_id: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          day: number
+          days: number
+          id?: string
+          kind: string
+          league_id: string
+          player_id: string
+          season_id: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          days?: number
+          id?: string
+          kind?: string
+          league_id?: string
+          player_id?: string
+          season_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_injuries_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_injuries_league_id_player_id_fkey"
+            columns: ["league_id", "player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_injuries_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "player_injuries_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       player_ratings_history: {
         Row: {
           age: number
@@ -885,6 +1122,8 @@ export type Database = {
           free_throw: number
           height_inches: number
           id: string
+          injury_days: number
+          injury_kind: string | null
           inside: number
           interior_d: number
           jersey: number
@@ -920,6 +1159,8 @@ export type Database = {
           free_throw: number
           height_inches: number
           id?: string
+          injury_days?: number
+          injury_kind?: string | null
           inside: number
           interior_d: number
           jersey: number
@@ -955,6 +1196,8 @@ export type Database = {
           free_throw?: number
           height_inches?: number
           id?: string
+          injury_days?: number
+          injury_kind?: string | null
           inside?: number
           interior_d?: number
           jersey?: number
@@ -1182,8 +1425,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1199,8 +1444,10 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: number
+          development_steps?: number
           fa_day?: number
           id?: string
+          injuries_through_day?: number
           last_day: number
           league_id: string
           offseason_done_at?: string | null
@@ -1216,8 +1463,10 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: number
+          development_steps?: number
           fa_day?: number
           id?: string
+          injuries_through_day?: number
           last_day?: number
           league_id?: string
           offseason_done_at?: string | null
@@ -1522,7 +1771,13 @@ export type Database = {
           logo_id: string | null
           nickname: string
           primary_color: string
+          rotation_size: number | null
           secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
+          trading_block: string[]
         }
         Insert: {
           abbreviation: string
@@ -1541,7 +1796,13 @@ export type Database = {
           logo_id?: string | null
           nickname: string
           primary_color: string
+          rotation_size?: number | null
           secondary_color: string
+          starters?: string[]
+          strategy_defense?: string
+          strategy_pace?: string
+          strategy_three_point?: string
+          trading_block?: string[]
         }
         Update: {
           abbreviation?: string
@@ -1560,7 +1821,13 @@ export type Database = {
           logo_id?: string | null
           nickname?: string
           primary_color?: string
+          rotation_size?: number | null
           secondary_color?: string
+          starters?: string[]
+          strategy_defense?: string
+          strategy_pace?: string
+          strategy_three_point?: string
+          trading_block?: string[]
         }
         Relationships: [
           {
@@ -1593,12 +1860,88 @@ export type Database = {
           },
         ]
       }
+      trade_offers: {
+        Row: {
+          created_at: string
+          day: number
+          get: string[]
+          get_picks: string[]
+          give: string[]
+          id: string
+          league_id: string
+          partner_id: string
+          resolved_at: string | null
+          season_id: string
+          status: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          day?: number
+          get: string[]
+          get_picks?: string[]
+          give: string[]
+          id?: string
+          league_id: string
+          partner_id: string
+          resolved_at?: string | null
+          season_id: string
+          status?: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          get?: string[]
+          get_picks?: string[]
+          give?: string[]
+          id?: string
+          league_id?: string
+          partner_id?: string
+          resolved_at?: string | null
+          season_id?: string
+          status?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_offers_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offers_league_id_partner_id_fkey"
+            columns: ["league_id", "partner_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "trade_offers_league_id_team_id_fkey"
+            columns: ["league_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["league_id", "id"]
+          },
+          {
+            foreignKeyName: "trade_offers_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trades: {
         Row: {
           created_at: string
           day: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a: string[]
+          gave_picks_b: string[]
           id: string
           league_id: string
           season_year: number
@@ -1610,6 +1953,8 @@ export type Database = {
           day?: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a?: string[]
+          gave_picks_b?: string[]
           id?: string
           league_id: string
           season_year: number
@@ -1621,6 +1966,8 @@ export type Database = {
           day?: number
           gave_a?: string[]
           gave_b?: string[]
+          gave_picks_a?: string[]
+          gave_picks_b?: string[]
           id?: string
           league_id?: string
           season_year?: number
@@ -1661,6 +2008,28 @@ export type Database = {
         Args: { acknowledged_version: number }
         Returns: undefined
       }
+      admin_accept_trade_offer: {
+        Args: { target_offer: string }
+        Returns: {
+          created_at: string
+          day: number
+          gave_a: string[]
+          gave_b: string[]
+          gave_picks_a: string[]
+          gave_picks_b: string[]
+          id: string
+          league_id: string
+          season_year: number
+          team_a: string
+          team_b: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trades"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_add_staff: {
         Args: { members: Json; target_league: string }
         Returns: number
@@ -1671,8 +2040,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1690,6 +2061,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_apply_development: {
+        Args: { changes: Json; step: number; target_season: string }
+        Returns: number
       }
       admin_apply_fa_day: {
         Args: {
@@ -1703,8 +2078,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1723,14 +2100,20 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_apply_injuries: {
+        Args: { new_injuries: Json; sim_day: number; target_season: string }
+        Returns: number
+      }
       admin_apply_progression: {
         Args: { changes: Json; staff_changes: Json; target_season: string }
         Returns: {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1755,8 +2138,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1779,6 +2164,8 @@ export type Database = {
         Args: {
           from_a: string[]
           from_b: string[]
+          picks_a?: string[]
+          picks_b?: string[]
           target_season: string
           trade_team_a: string
           trade_team_b: string
@@ -1788,6 +2175,8 @@ export type Database = {
           day: number
           gave_a: string[]
           gave_b: string[]
+          gave_picks_a: string[]
+          gave_picks_b: string[]
           id: string
           league_id: string
           season_year: number
@@ -1807,8 +2196,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1828,7 +2219,7 @@ export type Database = {
         }
       }
       admin_claim_sim_job: {
-        Args: { worker_name: string }
+        Args: { only_league?: string; worker_name: string }
         Returns: {
           created_at: string
           days_done: number
@@ -1954,8 +2345,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -1992,8 +2385,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2016,9 +2411,68 @@ export type Database = {
         Args: { members: Json; target_league: string }
         Returns: number
       }
+      admin_decline_trade_offer: {
+        Args: { target_offer: string }
+        Returns: undefined
+      }
       admin_ensure_contracts: {
         Args: { contracts: Json; target_league: string }
         Returns: number
+      }
+      admin_ensure_pick_rights: {
+        Args: { target_season: string }
+        Returns: number
+      }
+      admin_extend_contract: {
+        Args: {
+          new_salary: number
+          new_years: number
+          target_player: string
+          target_season: string
+        }
+        Returns: {
+          age: number
+          ball_handling: number
+          contract_expires: number | null
+          def_rebound: number
+          draft_pick: number | null
+          draft_round: number | null
+          draft_year: number | null
+          first_name: string
+          free_throw: number
+          height_inches: number
+          id: string
+          injury_days: number
+          injury_kind: string | null
+          inside: number
+          interior_d: number
+          jersey: number
+          last_name: string
+          league_id: string
+          mid_range: number
+          off_rebound: number
+          overall: number
+          passing: number
+          perimeter_d: number
+          position: string
+          potential: number
+          retired_year: number | null
+          rights_team_id: string | null
+          salary: number | null
+          speed: number
+          stamina: number
+          status: string
+          strength: number
+          team_id: string | null
+          three_point: number
+          weight_pounds: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_fail_sim_job: {
         Args: { message: string; target_job: string }
@@ -2044,6 +2498,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_heal_injuries: { Args: { target_season: string }; Returns: number }
       admin_hire_staff: {
         Args: {
           hire_team: string
@@ -2074,6 +2529,29 @@ export type Database = {
       admin_hold_lottery: {
         Args: { slots: Json; target_season: string }
         Returns: number
+      }
+      admin_import_league: {
+        Args: { owner: string; payload: Json }
+        Returns: {
+          config: Json | null
+          config_schema_version: number | null
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          rng_state: number[]
+          seed: string
+          size: string
+          status: string
+          updated_at: string
+          user_team_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_make_offer: {
         Args: {
@@ -2107,8 +2585,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2126,6 +2606,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_record_all_star_game: {
+        Args: { payload: Json; target_season: string }
+        Returns: boolean
       }
       admin_record_event: {
         Args: { event_name: string; event_path?: string }
@@ -2157,6 +2641,33 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_replace_league: {
+        Args: { old_league: string; owner: string; payload: Json }
+        Returns: {
+          config: Json | null
+          config_schema_version: number | null
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          rng_state: number[]
+          seed: string
+          size: string
+          status: string
+          updated_at: string
+          user_team_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "leagues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_replace_trade_offers: {
+        Args: { new_offers: Json; target_season: string }
+        Returns: number
+      }
       admin_requeue_stale_sim_jobs: {
         Args: { max_age: string }
         Returns: number
@@ -2180,7 +2691,13 @@ export type Database = {
           logo_id: string | null
           nickname: string
           primary_color: string
+          rotation_size: number | null
           secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
+          trading_block: string[]
         }
         SetofOptions: {
           from: "*"
@@ -2192,6 +2709,85 @@ export type Database = {
       admin_set_camp: {
         Args: { assignments: Json; camp_team: string; target_season: string }
         Returns: number
+      }
+      admin_set_season_awards: {
+        Args: { new_awards: Json; target_season: string }
+        Returns: number
+      }
+      admin_set_team_strategy: {
+        Args: {
+          new_defense: string
+          new_pace: string
+          new_rotation?: number
+          new_starters: string[]
+          new_three_point: string
+          target_team: string
+        }
+        Returns: {
+          abbreviation: string
+          ai_drafting: boolean
+          ai_roster_coverage: boolean
+          ai_roster_management: boolean
+          ai_scouting: boolean
+          ai_trades: boolean
+          city: string
+          city_id: string | null
+          conference_id: string
+          division_id: string
+          id: string
+          league_id: string
+          local_player_slot: number | null
+          logo_id: string | null
+          nickname: string
+          primary_color: string
+          rotation_size: number | null
+          secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
+          trading_block: string[]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "teams"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_set_trading_block: {
+        Args: { block: string[]; target_team: string }
+        Returns: {
+          abbreviation: string
+          ai_drafting: boolean
+          ai_roster_coverage: boolean
+          ai_roster_management: boolean
+          ai_scouting: boolean
+          ai_trades: boolean
+          city: string
+          city_id: string | null
+          conference_id: string
+          division_id: string
+          id: string
+          league_id: string
+          local_player_slot: number | null
+          logo_id: string | null
+          nickname: string
+          primary_color: string
+          rotation_size: number | null
+          secondary_color: string
+          starters: string[]
+          strategy_defense: string
+          strategy_pace: string
+          strategy_three_point: string
+          trading_block: string[]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "teams"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_sign_player: {
         Args: {
@@ -2209,8 +2805,10 @@ export type Database = {
           archived_at: string | null
           created_at: string
           day: number
+          development_steps: number
           fa_day: number
           id: string
+          injuries_through_day: number
           last_day: number
           league_id: string
           offseason_done_at: string | null
@@ -2317,7 +2915,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      import_new_id: { Args: { old: string; salt: string }; Returns: string }
       league_limit: { Args: never; Returns: number }
+      player_season_totals: {
+        Args: { playoffs?: boolean; target_season: string }
+        Returns: {
+          assists: number
+          blocks: number
+          fga: number
+          fgm: number
+          fouls: number
+          fta: number
+          ftm: number
+          games: number
+          minutes: number
+          player_id: string
+          points: number
+          rebounds: number
+          started: number
+          steals: number
+          team_id: string
+          tpa: number
+          tpm: number
+          turnovers: number
+        }[]
+      }
       rename_structure: {
         Args: {
           conference_names: Json

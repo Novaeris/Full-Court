@@ -101,6 +101,11 @@ describe("simulateGame", () => {
       const fouls = new Map<string, number>();
       for (const p of r.plays) {
         const set = p.teamId ? court[p.teamId] : undefined;
+        if (p.kind === "injury") {
+          // The hurt player is on the court when it happens; the next play replaces him.
+          expect(set?.has(p.playerId as string)).toBe(true);
+          continue;
+        }
         if (p.kind === "substitution") {
           expect(set?.has(p.outPlayerId as string)).toBe(true);
           expect(set?.has(p.playerId as string)).toBe(false);
@@ -148,7 +153,7 @@ describe("simulateGame", () => {
           expect(p.at).toBeNull();
           continue;
         }
-        if (p.kind === "substitution") {
+        if (p.kind === "substitution" || p.kind === "injury") {
           expect(p.at).toBeNull();
           continue;
         }
@@ -551,5 +556,133 @@ describe("fouling out", () => {
     }
     // Fouling out does happen, which is what makes the cap worth testing.
     expect(sixes).toBeGreaterThan(0);
+  });
+});
+
+describe("the coach's starters", () => {
+  const benchFive = (team: Team) =>
+    [...team.players]
+      .sort((a, b) => a.overall - b.overall)
+      .slice(0, 5)
+      .map((p) => p.id);
+
+  it("starts the five a coach names", () => {
+    const named = benchFive(teamA);
+    const game = play("starters", { ...teamA, starters: named });
+    expect([...game.starters.home].sort()).toEqual([...named].sort());
+  });
+
+  it("ignores a list that isn't five different players of the roster", () => {
+    const usual = play("starters").starters.home;
+    const first = teamA.players[0]?.id as string;
+    for (const bad of [
+      [first],
+      [first, first, first, first, first],
+      [...benchFive(teamA).slice(0, 4), "nobody"],
+    ]) {
+      expect(
+        play("starters", { ...teamA, starters: bad }).starters.home,
+      ).toEqual(usual);
+    }
+  });
+
+  it("changes the game, but not for a team that names nothing", () => {
+    const plain = play("starters");
+    const same = play("starters", { ...teamA, starters: undefined });
+    expect(same.game.homeScore).toBe(plain.game.homeScore);
+    expect(same.plays).toEqual(plain.plays);
+  });
+});
+
+describe("injuries during a game", () => {
+  /** Plays games until `n` injuries have happened, returning the games with any. */
+  function hurtGames(n: number) {
+    const found: ReturnType<typeof play>[] = [];
+    let total = 0;
+    for (let i = 0; total < n && i < 600; i++) {
+      const g = play(`hurt-${i}`, teamA, teamB, `g-${i}`);
+      if (g.injuries.length > 0) {
+        found.push(g);
+        total += g.injuries.length;
+      }
+    }
+    return found;
+  }
+
+  it("happen at about the expected rate, to players on the court", () => {
+    let hurt = 0;
+    let minutes = 0;
+    const games = 300;
+    for (let i = 0; i < games; i++) {
+      const g = play(`rate-${i}`, teamA, teamB, `g-${i}`);
+      hurt += g.injuries.length;
+      minutes += g.boxScore.lines.reduce((s, l) => s + l.minutes, 0);
+    }
+    // 0.017% a minute: 10 players for 48 minutes is about 0.08 a game.
+    const expected = minutes * 0.00017;
+    expect(hurt).toBeGreaterThan(expected * 0.5);
+    expect(hurt).toBeLessThan(expected * 1.6);
+    expect(hurt).toBeGreaterThan(5);
+  });
+
+  it("take the player out for the rest of the game, with a play for it", () => {
+    const games = hurtGames(8);
+    expect(games.length).toBeGreaterThan(0);
+    for (const g of games) {
+      for (const injury of g.injuries) {
+        const at = g.plays.findIndex(
+          (p) => p.kind === "injury" && p.playerId === injury.playerId,
+        );
+        expect(at).toBeGreaterThanOrEqual(0);
+        const event = g.plays[at] as PlayEvent;
+        expect(event.teamId).toBe(injury.teamId);
+        // The next play replaces him.
+        const next = g.plays[at + 1] as PlayEvent;
+        expect(next.kind).toBe("substitution");
+        expect(next.outPlayerId).toBe(injury.playerId);
+        // And he does nothing afterwards.
+        for (const later of g.plays.slice(at + 1)) {
+          if (later.kind === "substitution") {
+            expect(later.playerId).not.toBe(injury.playerId);
+          } else {
+            expect(later.playerId).not.toBe(injury.playerId);
+            expect(later.assistPlayerId).not.toBe(injury.playerId);
+            expect(later.blockPlayerId).not.toBe(injury.playerId);
+            expect(later.stealPlayerId).not.toBe(injury.playerId);
+          }
+        }
+        expect(injury.days).toBeGreaterThanOrEqual(1);
+        expect(injury.kind.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("are the same on a replay, and every injury has its play", () => {
+    for (const g of hurtGames(4)) {
+      const again = play(
+        `hurt-${g.game.id.replace("g-", "")}`,
+        teamA,
+        teamB,
+        g.game.id,
+      );
+      expect(again.injuries).toEqual(g.injuries);
+      expect(g.plays.filter((p) => p.kind === "injury")).toHaveLength(
+        g.injuries.length,
+      );
+    }
+  });
+
+  it("keep the box score consistent: a hurt player's minutes stop", () => {
+    for (const g of hurtGames(4)) {
+      const total = g.boxScore.lines.reduce((s, l) => s + l.points, 0);
+      expect(total).toBe((g.game.homeScore ?? 0) + (g.game.awayScore ?? 0));
+      for (const injury of g.injuries) {
+        const line = g.boxScore.lines.find(
+          (l) => l.playerId === injury.playerId,
+        );
+        expect(line).toBeDefined();
+        expect((line?.minutes ?? 99) < 48).toBe(true);
+      }
+    }
   });
 });

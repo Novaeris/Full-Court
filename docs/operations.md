@@ -72,6 +72,16 @@ supabase db push             # apply migrations to the linked (staging) project
 supabase config push         # apply auth settings and templates to staging
 ```
 
+## Running the end-to-end suite locally
+
+`pnpm test:e2e` builds the web app, runs it against the local Supabase, and runs every spec at three sizes with up to eight tests at once. A full run takes about three and a half minutes. Things that can make a run fail that are not bugs in the game (all seen, all understood):
+
+- **The contact form's daily cap.** The Contact & Support form refuses everyone after 200 messages a UTC day (`support:all` in `app_private.rate_limits`), and one full run sends about ten, so after roughly twenty runs in a day the support tests fail with the form refusing every message. Start again with `delete from app_private.rate_limits where bucket like 'support:%';` in the local database.
+- **The Docker VM's clock.** On Windows and macOS the VM that runs Supabase drifts from the host's clock. The suite warns at the start when they differ by three seconds or more (`e2e/global-setup.ts`). Time-sensitive tests (the auth service's wait between two emails, fixed rate-limit windows) can then fail at random until the clock is corrected (restart Docker Desktop, or `wsl --shutdown`).
+- **A Node process that dies with exit code 3221226505 (0xC0000409) on Windows.** Playwright's test runner ("worker process exited unexpectedly"), the web server (a run full of "fetch failed" and `ECONNREFUSED`) and the simulation worker (`pnpm --filter @fullcourt/worker once` failing with that status and no output) have each been killed this way, about once in ten or twenty full runs, in whichever test was running. There is no JavaScript error or stack. It was not reproduced in isolation: 66,000 simulated days across twelve parallel processes, and 370,000 requests to Supabase from twelve, ran without a crash; no Node crash report is produced. It looks like a fault in the Node runtime (24.15.0 here) or the machine, not in this code. Run again; if it becomes common, try another Node 24 release.
+
+Every other failure should be a real one. Failing tests keep their traces in `test-results/`, and a worker that fails reports its own output in the test's error.
+
 ## Git
 
 - Commits in this repository are authored as **Novaeris** with the GitHub noreply address. This is set in the repository's local git config, so other repositories on the machine are unaffected.
@@ -80,3 +90,21 @@ supabase config push         # apply auth settings and templates to staging
 ## Checking that old leagues survive a migration
 
 `pnpm check:legacy-upgrade` resets the **local** Supabase database to the last migration before Owner Mode, creates an old-style league the way the old server did, applies the newer migrations, and checks what the old data became (config left empty, stable conference and division ids with the same display names, the chosen team as Player 1's, every player still on a team). It then resets the local database to the latest migrations. It needs Docker and `supabase start`, and never touches a hosted project. Run it whenever a migration changes how existing leagues are stored.
+
+## Soaking the offseason
+
+An offseason step the server refuses ("That step can't be taken as things
+stand") is a bug in how a team's roster or payroll was worked out, and it can
+depend on the draw. `e2e/soak-offseason.spec.ts` finds those: it is skipped
+unless `SOAK=1`, and plays leagues through four offseasons each.
+
+```
+SOAK=1 SOAK_LEAGUES=28 pnpm test:e2e --project=desktop --workers=5 --grep "offseason soak"
+```
+
+A refusal prints `SOAK-REFUSED league=... stage=... error=...`, and the web
+server's log has `Offseason step refused` with the team and the database's
+detail (for the hard ceiling, "ABC has a payroll of N"). The refused league is
+left in the local database to inspect. Before the fix above about three leagues
+in 28 were refused; a run with a failing `fetch failed` for every league means
+the test server did not start (see the Windows crash note above), not a bug.

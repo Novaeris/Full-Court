@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { RestoreBackup } from "@/components/leagues/restore-backup";
 import { LeagueGrid } from "@/components/leagues/league-card";
 import { Page, PageHeader } from "@/components/layout/primitives";
 import { ButtonLink } from "@/components/ui/button";
@@ -83,6 +84,7 @@ async function Leagues({
           ) : null}
         </>
       )}
+      {atLimit ? null : <RestoreBackup />}
     </>
   );
 }

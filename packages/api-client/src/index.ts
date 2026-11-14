@@ -10,7 +10,20 @@ import {
   AiAssistResponseSchema,
   CampResponseSchema,
   DraftResponseSchema,
+  HistoryResponseSchema,
+  LeagueExportSchema,
+  AwardRaceResponseSchema,
+  HallOfFameResponseSchema,
+  HeadToHeadResponseSchema,
+  InboxResponseSchema,
+  NewsResponseSchema,
+  ExtendResultSchema,
+  ExtensionsResponseSchema,
+  AllStarResponseSchema,
   ShopResponseSchema,
+  TeamOverviewSchema,
+  StatsResponseSchema,
+  StrategyResponseSchema,
   TradeEvaluationSchema,
   TradePartnerResponseSchema,
   TradeResultSchema,
@@ -35,11 +48,28 @@ import {
   type DraftPickRequest,
   type DraftResponse,
   type DraftSimRequest,
+  type HistoryResponse,
+  type LeagueExport,
+  type AwardRaceResponse,
+  type HallOfFameResponse,
+  type HeadToHeadResponse,
+  type InboxResponse,
+  type NewsResponse,
+  type ExtendRequest,
+  type ExtendResult,
+  type ExtensionsResponse,
+  type AllStarResponse,
   type ShopRequest,
+  type TradingBlockRequest,
+  type TeamOverview,
+  type StatsResponse,
+  type StrategyResponse,
+  type UpdateStrategyRequest,
   type ShopResponse,
+  type OfferAnswer,
   type TradeEvaluation,
   type TradePartnerResponse,
-  type TradeProposal,
+  type TradeProposalInput,
   type TradeResult,
   type TradesResponse,
   type FreeAgencyResponse,
@@ -67,6 +97,7 @@ import {
   type League,
   type LeagueList,
   type LeagueSettings,
+  type SeasonRulesRequest,
   type LeagueStructure,
   type RenameLeagueRequest,
   type RenameStructureRequest,
@@ -164,6 +195,22 @@ export function createApiClient(options: ApiClientOptions) {
         request("GET", "/leagues", (b) => LeagueListSchema.parse(b)),
       create: (input: CreateLeagueRequest): Promise<League> =>
         request("POST", "/leagues", (b) => LeagueSchema.parse(b), input),
+      /** Restores a backup document over a league, replacing it. */
+      restoreLeague: (id: string, backup: LeagueExport): Promise<League> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/restore`,
+          (b) => LeagueSchema.parse(b),
+          backup,
+        ),
+      /** Restores a backup document (see exportLeague) as a new league. */
+      importLeague: (backup: LeagueExport): Promise<League> =>
+        request(
+          "POST",
+          "/leagues/import",
+          (b) => LeagueSchema.parse(b),
+          backup,
+        ),
       get: (id: string): Promise<League> =>
         request("GET", `/leagues/${encodeURIComponent(id)}`, (b) =>
           LeagueSchema.parse(b),
@@ -181,6 +228,17 @@ export function createApiClient(options: ApiClientOptions) {
           TeamListSchema.parse(b),
         ),
       /** The rules a league was created with (derived for older leagues). */
+      /** Sets the schedule and playoff format for the next season. */
+      setSeasonRules: (
+        id: string,
+        input: SeasonRulesRequest,
+      ): Promise<LeagueSettings> =>
+        request(
+          "PUT",
+          `/leagues/${encodeURIComponent(id)}/season-rules`,
+          (b) => LeagueSettingsSchema.parse(b),
+          input,
+        ),
       settings: (id: string): Promise<LeagueSettings> =>
         request("GET", `/leagues/${encodeURIComponent(id)}/settings`, (b) =>
           LeagueSettingsSchema.parse(b),
@@ -322,7 +380,7 @@ export function createApiClient(options: ApiClientOptions) {
       /** Whether a trade is legal and what the computer team would say, without making it. */
       evaluateTrade: (
         id: string,
-        input: TradeProposal,
+        input: TradeProposalInput,
       ): Promise<TradeEvaluation> =>
         request(
           "POST",
@@ -331,11 +389,33 @@ export function createApiClient(options: ApiClientOptions) {
           input,
         ),
       /** Proposes a trade: made if it is legal and the computer team accepts. */
-      proposeTrade: (id: string, input: TradeProposal): Promise<TradeResult> =>
+      proposeTrade: (
+        id: string,
+        input: TradeProposalInput,
+      ): Promise<TradeResult> =>
         request(
           "POST",
           `/leagues/${encodeURIComponent(id)}/trades`,
           (b) => TradeResultSchema.parse(b),
+          input,
+        ),
+      /** Accepts or declines an offer from a computer team. */
+      answerOffer: (id: string, input: OfferAnswer): Promise<TradesResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades/offers`,
+          (b) => TradesResponseSchema.parse(b),
+          input,
+        ),
+      /** Puts up to five of your players on the trading block. */
+      setTradingBlock: (
+        id: string,
+        input: TradingBlockRequest,
+      ): Promise<TradesResponse> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/trades/block`,
+          (b) => TradesResponseSchema.parse(b),
           input,
         ),
       /** What the computer teams would give for your players. */
@@ -476,6 +556,105 @@ export function createApiClient(options: ApiClientOptions) {
           "PUT",
           `/leagues/${encodeURIComponent(id)}/camp`,
           (b) => CampResponseSchema.parse(b),
+          input,
+        ),
+      /** How a team's season is going: record, style, results, leaders. */
+      teamOverview: (id: string, teamId: string): Promise<TeamOverview> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}/overview`,
+          (b) => TeamOverviewSchema.parse(b),
+        ),
+      /** A season's All-Star Game (the latest by default). */
+      allStar: (id: string, year?: number): Promise<AllStarResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/all-star${year ? `?year=${year}` : ""}`,
+          (b) => AllStarResponseSchema.parse(b),
+        ),
+      /** Who on your team can be given a new contract. */
+      extensions: (id: string, teamId?: string): Promise<ExtensionsResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/extensions${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+          }`,
+          (b) => ExtensionsResponseSchema.parse(b),
+        ),
+      /** Offers a player a new contract; he signs if it is worth enough to him. */
+      extendPlayer: (id: string, input: ExtendRequest): Promise<ExtendResult> =>
+        request(
+          "POST",
+          `/leagues/${encodeURIComponent(id)}/extensions`,
+          (b) => ExtendResultSchema.parse(b),
+          input,
+        ),
+      /** The league's leaders for the season being played. */
+      stats: (id: string, playoffs = false): Promise<StatsResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/stats${playoffs ? "?phase=playoffs" : ""}`,
+          (b) => StatsResponseSchema.parse(b),
+        ),
+      /** What has happened to your team, newest first. */
+      inbox: (id: string, teamId?: string): Promise<InboxResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/inbox${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+          }`,
+          (b) => InboxResponseSchema.parse(b),
+        ),
+      /** Who is leading each award on the season so far. */
+      awardRace: (id: string): Promise<AwardRaceResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/award-race`, (b) =>
+          AwardRaceResponseSchema.parse(b),
+        ),
+      /** A team's all-time record against each opponent. */
+      headToHead: (id: string, teamId: string): Promise<HeadToHeadResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}/head-to-head`,
+          (b) => HeadToHeadResponseSchema.parse(b),
+        ),
+      /** The retired players inducted into the Hall of Fame. */
+      hallOfFame: (id: string): Promise<HallOfFameResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/hall-of-fame`, (b) =>
+          HallOfFameResponseSchema.parse(b),
+        ),
+      /** What has happened around the league, newest first. */
+      news: (id: string): Promise<NewsResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/news`, (b) =>
+          NewsResponseSchema.parse(b),
+        ),
+      /** A backup of the whole league: teams, players, seasons, games, awards. */
+      exportLeague: (id: string): Promise<LeagueExport> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/export`, (b) =>
+          LeagueExportSchema.parse(b),
+        ),
+      /** Champions, awards, titles and records from the archived seasons. */
+      history: (id: string): Promise<HistoryResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/history`, (b) =>
+          HistoryResponseSchema.parse(b),
+        ),
+      /** How your team plays, its starters and its roster. */
+      strategy: (id: string, teamId?: string): Promise<StrategyResponse> =>
+        request(
+          "GET",
+          `/leagues/${encodeURIComponent(id)}/strategy${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+          }`,
+          (b) => StrategyResponseSchema.parse(b),
+        ),
+      /** Sets your team's pace, three-point focus, defence and starters. */
+      updateStrategy: (
+        id: string,
+        input: UpdateStrategyRequest,
+      ): Promise<StrategyResponse> =>
+        request(
+          "PATCH",
+          `/leagues/${encodeURIComponent(id)}/strategy`,
+          (b) => StrategyResponseSchema.parse(b),
           input,
         ),
       /** The game's plays, replayed by the server. */

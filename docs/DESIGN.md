@@ -9,6 +9,7 @@ Full Court is a fictional basketball franchise-management game. There are no rea
 - **Online-first.** Progress is stored on the server, so a save opens on any device.
 - **Platforms.** Website first, then iOS/Android, and possibly desktop/Steam later ([ARCHITECTURE.md](./ARCHITECTURE.md)).
 - **Simulation.** Games are simulated from player ratings and team strategy by a deterministic engine. The same seed and the same decisions always produce the same results.
+- **Computer teams play by the owner's rules.** A computer team never gets a privilege the owner doesn't have: the same contracts, the same cap and ceiling, the same free agency and draft, the same trades and the same steps (development, injuries) applied the same way. It doesn't get a head start or a fixed quota. (Computer teams re-signing their own players before free agency was tried and removed for this reason: their expiring players reach free agency like everyone else's.)
 
 ## Game modes
 
@@ -58,7 +59,7 @@ Design for the season core. Phase 10 fixes the types and rules (`@fullcourt/game
 - **Simulation fidelity.** Possession by possession. Four 12-minute periods. On each trip the offence may turn the ball over, draw a foul or take a shot; shooters, zones and passers are chosen from ratings, and the defence's ratings, fatigue and the coaching strategy shift the odds. Misses can be blocked or rebounded either way. Stamina drains on court and recovers on the bench, which drives substitutions. The same seed and decisions give identical plays.
 - **Fast breaks and flow.** A possession can start as a fast break. Steals start them most often, then defensive rebounds, then made baskets and dead-ball turnovers. Faster teams and a faster pace start more. A break is quicker, ends mostly at the rim (layups and dunks) or with an early three, converts better than a half-court set, and is usually led by the player who got the steal or rebound, who takes the shot or makes the pass (`assistPlayerId`). Plays on a break are flagged `transition`.
 - **Watching a game.** The game page shows the whole court, 94 by 50 feet, with the teams switching baskets at halftime. Every play carries where it happened (shots, rebounds, lost balls, fouls, free throws) and when (the clock), and the lineups are known from the starters and substitutions. From those the page moves the ten players and the ball smoothly from one play to the next: players run back and forth on transitions, jump to a steal, crash the boards and space the floor in half-court sets. Controls play at speed, skip to the end or step play by play, and a play feed runs alongside.
-- **Team strategy.** Three coaching choices feed the simulation: pace (slow, normal, fast), three-point focus (low, normal, high) and defence (balanced, perimeter, interior). AI-run franchises use the defaults.
+- **Team strategy.** Three coaching choices feed the simulation: pace (slow, normal, fast), three-point focus (low, normal, high) and defence (balanced, perimeter, interior). Computer teams choose theirs from their roster (below). The owner sets them for a franchise they run on the **Moves** page ("Strategy and starters"), at any time; a change applies to the games played after it. The owner may also **name the five starters** (any five different players on the roster); left automatic, the best player at each position starts. A named starter who has left the team (traded, released) means the automatic five until the owner picks again. A game keeps the strategy and starters it was played with, so replays stay exact.
 - **Standings.** Ranked by win percentage. Ties break by record among the tied teams, then division record (all tied teams in one division), then conference record (all in one conference), then point differential, then team id so the order is always determined. The ranking feeds playoff seeding directly (`rankStandings` returns what `seedPlayoffTeams` takes).
 - **Advancing time.** The player asks to simulate a day, a week or the rest of the season. A worker runs it in the background, one day at a time, and the page follows progress live. The worker is the only thing that writes results.
 
@@ -114,11 +115,109 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### League news
+
+The **News** tab lists what has happened around the league, newest first, so the other teams' moves can be seen, not only your own.
+
+- **What is in it.** Signings, re-signings, extensions and releases (by any team, the owner's included: your own moves appear in it too, exactly as the other teams' do), trades between any two teams, injuries that keep a player out three weeks or more, retirements, each season's champion and most valuable player.
+- **Same for everyone.** It is built from the league's records (the same ones that back the inbox, the history and the backup), so a computer team's move is shown in the same words and at the same time as the owner's. Nothing is announced that the records don't hold.
+- **How much.** The newest hundred items, with at most sixty of any one kind from the records behind them. Draft picks and contracts that simply ran out are left out, to keep it readable: the draft has its own page.
+- **Not yet:** filtering by team or kind, rumours, and reading older seasons' news beyond the newest hundred.
+
+### League backup and restore
+
+On the league's Settings page, **Download a backup** saves the league as one JSON file (`full-court-league.json`). On the Leagues page, **Restore a backup** turns such a file back into a league.
+
+- **What is in the file.** The league's own row and every table that belongs to it, as the database holds them: teams, players (retired ones too), seasons, games with scores and play-by-play recipes, this season's box scores, season stats, awards, draft picks and pick rights, contracts and offers, trades, injuries, staff, camp results, All-Star games and the rest. Only the owner can take it; anyone else gets "not found".
+- **Restoring.** It always makes a **new** league, named "(restored)" after the old name, so the original is left alone and a backup can be restored as often as you like. Every id is replaced by a new one, so nothing in the new league points at the old. The league's owner is whoever restores it, and every row is put in the new league whatever the file says.
+- **All or nothing.** If anything in the file doesn't fit (a missing team, a rule the database checks), nothing is created and the page says the file isn't a backup it can restore. The league limit (five) still applies.
+- **Same version.** The file starts with `format: 2` and the site only restores that layout. A backup from a future version that changed a table won't restore until a matching converter exists.
+- **Replacing a league.** The league's Settings page can also restore a backup **over this league**. The league you have now is removed and the backup restored in its place (with the same name, and new ids as in any restore), in one step: if the backup can't be restored, your league is left exactly as it was. Because it removes a league, it asks you to type the league's name first. To keep the current league, restore into a new league from the Leagues page instead.
+- **Not yet:** restoring a backup made by an older layout, and keeping a league's id when it is replaced.
+
+### The trading block
+
+The owner can put up to five of their players on a **trading block** (on the Moves page, under Trades). It tells the computer teams which players are available.
+
+- **Offers follow the block.** Without a block, computer teams make offers for one of the owner's eight best players. With one, they make offers for the players on the block and for no others, from different teams, at most two at a time, as before. Every offer is still one the computer team would make and that is legal for both sides.
+- **At once and every round.** Saving the block makes new offers straight away (when trades are open), and each round of computer trades (every fifth day of the season, and in free agency) uses it.
+- **Rules.** Up to five different players of the owner's own team. A player who leaves the team (traded, released) just stops counting; if nobody on the block is left the team is back to the default. Clearing the block (saving none) goes back to the default too.
+- **Not yet:** asking for something in particular (a position, a pick, cap room), and putting a player on the block with an asking price.
+
+### Power rankings
+
+The Standings tab has a second view, **Power rankings**, that ranks every team by how good it looks right now, which isn't quite the standings. A team's score from 0 to 100 blends three things:
+
+- **Its record** (45%): the share of its games it has won.
+- **Its margin** (35%): how many points it scores less how many it allows, per game. A margin of 15 points a game or more, either way, counts as the best (or worst) it can be.
+- **Its last ten games** (20%): the share of those it won.
+
+A team with no games yet scores 50. Ties go to the better record, then to the team's id, so the list never changes between page loads. Each line shows the team's record, margin, last ten, score and where it stands in the standings, and how many places higher or lower the power rankings put it. A hot team with a big margin can outrank a team with a better record.
+
+### The cap outlook
+
+The roster section of the Moves and Offseason pages shows a **cap outlook**: for this season and the next four, what the team's contracts commit, how many players that is, what the cap will be, the room under it (or how far over) and how many contracts end after the season. It is meant for planning an extension, a trade or free agency.
+
+- It counts only the contracts the team holds today. A contract is a flat salary until the last season it covers, so a season's commitment is the sum of the salaries that haven't run out by then; nobody is assumed to be re-signed, drafted or traded.
+- The cap rises 3% a year from the league's first season, so each season is measured against its own cap. The hard ceiling is 120% of that cap, and going over the cap is allowed only through the exceptions (re-signing your own players, the mid-level exception and minimum contracts).
+- This season's line is the same as the payroll and room the page already shows, and an extension changes the later seasons at once.
+- **Not yet:** projecting the draft picks' rookie contracts, a minimum-roster estimate, or a luxury tax.
+
+### Game recaps
+
+A finished game's page opens with a short written recap under the score, made from the score and the box score alone, so the same game always reads the same.
+
+- **The headline** names the winner first, with a verb that fits the margin (edged for 1 to 3 points, beat up to 9, defeated up to 19, routed beyond) and the score, and says if it went to overtime: "Boston Comets edged Denver Peaks 101-99 in overtime."
+- **Notes**, a few at most: who led each team in points (the winner's first), then standout lines, most striking first (a triple-double, a 40-point game, a double-double, five steals, five blocks, six threes), then what kind of game it was (decided by three points or fewer without overtime, a blowout of 25 or more, 230 or more points in all, or 170 or fewer).
+- A game not yet played has no recap.
+- **Not yet:** who was ahead when, runs and lead changes (those need the plays), series context for playoff games, streaks and season highs.
+
+### The team page
+
+Every team's page (reached from Teams, Standings or any link to a team) opens with an overview of its season, above the roster:
+
+- **Record and place:** wins and losses, rank among all teams, points scored and allowed per game, the current streak and the last ten games. Before a game is played it says so.
+- **How they play:** the pace, three-point focus and defence in words ("Runs the floor, shoots a lot of threes and protects the paint."), and whether the owner set it or the team chose it to suit its roster.
+- **Leaders:** the team's best player this season in points, rebounds and assists per game.
+- **Latest results** (the last five, with the score and a link to each game) and **next games** (the next three).
+
+It shows the team's regular-season record (the playoffs are on their own tab) and its results and next games include playoff games when there are some.
+
+### Computer teams play to their strengths
+
+A computer team doesn't play the default style: it looks at its best eight players (the ones who play most) and picks the pace, the three-point focus and the defence that suit them.
+
+- **Pace.** Fast if the players' speed and stamina average 65.5 or more, slow at 61.2 or less, normal between.
+- **Three-pointers.** A high focus if their three-point ratings average 65.8 or more, low at 60.4 or less.
+- **Defence.** Guard the perimeter if their perimeter defence beats their interior defence by 5 or more, protect the paint if it doesn't beat it at all, balanced between.
+
+The thresholds sit about half a standard deviation either side of a generated league's average, so about a third of teams lean each way on each choice and every league has a mix of styles. The style is judged on the whole roster, injured players included, so it doesn't flip with every injury, and it changes only as the roster does. An owner's team never has its strategy picked for it: it plays what the owner saved, and the usual style if they never set one.
+
+### The All-Star Game
+
+Half way through the regular season (before day `floor(last day / 2)`, never the first), the league plays an All-Star Game.
+
+- **Who is picked.** The 24 best players so far, by efficiency per game (points, rebounds, assists, steals and blocks, less misses and turnovers). A player must have played at least half the games the most-used player has, so a star who has barely played isn't picked. If fewer than 24 qualify, there is no game that season.
+- **Two squads.** The two best players are the captains, one for each squad, and the rest are drafted in a snake (A, B, B, A, A, B, B, A...) so the squads come out even. Each squad is named for its captain ("Team Okafor"); the best five by pick order start.
+- **The game.** One real game between two squads of twelve, with the same engine as every other game: all-stars play a fast pace and shoot a lot of threes, there is no home court, and it can go to overtime. It is the same game every time for a league and year, so a repeated run plays the same one.
+- **Most valuable player** is the best line on the winning squad (points, rebounds, assists, steals and blocks, less turnovers).
+- **Where it shows.** The Stats tab has the score, the MVP and both squads' lines; History lists each season's game; a selected player's page lists "All-Star" with his awards; and the owner's inbox says which of their players were picked and how they did. It doesn't count in any statistics and a player isn't hurt in it.
+- **Not yet:** a dunk or three-point contest, voting by fans, coaches, a game for rookies, and the owner choosing the reserves.
+
+### Extending a contract
+
+An owner doesn't have to wait for a contract to end. On the **Moves** page, any player of their team with **two years or fewer left** can be given a new contract.
+
+- **What an extension is.** A new salary and a length of one to five years (no longer than his age allows), counted from the current season, so it has to end later than his old contract does. The new salary replaces the old one at once, and the team's payroll can't pass the hard ceiling (an extension is like re-signing a player: no cap room is needed, only room under the ceiling).
+- **Whether he agrees.** He decides the way a free agent does: what the offer is worth to him is the salary raised or lowered by how he sees the team (winning, role, market and history, weighted by what he cares about), and the line is that worth being at least what he asks. There is no luck in it. The page shows each player's **ask**, **the least he will sign for** and how he feels (eager, willing or reluctant), and an offer under the line is turned down with the figure he would take. A player who already plays for the team counts it a little in its favour. In a league's first season there is no past to judge a team by, so every team looks average to its players.
+- **Open** in the regular season and from free agency to the preseason. It shows in the inbox ("You extended ...").
+- **Not yet:** negotiating (asking for more years or a discount for them), and bonuses. Computer teams don't extend players early: they re-sign their own players in free agency, by the same rules as everyone else.
+
 ### Free agency day by day
 
 - **The offers.** An offer is a salary and a length (and says whether it uses the mid-level exception). It is checked when it is made and again when the player decides: if the team's payroll has changed so that it no longer fits, the offer is void. A team can have an offer out to many players, but a team can't sign more players than it has roster places for.
 - **What makes an offer the best one.** Money is only part of it. Every player has priorities that never change: how much the money matters to him (a fifth to three fifths of what he cares about) and how he shares the rest between **winning**, **role**, **the city** and **franchise history**. Each team looks different on those: its _winning_ comes from how it finished and how deep it went in the playoffs; his _role_ from where he would rank on its roster (a starter if he is one of its five best, the rotation if one of the next three, the bench otherwise); _the city_ from the size of its city compared with the league's; and _franchise history_ from its titles, finals and playoff seasons in the last eight, plus a bonus if it is the team he is leaving. A team that looks good on what he cares about makes its offer worth up to 24% more to him than its salary, and one that looks bad up to 24% less, so a winning team with a starting job can beat a better-paying one, and a player who only wants money takes the highest salary. The Free agency page shows what each player cares about most, the role he would have on your team, how your team looks to free agents, and what each offer of yours is worth to him as a share of his asking price.
-- **Each day.** The computer teams (and the owner's team, if roster management is on AI Assist) pick targets: the best player they can use, at a position of need, at a price they can pay, and one who will like their team; they bid about his asking price, a little above or below. **Computer teams use their cap room, up to the full cap**, like any team; past it they can only use the exceptions (re-signing their own, the mid-level exception) and stop at 110% of the cap, so they still have room to fill a roster. A team that has already made an offer may raise it a few percent. Then free agents decide, the best players first: a player looks at what his offers are worth to him; the closer the best is to what he asks, the likelier he is to accept that day; at least 10% over he accepts at once, under 80% never, and every passing day makes everyone a little more willing. A player who accepts goes to that team and his other offers lapse. When free agency ends, a computer team that has no room under the ceiling for minimum contracts to fill its roster has to let its best-paid players go first, as a real team must.
+- **Each day.** The computer teams (and the owner's team, if roster management is on AI Assist) pick targets: the best player they can use, at a position of need, at a price they can pay, and one who will like their team; they bid about his asking price, a little above or below. **Computer teams use their cap room, up to the full cap**, like any team; past it they can only use the exceptions (re-signing their own, the mid-level exception) and stop at 110% of the cap, so they still have room to fill a roster. A team that has already made an offer may raise it a few percent. Then free agents decide, the best players first: a player looks at what his offers are worth to him; the closer the best is to what he asks, the likelier he is to accept that day; at least 10% over he accepts at once, under 80% never, and every passing day makes everyone a little more willing. A player who accepts goes to that team and his other offers lapse. When free agency ends, a computer team that has no room under the ceiling for minimum contracts to fill its roster has to let its best-paid players go first, as a real team must. It does not sign one of them back, and a player a team cuts to trim its roster who is then signed by another team takes the minimum contract there, as any player signed to fill a roster does.
 - **The owner's part.** The owner can make, change and withdraw offers any day, see their own offers and what happened to them, and simulate one day, a week, or to the end. They can always make an offer, with AI Assist on or off.
 - **After day 21.** Anyone left unsigned can still be signed by a team that fits him in at 75% of his asking price, for one year (the computer teams do this to fill rosters; so can the owner).
 - **What is kept.** Every signing, draft pick, release and contract that ends is recorded for the league's history.
@@ -129,11 +228,19 @@ _Numbers are tunable._ This is the first slice of trading: the owner proposes, t
 
 - **Roster moves in the season.** Until the playoffs the owner can **sign a free agent** and **release a player**. A free agent signs for the rest of the season (a one-year contract) at 75% of his asking price, under the cap rules (cap room, or the minimum contract); a release removes his salary from the payroll. A roster is always 12 to 15 players, so a release that would leave fewer than 12 is refused. The same moves are open from free agency to the preseason.
 - **When trades are open.** From free agency to the preseason, and in the regular season up to the **trade deadline**, two thirds of the way through it. Not during the draft, the playoffs or after the season.
-- **What can be traded.** Players under contract, one or more on each side. (Draft picks aren't tradeable yet: picks are created when the lottery is held.) A trade must leave both teams with 12 to 15 players in the season (at most 15 in the offseason) and neither above the **hard ceiling**, and it must pass the **salary-matching rule**: a team that ends over the cap may take back at most 125% of the salary it sends out, plus the minimum salary; a team that ends under the cap needs no matching.
+- **What can be traded.** Players under contract and draft picks (see below), one or more on each side. A trade must leave both teams with 12 to 15 players in the season (at most 15 in the offseason) and neither above the **hard ceiling**, and it must pass the **salary-matching rule**: a team that ends over the cap may take back at most 125% of the salary it sends out, plus the minimum salary; a team that ends under the cap needs no matching.
 - **What a player is worth in a trade.** His value (rating and potential, leaning on potential for the young, less for the old) raised steeply for stars, adjusted for his contract: a player paid less than he asks, with years left, is worth more; an overpaid player is worth less. A computer team also values a position it is short of.
 - **How a computer team answers.** It accepts if what it receives is worth at least 8% more than what it gives, and if the trade is legal for it. It protects its best two players: it needs 40% more value to give one up. It says why when it says no (not enough value, its roster would be too small or too large, a cap rule).
 - **Shopping a player.** The owner can ask what the computer teams would give for one of their players: each team looks for a package from its roster that it would accept and that fits the cap, and the best few are shown. The owner can take one or use it as a starting point.
 - **What is kept.** Every trade is recorded (the teams, the players each side gave and the day), and each traded player gets a transaction.
+
+### Computer teams trade
+
+- **Who.** Every computer team, and an owner's team only when its AI Assist _trades_ switch is on. An owner's team with the switch off is never traded.
+- **When.** Every third day of free agency, and before every fifth day of the regular season until the trade deadline: up to two trades a round, each team and player used once.
+- **What a deal is.** One player for one. Both teams must come out ahead by their own count (at least 2%), and the only difference between their counts is need: a position a team has fewer than two of is worth 10% more to it, unless it is sending a player at that position away. Each team keeps its two best players. The deal must be legal (rosters, hard ceiling, salary matching).
+- **Offers to the owner.** With the same rounds, a computer team offers the owner something for one of their better players (the best package `shopPlayers` finds, so it is one the team would make and that is legal for both). Each owner team has at most two open offers, from different teams; a new round replaces them, and an offer expires when the window closes or a player in it moves. The owner accepts or declines from the Moves tab. An owner team with AI Assist _trades_ on gets no offers; the AI trades for it instead.
+- **Draft picks.** Every team holds its first- and second-round picks for the next two drafts, and either side of a trade can include them (at most four a side). A pick is worth more from a weaker team (by the strength of its best eight players), more in the first round, and 10% less for each year after the next draft: a top first-round pick is worth about a good starter and a second-round pick a little. A computer team counts them like players in its answer. A pick can be traded until its draft's lottery; at the lottery each pick goes to the team that holds it. Computer teams use picks too: when a swap suits only one of two computer teams, the other may add one of its picks (the cheapest that makes it work for both), and an offer to the owner may include a pick on top of players. The draft room and the draft results show where a traded pick came from ("from BOS"); the lottery still ranks the team whose finish decided it.
 
 ### AI Assist
 
@@ -145,9 +252,20 @@ AI Assist is for owners who want a less hands-on game, or who simulate through a
 | Scouting          | ranks the draft board for the franchise's needs and suggests the best pick                            | sees the scouted ratings and ranks the board themselves (a suggestion is still one click away)        |
 | Roster management | releases and signs players in free agency and the preseason, as a computer team does                  | releases and signs their own players                                                                  |
 | Roster coverage   | keeps the roster legal (12 to 15) and every position covered when the owner has left it short or long | has to make the roster legal before free agency or the preseason can end; the game says what is wrong |
-| Trades            | _not built yet_ (trades are a later phase)                                                            | _not built yet_                                                                                       |
+| Trades            | lets the franchise trade with other computer teams in free agency and the preseason                   | makes no trades unless the owner proposes them                                                        |
 
 Nothing the AI does is hidden: what it did shows in the offseason report. Simulating never blocks on a job that the AI is doing.
+
+### Development during the season
+
+A player's ratings don't wait for the offseason to change. A third and two thirds of the way through the regular season, before that day's games, every player in the league develops a little.
+
+- **Everyone alike.** Every active player takes the step: a computer team's, the owner's and free agents'. A player's own age, ratings and potential decide it, and nothing else; no team gets a better step than another.
+- **What a step is.** A player's ratings move by a share of the change expected for his age (the young improve, the old decline, the body fades before the touch) plus some luck, and a player of 25 or under can't grow far past his potential. Age and potential only change in the offseason.
+- **The year is the same size.** In-season steps carry 30% of a year's expected change (15% each); the offseason's ageing applies the other 70%, so a player's year adds up to what it always did. The luck is small, so a player rarely moves more than a point or two in a step.
+- **Once each.** A season remembers how many steps it has had, so a step is never taken twice, even if a simulation is retried; the same league and year always give the same steps.
+- **Where it shows.** The players' current ratings (the roster, player pages, trades, free agency) are the developed ones; the ratings history keeps each season's starting values.
+- **Not yet:** coaches and playing time making a difference, injuries slowing growth, and a "breakout" or "slump" notice in the news.
 
 ### Training camp
 
@@ -162,6 +280,96 @@ Nothing the AI does is hidden: what it did shows in the offseason report. Simula
 - **Budget.** Every team has a staff budget of $10 million, and total staff salary can't exceed it, so a team can't have the best of everyone.
 - **Contracts.** One to three years. At the start of each offseason, contracts that have run out end and the person joins the staff market, and staff over 64 retire.
 - **The market.** Every league starts with staff on every team and a pool of free agents. The owner can hire a free agent into a role (an existing person in that role is released into the market) or let someone go. The computer teams hire the best they can afford for each role.
+
+### Statistics
+
+The **Stats** tab shows how the season being played is going. Past seasons are on the History tab (their numbers live in the history tables once a season is archived).
+
+- **League leaders**, top ten in eight categories: points, rebounds, assists, steals and blocks per game, and field goal, three-point and free throw percentage. A player must have played at least half the games of the most-used player to be ranked, and a percentage needs enough attempts (3 field goals, 1 three and 1 free throw a game), so one lucky shot doesn't lead. A player traded in the season is one player, listed under the team he played most for. There is a regular-season view and a playoff view.
+- **A player's page** has a **season line** (games, starts, minutes, points, rebounds, assists, steals, blocks, turnovers and the three shooting percentages, per game) for the regular season and, once there are playoff games, the playoffs, and his **latest ten games** with the score and his points, rebounds and assists, each linking to the game.
+- **Not yet:** team statistics, sortable full tables, advanced measures, and splits (home and away, by month).
+
+### The inbox
+
+The **Inbox** tab tells the owner what has happened to their team, newest first, so nothing slips by while a season is simulated in bulk. It lists:
+
+- **Injuries** to their players ("X was hurt: sprained ankle. Out 6 days.").
+- **Roster moves**: players drafted, signed, re-signed and released, and contracts that ended.
+- **Trades** their team made, with the players and picks each way.
+- **Awards** won by their players, and their team's championships and finals.
+- **Open trade offers** from computer teams, until they are accepted, declined or expire.
+- **A reminder** while a season is on: which contracts end after it.
+
+Each line links to where to act on it (the player, Moves, Roster or History). It is worked out from the league's own records when the page is opened, so it can't disagree with them. It holds the latest 80 items.
+
+### Coaching and rotations
+
+- **The head coach matters in games.** Every team has a head coach (a staff member, rated 30 to 95) from its first season. In every game his rating adds to all of the team's players' effective ratings: nothing at 60, up to +2 at 95 and down to -1.7 at 30. That is small on one possession and shows up over a season as a few wins. Computer teams have head coaches too, so a good coach is worth hiring from the staff market. A team with no head coach gets nothing.
+- **Rotation size.** On the Moves page the owner can tell the coach to use 7 to 12 players (the starters count), or everyone (the default). The starters and the best of the rest by overall are the rotation; the others sit unless the rotation can't fill a place (fouls, injuries). A short rotation means heavy minutes for the starters, who tire sooner and play worse when spent; a long one rests them.
+- **Not yet:** setting minutes player by player, a bench order, the coach changing strategy on his own, and the development and conditioning coaches' effects beyond training camp.
+
+### Injuries
+
+Players get hurt, on every team, in the regular season and the playoffs.
+
+- **When.** Injuries happen **during games**, at a moment of play. After every trip down the court, each of the ten players on the court is rolled, and the chance grows with the time that trip took (about 0.6% over a 36-minute game), so starters are hurt more often than the bench. A hurt player leaves the game at once, is replaced from the bench and does not come back; the game shows an injury play ("X is injured and leaves the game") and his minutes stop there.
+- **How long.** Most are minor (about 72%: 1 to 5 days, mostly the short end), some moderate (23%: 6 to 20 days) and a few major (5%: 21 to 80 days). Each has a name (a sprained ankle, a torn ligament). Days are league days: every simulated day, everyone who is hurt is a day closer to playing, whether or not his team played.
+- **What it changes.** A hurt player stays on his team and its roster (and still counts towards 12 to 15, still counts for cap and trades) but does not play. A team always has at least 8 healthy players: if more are hurt, the ones with the fewest days left play. A starter the owner named who is hurt is replaced on game day by the best healthy player not already starting. An injury never changes a player's ratings.
+- **The offseason heals everyone**, so a new season starts fit.
+- **Where it shows.** The team page has a Status column ("Out 6 days"), the player page says what the injury is and how long is left, and the starters picker marks hurt players. Every injury is kept in a table for the league's history.
+- **Not yet:** a hurt player playing through it, injuries that last into the next season or lower ratings, rehab, and the AI taking injuries into account when it trades or signs.
+
+### Season rules
+
+The **Settings** page has a card, **Rules for the next season**, where the owner changes how long the season is and how the playoffs are played.
+
+- **What can change.** The **schedule** (the short, standard or long preset, or custom counts of 1 to 8 games against each division rival, each other team in the conference and each team in the other conference; the page shows the number of games every team will play) and the **playoff format** (how many teams, seeding by conference or league-wide, whether division leaders qualify automatically and how many are seeded first, and the length of the series in each round). The structure of the league (its teams and divisions) can't change.
+- **When it starts.** The season being played keeps the rules it began with. Changes are saved as _waiting_ and take over when the next season is created, which is also when the playoffs and the schedule for it are built. A banner on the card says changes are waiting. Rules changed before a league's first season exists (before its first day is played) apply to that first season. Saving rules that are the same as those in force clears anything waiting.
+- **What is refused.** A playoff format the league can't hold (too many teams, a bracket that doesn't split), counts outside 1 to 8, a named preset with game counts that aren't its own, and a schedule that doesn't give every team the same number of games.
+- **Old leagues.** A league created before league rules could be chosen has no stored rules and can't change them; its card is not shown.
+- **Same for everyone.** The rules are the league's, so they apply to every team alike.
+- **Not yet:** changing the rules of the season in progress, scheduling by a target number of games (an exact 82-game season isn't possible in every league), and changing the conference and division structure.
+
+### Head to head
+
+A team's page has a **Head to head** section: its all-time record against every opponent it has met.
+
+- **What it counts.** Every finished game of every season, from the team's side: regular-season wins and losses, and playoff wins and losses kept apart, with the latest meeting (who won, the score, the year, and whether it was a playoff game). Most games first.
+- **Rivalries.** A pair of teams that has played **six or more playoff games** against each other (about one series) is marked as a rivalry, on both teams' pages.
+- **Same for everyone.** Every team's page has it, the owner's and the computer teams' alike, and the two sides of a record are always each other's mirror image.
+- **Not yet:** a rivalry that grows from close games or travel, a head-to-head view between any two teams, and per-season splits.
+
+### The Hall of Fame
+
+A retired player can be inducted into the league's **Hall of Fame**, listed on its own page (a link at the top of the History tab).
+
+- **Who.** A retired player is inducted **three seasons after he retires**, if his career in this league scores **60 or more**. The same rules apply to every player, whoever he played for.
+- **The score.** For each season, his production above an ordinary player (efficiency per game over 10, the same measure the awards use, counted by games played out of 82), plus points for each honour: MVP 12; finals MVP, defensive player and all-league first team 6 each; all-league second team 4; sixth man, a statistical title and all-league third team 2 to 3; rookie of the year and most improved 2; plus 2 for each All-Star Game and 3 for each championship (a season with at least ten games for the champion).
+- **What the page shows.** Each member's seasons, career averages, titles, All-Star Games and honours, the year he was inducted and the year he retired, best career first.
+- **What this means in practice.** Only seasons in this league count, so a veteran who joins a new league late can't reach the Hall; it fills slowly, as the league's own stars retire.
+- **Computed, not stored.** The Hall is worked out from the archived seasons whenever it is asked for, so it always agrees with the records.
+- **Where else it shows.** A member's own page says "Hall of Fame · inducted YEAR" (a retired player's page says "Retired YEAR" rather than "Free agent"), and the News tab has a line when each is inducted, dated to the season he was inducted.
+- **Not yet:** a vote with a ballot, an induction ceremony, and jersey retirement.
+
+### The award race
+
+The Stats tab has an **Award race** view: who leads each of the season's main awards on the games played so far.
+
+- **Which awards.** Most valuable player, defensive player, sixth man, rookie of the year and most improved player. The five leaders of each are listed with their points, rebounds and assists a game and the score the award's rules give them, so the gaps can be seen.
+- **The same rules as the award.** The race doesn't have its own formula: it ranks the candidates by the very rules the season's award uses (who is eligible, how a player is scored, ties to the smaller player id), on the totals so far and each team's record so far. At the end of the regular season the leader of each race is the player the award then goes to. Early in the season few players have played enough games to qualify, so a race can be short or empty.
+- **Same for everyone.** It is the whole league's race; the owner's players are ranked exactly like everybody else's.
+- **Not yet:** finals MVP and the all-league teams (they need the playoffs), a history of how a race moved, and the standard deviations a "projected winner" would need.
+
+### Awards and history
+
+When a season is archived (at the start of the next offseason) its awards are decided from the season's totals, by fixed rules, so the same season always gives the same winners.
+
+- **Eligibility.** A player must have played at least 60% of the games the most-used player played (a rookie 40%).
+- **Efficiency** is points, rebounds, assists, steals and blocks, less every missed shot and free throw and every turnover, per game.
+- **Most valuable player:** efficiency, weighted by the team's winning share (a good player on a losing team loses ground). **Defensive player:** steals, blocks and rebounds per game, weighted by how few points the team allows. **Sixth man:** the best efficiency among eligible players who started at most a quarter of their games and play 15 minutes or more. **Rookie of the year:** the best efficiency among first-year players. **Most improved:** the biggest rise in efficiency on last season. **Scoring, rebounding, assists, steals and blocks titles:** the best per game. **Finals MVP:** the champion's best player in the playoffs.
+- **All-league teams.** Three teams of five, by the MVP measure: two guards, two forwards and a centre each (a position that runs short is filled by the best player left), nobody on two teams.
+- **The History tab** lists every season's champion, finalist, awards and all-league teams, how many titles each team has, and a record book (best single game and best single season in each category, and the best team records). A player's page lists his awards and his seasons.
+- **Not yet:** playoff stat lines, career totals and leaders, and retired numbers. (The Hall of Fame is below.)
 
 ### What the owner sees
 
@@ -185,9 +393,9 @@ An audit after Phase 17, before the next phase. Each gap is something the owner 
 
 **4. Staff salaries (now part of the payroll under the cap, Phase 19).** Staff have salaries and contracts, but nothing is ever paid, because the league has no finances: no revenue (tickets, TV, merchandise), no payroll, no owner profit, no budget that changes with success or market size. Every team has the same $10 million, forever. The staff budget should become part of the same finances as player salaries (one payroll, one cap or tax rule, a budget that depends on the team).
 
-**5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. `TeamStrategy` (pace, three-point focus, defence) exists in the engine but is the same default for every team and can't be set, stored or changed, and starters are chosen automatically. A head coach, lineups and a strategy page belong together.
+**5. Staff do less than the design says.** The head coach only sets camp places, and nothing carries into games. _Strategy and starters were built in Phase 22_ (pace, three-point focus, defence and the five who start, set by the owner); the head coach's effect and the rotation size came in Phase 25; what is still missing is player-by-player minutes and a bench order.
 
-**6. Smaller gaps.** Only the champion and the finalist are recorded as awards (no MVP, rookie of the year, all-league teams, scoring titles); no injuries; no all-star game; no record book or league history page; no notification when a player retires or a contract ends; a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
+**6. Smaller gaps.** Awards and a history page were built in Phase 23 and injuries in Phase 24; an All-Star Game in Phase 29; an inbox in Phase 26 (a player who retires from another team isn't announced); a rookie class that doesn't age into a story (no prospects before the draft); no trades, even between computer teams.
 
 **Order.** (a) Make AI Assist real and move the offseason's decisions to the owner: a draft board that exists before the draft, choosing picks, roster moves in free agency and the preseason. (b) Finances and contracts: salaries, the cap, rookie scale, owner budget, staff payroll folded into it. (c) Free agency with offers and negotiation, extensions, releases. (d) In-season roster moves and trades. (e) Strategy, lineups and the head coach's effect on games. (f) Awards and history.
 

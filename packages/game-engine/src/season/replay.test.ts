@@ -137,6 +137,7 @@ function fingerprint(text: string): string {
 const PINNED: Record<number, string> = {
   1: "5a7266a0",
   2: "92e4aef0",
+  3: "dcd4bc84",
 };
 
 describe("the engine's output", () => {
@@ -162,5 +163,38 @@ describe("the engine's output", () => {
       actual,
       "The engine's output changed. If that is intended, bump ENGINE_VERSION in replay.ts and add the new fingerprint to PINNED.",
     ).toBe(pinned);
+  });
+});
+
+describe("a replay with chosen starters", () => {
+  it("replays the same game and keeps the starters in the snapshot", () => {
+    const home = {
+      ...t(0),
+      starters: [...t(0).players]
+        .sort((a, b) => a.overall - b.overall)
+        .slice(0, 5)
+        .map((p) => p.id),
+    };
+    const away = t(1);
+    const snapshot = snapshotTeams(home, away);
+    expect(snapshot.home.starters).toEqual(home.starters);
+    expect(snapshot.away.starters).toBeUndefined();
+    const restored = restoreTeams(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored.home.starters).toEqual(home.starters);
+    expect(restored.away.starters).toBeUndefined();
+  });
+});
+
+describe("a replay with a coach and a rotation", () => {
+  it("keeps both in the snapshot, and leaves them out when unset", () => {
+    const home = { ...t(0), coachBonus: 1.2, rotation: 8 };
+    const snapshot = snapshotTeams(home, t(1));
+    expect(snapshot.home).toMatchObject({ coach: 1.2, rotation: 8 });
+    expect(snapshot.away.coach).toBeUndefined();
+    expect(snapshot.away.rotation).toBeUndefined();
+    const restored = restoreTeams(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored.home.coachBonus).toBe(1.2);
+    expect(restored.home.rotation).toBe(8);
+    expect(restored.away.coachBonus).toBeUndefined();
   });
 });

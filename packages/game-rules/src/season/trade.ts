@@ -49,6 +49,52 @@ export function tradeValue(asset: TradeAsset, cap: number): number {
 }
 
 /**
+ * What a draft pick is worth, on the same scale as `tradeValue`. A first-round
+ * pick from a weak team is worth about a good starter; from a strong team, a
+ * rotation player; a second-round pick is worth little. `worstness` is 0 for
+ * the best team and 1 for the worst; a pick further in the future is worth
+ * 10% less for each year after the next draft.
+ */
+export function pickValue(input: {
+  round: number;
+  /** 1 for the next draft, 2 for the one after. */
+  yearsAway: number;
+  worstness: number;
+}): number {
+  const worstness = Math.min(1, Math.max(0, input.worstness));
+  const base =
+    input.round === 1 ? 450 + 1050 * worstness ** 1.5 : 90 + 90 * worstness;
+  return base * 0.9 ** Math.max(0, input.yearsAway - 1);
+}
+
+/**
+ * How weak each team is, for valuing its picks: 0 for the strongest, 1 for the
+ * weakest, by the sum of its best eight players' overalls.
+ */
+export function teamWorstness(
+  teams: readonly { id: string; overalls: readonly number[] }[],
+): Map<string, number> {
+  const scored = teams
+    .map(
+      (t) =>
+        [
+          t.id,
+          [...t.overalls]
+            .sort((a, b) => b - a)
+            .slice(0, 8)
+            .reduce((s, x) => s + x, 0),
+        ] as const,
+    )
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return new Map(
+    scored.map(([id], i) => [
+      id,
+      scored.length > 1 ? i / (scored.length - 1) : 0.5,
+    ]),
+  );
+}
+
+/**
  * The salary-matching rule: a team that ends the trade over the cap may take
  * back at most 125% of the salary it sends out, plus the minimum salary; a
  * team that ends under the cap needs no matching.
@@ -85,16 +131,21 @@ export function answerTrade(input: {
   cap: number;
   /** In the season a roster is 12 to 15; in the offseason it need only be at most 15. */
   inSeason: boolean;
+  /** The value of the picks it would give and take, if any. */
+  picksGiven?: number;
+  picksReceived?: number;
 }): TradeVerdict {
   const { cap } = input;
   const value = (a: TradeAsset) => tradeValue(a, cap);
   const short = (position: string) =>
     input.team.filter((p) => p.position === position).length < 2;
-  const gives = input.gives.reduce((s, a) => s + value(a), 0);
-  const receives = input.receives.reduce(
-    (s, a) => s + value(a) * (short(a.position) ? 1.1 : 1),
-    0,
-  );
+  const gives =
+    input.gives.reduce((s, a) => s + value(a), 0) + (input.picksGiven ?? 0);
+  const receives =
+    input.receives.reduce(
+      (s, a) => s + value(a) * (short(a.position) ? 1.1 : 1),
+      0,
+    ) + (input.picksReceived ?? 0);
   const reasons: string[] = [];
 
   const size = input.team.length - input.gives.length + input.receives.length;

@@ -15,7 +15,8 @@ const EFFECT: Record<(typeof AI_ASSIST_KEYS)[number], string> = {
     "Signs and releases players for you as free agency and the preseason end. You can still make your own moves.",
   rosterCoverage:
     "Keeps your roster at 12 to 15 players with every position covered, whatever you leave it at.",
-  trades: "Not built yet.",
+  trades:
+    "Lets your team make trades with other computer teams in free agency and the preseason. Off by default.",
 };
 
 /**
@@ -99,7 +100,7 @@ export function AiAssistPanel({
                 role="switch"
                 className="mt-1 size-6 shrink-0 accent-accent"
                 checked={current[key]}
-                disabled={busy || key === "trades"}
+                disabled={busy}
                 onChange={(e) => toggle(key, e.target.checked)}
               />
             </li>

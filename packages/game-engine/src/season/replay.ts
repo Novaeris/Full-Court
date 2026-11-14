@@ -24,7 +24,7 @@ import type { SimPlayer, SimTeam, SimulatedGame } from "./types";
  * their scores and box scores but can no longer be replayed exactly.
  * `replay.test.ts` fails when the output changes without a bump.
  */
-export const ENGINE_VERSION = 2;
+export const ENGINE_VERSION = 3;
 
 /** One player: id, position, overall, then the ratings in `RATING_KEYS` order. */
 export type ReplayPlayer = (string | number)[];
@@ -34,6 +34,11 @@ export type ReplayTeam = {
   /** Pace, three-point focus and defence, in that order. */
   strategy: [Pace, ThreePointFocus, DefenseStyle];
   players: ReplayPlayer[];
+  /** The coach's chosen five, when there were any (left out otherwise). */
+  starters?: string[];
+  /** The head coach's bonus and the rotation size, when set (left out otherwise). */
+  coach?: number;
+  rotation?: number;
 };
 
 /**
@@ -52,7 +57,15 @@ export type GameReplay = {
 };
 
 function snapshotTeam(team: SimTeam): ReplayTeam {
+  const starters = team.starters?.length
+    ? { starters: [...team.starters] }
+    : {};
+  const coach = team.coachBonus ? { coach: team.coachBonus } : {};
+  const rotation = team.rotation ? { rotation: team.rotation } : {};
   return {
+    ...starters,
+    ...coach,
+    ...rotation,
     id: team.id,
     strategy: [
       team.strategy.pace,
@@ -114,7 +127,17 @@ function restoreTeam(team: ReplayTeam): SimTeam {
   ) {
     throw new Error("Replay snapshot: invalid team.");
   }
+  const starters =
+    Array.isArray(team.starters) &&
+    team.starters.every((id) => typeof id === "string")
+      ? { starters: [...team.starters] }
+      : {};
+  const optional = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined;
   return {
+    ...starters,
+    coachBonus: optional(team.coach),
+    rotation: optional(team.rotation),
     id: team.id,
     strategy: {
       pace: oneOf(PACE_LEVELS, team.strategy[0], "pace"),

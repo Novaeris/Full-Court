@@ -1,3 +1,4 @@
+import { scheduleGames } from "@fullcourt/game-rules";
 import { REGION_NAMES } from "@fullcourt/game-types";
 import type { LeagueSettings, LeagueStructure } from "@fullcourt/validation";
 import { roundName } from "./setup/draft";
@@ -27,6 +28,13 @@ export function LeagueRules({
     [
       "Region",
       settings.region ? REGION_NAMES[settings.region] : "Fictional cities",
+    ],
+    [
+      "Season",
+      (() => {
+        const games = scheduleGames(structure, settings.schedule);
+        return `${settings.schedule.preset === "custom" ? "Custom" : settings.schedule.preset[0]!.toUpperCase() + settings.schedule.preset.slice(1)} schedule${games === null ? "" : `: ${games} games`}`;
+      })(),
     ],
     [
       "Playoffs",

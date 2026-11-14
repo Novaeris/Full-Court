@@ -76,7 +76,12 @@ test("desktop and tablet: everything else lives in the account menu", async ({
   await expect(menu.getByRole("group", { name: "Color theme" })).toBeVisible();
   await expect(menu.getByRole("button", { name: "Sign out" })).toBeVisible();
 
-  // Every control is a 44px touch target, inside the window.
+  // Every control is a 44px touch target, inside the window. The menu slides in
+  // as it opens, and an element that is moving measures a hair under its size
+  // (43.9999px): measure it at rest.
+  await page.evaluate(() =>
+    Promise.all(document.getAnimations().map((a) => a.finished)),
+  );
   const small = await menu
     .locator("a:visible, button:visible, summary")
     .evaluateAll((elements) =>

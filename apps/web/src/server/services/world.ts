@@ -56,7 +56,7 @@ async function loadStructure(
 }
 
 const PLAYER_COLUMNS =
-  "id, team_id, first_name, last_name, position, age, height_inches, weight_pounds, jersey, overall, potential, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina" as const;
+  "id, team_id, first_name, last_name, position, age, height_inches, weight_pounds, jersey, overall, potential, inside, mid_range, three_point, free_throw, passing, ball_handling, off_rebound, def_rebound, perimeter_d, interior_d, speed, strength, stamina, injury_days, injury_kind" as const;
 
 /** Players that count towards a team's strength figure. */
 const ROTATION = 8;
@@ -159,6 +159,8 @@ function toPlayer(
       strength: row.strength,
       stamina: row.stamina,
     },
+    injuryDays: row.injury_days,
+    injuryKind: row.injury_kind,
   };
 }
 

@@ -127,4 +127,40 @@ describe("runJob, when the database rejects a day", () => {
       /^Day 2 was rejected by the database: 23514/,
     );
   });
+
+  it("rolls injuries after each committed day, the same way each time", async () => {
+    const first = fakeDb();
+    await runJob(first.db, first.job);
+    expect(first.injuryCalls.map((c) => c.day)).toEqual([1, 2, 3]);
+    const second = fakeDb();
+    await runJob(second.db, second.job);
+    expect(second.injuryCalls).toEqual(first.injuryCalls);
+    for (const call of first.injuryCalls) {
+      for (const i of call.injuries) {
+        expect(i.days).toBeGreaterThanOrEqual(1);
+        expect(i.kind.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("keeps going when injuries can't be stored, or the database has no such call", async () => {
+    const failing = fakeDb({ injuryError: new Error("boom") });
+    await runJob(failing.db, failing.job);
+    expect(failing.commits).toHaveLength(3);
+    expect(failing.failures).toEqual([]);
+    const without = fakeDb({ withInjuries: false });
+    await runJob(without.db, without.job);
+    expect(without.commits).toHaveLength(3);
+  });
+
+  it("plays the day without a player who is hurt", async () => {
+    const players = fakePlayers(10).map((p) =>
+      p.id === "t1-p1" ? { ...p, injury_days: 4 } : p,
+    );
+    const fake = fakeDb({ players, daysRequested: 1 });
+    await runJob(fake.db, fake.job);
+    const played = fake.commits[0]?.lines.map((l) => l.player_id) ?? [];
+    expect(played).not.toContain("t1-p1");
+    expect(played.length).toBeGreaterThan(0);
+  });
 });

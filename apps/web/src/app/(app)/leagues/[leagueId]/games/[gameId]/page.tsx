@@ -1,3 +1,4 @@
+import { gameRecap } from "@fullcourt/game-rules";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -65,6 +66,28 @@ async function Game({
   const final = game.status === "final";
   const canWatch = final && detail.replay !== null;
   const view = query.tab === "box" || !canWatch ? "box" : "watch";
+  // A short written recap of a finished game, from its score and box score.
+  const recap =
+    final && game.homeScore !== null && game.awayScore !== null
+      ? gameRecap({
+          home: { id: home.id, name: teamName(home) },
+          away: { id: away.id, name: teamName(away) },
+          homeScore: game.homeScore,
+          awayScore: game.awayScore,
+          overtimes: game.overtimes,
+          lines: detail.lines.map((l) => ({
+            playerId: l.playerId,
+            name: `${l.firstName} ${l.lastName}`,
+            teamId: l.teamId,
+            points: l.points,
+            rebounds: l.rebounds,
+            assists: l.assists,
+            steals: l.steals,
+            blocks: l.blocks,
+            threes: l.tpm,
+          })),
+        })
+      : null;
   const overtime =
     game.overtimes === 0
       ? ""
@@ -110,6 +133,24 @@ async function Game({
               </span>
             ))}
           </div>
+        ) : null}
+        {recap ? (
+          <section
+            aria-labelledby="recap-heading"
+            className="flex flex-col gap-1"
+          >
+            <h3 id="recap-heading" className="sr-only">
+              Recap
+            </h3>
+            <p className="text-lg font-semibold">{recap.headline}</p>
+            {recap.notes.length > 0 ? (
+              <ul className="list-disc pl-5 text-text-muted">
+                {recap.notes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
         ) : null}
       </header>
 

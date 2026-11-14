@@ -65,6 +65,17 @@ export function OffseasonReport({
 }) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const team = (id: string | null) => (id ? teamById.get(id) : undefined);
+  /** The team that holds a pick, and where it came from if it was traded. */
+  const holder = (r: { teamId: string; fromTeamId: string | null }) => (
+    <span className="inline-flex flex-wrap items-center gap-x-2">
+      <TeamCell team={team(r.teamId)} />
+      {r.fromTeamId ? (
+        <span className="text-sm text-text-muted">
+          from {team(r.fromTeamId)?.abbreviation ?? "another team"}
+        </span>
+      ) : null}
+    </span>
+  );
 
   type DraftRow = OffseasonResponse["draft"][number];
   const lotteryRows = report.draft
@@ -75,7 +86,7 @@ export function OffseasonReport({
     {
       key: "team",
       header: "Team",
-      cell: (r) => <TeamCell team={team(r.teamId)} />,
+      cell: (r) => holder(r),
     },
     {
       key: "finish",
@@ -154,7 +165,7 @@ export function OffseasonReport({
     {
       key: "team",
       header: "Team",
-      cell: (r) => <TeamCell team={team(r.teamId)} />,
+      cell: (r) => holder(r),
     },
     {
       key: "pos",

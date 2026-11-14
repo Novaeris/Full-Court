@@ -19,6 +19,72 @@ import type { OffseasonPlayer } from "./offseason";
  * but is never below the minimum. Free agency itself has no cap.
  */
 
+/**
+ * What each team pays its players: `salaries` by player id (a player with none
+ * counts for nothing), added up over the players on a team.
+ */
+export function payrollOf(
+  players: readonly { id: string; teamId: string | null }[],
+  salaries: ReadonlyMap<string, number>,
+): Map<string, number> {
+  const pay = new Map<string, number>();
+  for (const p of players) {
+    if (p.teamId)
+      pay.set(p.teamId, (pay.get(p.teamId) ?? 0) + (salaries.get(p.id) ?? 0));
+  }
+  return pay;
+}
+
+/**
+ * A team whose payroll leaves no room to fill its roster to the minimum with
+ * minimum contracts lets its best-paid players go until it can: the hard
+ * ceiling is never passed, and a roster is never left short. Only the teams in
+ * `teams` do this. The payrolls it was given no longer describe the result:
+ * work them out again with `payrollOf` before using them.
+ */
+export function shedPayroll<P extends { id: string; teamId: string | null }>(
+  players: readonly P[],
+  salaries: ReadonlyMap<string, number>,
+  payroll: ReadonlyMap<string, number>,
+  teams: ReadonlySet<string>,
+  cap: number,
+): P[] {
+  const ceiling = hardCeiling(cap);
+  const min = minSalary(cap);
+  let next = [...players];
+  for (const teamId of teams) {
+    let pay = payroll.get(teamId) ?? 0;
+    let roster = next.filter((p) => p.teamId === teamId);
+    const need = () => Math.max(0, ROSTER_LIMITS.min - roster.length) * min;
+    while (roster.length > 0 && pay + need() > ceiling) {
+      const drop = roster.reduce((a, b) =>
+        (salaries.get(b.id) ?? 0) > (salaries.get(a.id) ?? 0) ? b : a,
+      );
+      pay -= salaries.get(drop.id) ?? 0;
+      roster = roster.filter((p) => p.id !== drop.id);
+      next = next.map((p) => (p.id === drop.id ? { ...p, teamId: null } : p));
+    }
+  }
+  return next;
+}
+
+/**
+ * Whether a player who ends free agency on a team signs a new contract with it
+ * (the minimum one the engine set) or keeps the one he has. `now` is his team
+ * at the end, `afterShed` his team once teams had let players go to get under
+ * the ceiling, and `signedByEngine` whether the fill signed him. He is new to
+ * the team if he was a free agent, was let go (even by the team that signs him
+ * again) or was cut by one team and signed by another: in every case the engine
+ * counted him at the contract it set, so the saved result has to as well.
+ */
+export function getsNewContract(
+  now: string | null,
+  afterShed: string | null,
+  signedByEngine: boolean,
+): boolean {
+  return now !== null && (afterShed === null || signedByEngine);
+}
+
 /** A player below this value is not worth a roster place a team doesn't need. */
 const REPLACEMENT_LEVEL = 57;
 
@@ -66,6 +132,13 @@ export function fillRosters(
      * that would take it past the hard ceiling.
      */
     payroll?: ReadonlyMap<string, number>;
+    /**
+     * Players a team has just let go (to get under the hard ceiling), by the
+     * team that did. A team doesn't sign back someone it released to make
+     * room: it couldn't afford him, and the saved result would otherwise
+     * keep his old salary while the team believed it had shed it.
+     */
+    released?: ReadonlyMap<string, string>;
   },
 ): RosterMove[] {
   const teams = [...input.teams];
@@ -130,9 +203,11 @@ export function fillRosters(
         input.cap === undefined ||
         askingSalary(byId.get(id) as OffseasonPlayer, input.cap) <=
           minSalary(input.cap) * 1.6;
-      const cheap = pool.filter(wouldTakeMinimum);
+      const open = pool.filter((id) => input.released?.get(id) !== teamId);
+      if (open.length === 0) break;
+      const cheap = open.filter(wouldTakeMinimum);
       const candidates =
-        cheap.length > 0 && roster.length >= ROSTER_LIMITS.min ? cheap : pool;
+        cheap.length > 0 && roster.length >= ROSTER_LIMITS.min ? cheap : open;
       let best = 0;
       let bestScore = -Infinity;
       pool.forEach((id, i) => {

@@ -29,7 +29,7 @@ test.describe("playoffs", () => {
 
     // The regular season, through the API.
     await api.leagues.simulate(league.id, { kind: "season" });
-    runWorker();
+    runWorker(league.id);
     const afterSeason = await api.leagues.simulation(league.id);
     expect(afterSeason.season?.phase).toBe("playoffs");
     // No bracket until the playoffs are first simulated.
@@ -47,7 +47,7 @@ test.describe("playoffs", () => {
 
     // The playoffs, from the page.
     await page.getByRole("button", { name: "Sim to end of playoffs" }).click();
-    runWorker();
+    runWorker(league.id);
     await expect(page.getByText(/are the \d+ champions\./)).toBeVisible({
       timeout: 90_000,
     });
@@ -394,7 +394,7 @@ test.describe("playoffs API", () => {
       code: "season_not_found",
     });
     await api.leagues.simulate(league.id, { kind: "day" });
-    runWorker();
+    runWorker(league.id);
     await expect(api.leagues.startNextSeason(league.id)).rejects.toMatchObject({
       status: 409,
       code: "season_not_complete",

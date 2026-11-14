@@ -3,7 +3,14 @@ import {
   OFFSEASON_STAGES,
   STAFF_ROLES,
 } from "@fullcourt/game-types";
-import { PLAY_KINDS, POSITIONS, SHOT_ZONES } from "@fullcourt/game-types";
+import {
+  DEFENSE_STYLES,
+  PACE_LEVELS,
+  PLAY_KINDS,
+  POSITIONS,
+  SHOT_ZONES,
+  THREE_POINT_FOCUS_LEVELS,
+} from "@fullcourt/game-types";
 import { z } from "zod";
 import { SeasonSchema } from "./simulation";
 
@@ -261,7 +268,9 @@ export const OffseasonResponseSchema = z.object({
       pick: z.number().int(),
       round: z.number().int(),
       teamId: z.uuid(),
-      /** Where the picking team finished, 1 = best. */
+      /** The team the pick came from, if it was traded; null for its own. */
+      fromTeamId: z.uuid().nullable(),
+      /** Where the team it came from finished, 1 = best. */
       finishRank: z.number().int(),
       /** The pick it would have had without the lottery. */
       expectedPick: z.number().int(),
@@ -395,6 +404,7 @@ export const DraftResponseSchema = z.object({
       pick: z.number().int(),
       round: z.number().int(),
       teamId: z.uuid(),
+      fromTeamId: z.uuid().nullable(),
       finishRank: z.number().int(),
       expectedPick: z.number().int(),
       lotteryOdds: z.number().nullable(),
@@ -462,6 +472,20 @@ export type CapFigures = z.infer<typeof CapFiguresSchema>;
  * when players can be released and signed (after free agency's days, at 75% of
  * the asking price).
  */
+/** What a team has committed in one season, from the contracts it holds today. */
+export const OutlookYearSchema = z.object({
+  year: z.number().int(),
+  cap: z.number().int(),
+  ceiling: z.number().int(),
+  committed: z.number().int(),
+  players: z.number().int(),
+  /** The cap less what is committed; negative when over the cap. */
+  room: z.number().int(),
+  /** Contracts that end after the season. */
+  expiring: z.number().int(),
+});
+export type OutlookYear = z.infer<typeof OutlookYearSchema>;
+
 export const RosterResponseSchema = z.object({
   teamId: z.uuid().nullable(),
   open: z.boolean(),
@@ -469,6 +493,8 @@ export const RosterResponseSchema = z.object({
   max: z.number().int(),
   figures: CapFiguresSchema.nullable(),
   players: z.array(RosterPlayerSchema),
+  /** The next five seasons' commitments and cap, empty with no season or team. */
+  outlook: z.array(OutlookYearSchema),
   freeAgents: z.array(FreeAgentSchema),
   freeAgentTotal: z.number().int(),
 });
@@ -611,6 +637,19 @@ export const TradePlayerSchema = OffseasonPlayerSchema.extend({
 });
 export type TradePlayer = z.infer<typeof TradePlayerSchema>;
 
+/** A draft pick a team holds, tradeable until its lottery. */
+export const TradePickSchema = z.object({
+  id: z.uuid(),
+  /** The year of the draft, as in the draft board. */
+  seasonYear: z.number().int(),
+  round: z.number().int(),
+  /** Whose finish decides where it falls. */
+  originalTeamId: z.uuid(),
+  /** Its trade value, rounded. */
+  value: z.number().int(),
+});
+export type TradePick = z.infer<typeof TradePickSchema>;
+
 /** A trade that was made. */
 export const TradeRecordSchema = z.object({
   id: z.uuid(),
@@ -621,8 +660,45 @@ export const TradeRecordSchema = z.object({
   teamB: z.uuid(),
   gaveA: z.array(OffseasonPlayerSchema),
   gaveB: z.array(OffseasonPlayerSchema),
+  picksA: z.array(
+    z.object({
+      seasonYear: z.number().int(),
+      round: z.number().int(),
+      originalTeamId: z.uuid(),
+    }),
+  ),
+  picksB: z.array(
+    z.object({
+      seasonYear: z.number().int(),
+      round: z.number().int(),
+      originalTeamId: z.uuid(),
+    }),
+  ),
 });
 export type TradeRecord = z.infer<typeof TradeRecordSchema>;
+
+/** An offer from a computer team: you give `give` and get `get`. */
+export const TradeOfferSchema = z.object({
+  id: z.uuid(),
+  /** The season's day it was made, or 0 in the offseason. */
+  day: z.number().int(),
+  teamId: z.uuid(),
+  partnerId: z.uuid(),
+  give: z.array(TradePlayerSchema),
+  get: z.array(TradePlayerSchema),
+  /** Picks the computer team adds to what it sends. */
+  getPicks: z.array(TradePickSchema),
+  /** Whether it is still legal to accept, and if not why. */
+  problems: z.array(z.string()),
+});
+export type TradeOffer = z.infer<typeof TradeOfferSchema>;
+
+/** POST /api/v1/leagues/:leagueId/trades/offers: accept or decline an offer. */
+export const OfferAnswerSchema = z.object({
+  offerId: z.uuid(),
+  action: z.enum(["accept", "decline"]),
+});
+export type OfferAnswer = z.infer<typeof OfferAnswerSchema>;
 
 /**
  * GET /api/v1/leagues/:leagueId/trades?team=: whether trades are open, your
@@ -647,14 +723,33 @@ export const TradesResponseSchema = z.object({
     }),
   ),
   history: z.array(TradeRecordSchema),
+  /** The picks your team holds. */
+  picks: z.array(TradePickSchema),
+  /** Open offers from computer teams to this team. */
+  offers: z.array(TradeOfferSchema),
+  /** The players your team has put on the trading block (up to five). */
+  block: z.array(z.uuid()),
 });
 export type TradesResponse = z.infer<typeof TradesResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/trades/block: put up to five of your players on the trading block (none clears it). */
+export const TradingBlockRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerIds: z
+    .array(z.uuid())
+    .max(5)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "List each player once.",
+    }),
+});
+export type TradingBlockRequest = z.infer<typeof TradingBlockRequestSchema>;
 
 /** GET /api/v1/leagues/:leagueId/trades/partner?partner=: a computer team's roster with contracts. */
 export const TradePartnerResponseSchema = z.object({
   teamId: z.uuid(),
   payroll: z.number().int(),
   roster: z.array(TradePlayerSchema),
+  picks: z.array(TradePickSchema),
 });
 export type TradePartnerResponse = z.infer<typeof TradePartnerResponseSchema>;
 
@@ -664,8 +759,13 @@ export const TradeProposalSchema = z.object({
   partnerId: z.uuid(),
   give: z.array(z.uuid()).max(5),
   get: z.array(z.uuid()).max(5),
+  /** Draft picks (rights) each side gives. */
+  givePicks: z.array(z.uuid()).max(4).default([]),
+  getPicks: z.array(z.uuid()).max(4).default([]),
 });
 export type TradeProposal = z.infer<typeof TradeProposalSchema>;
+/** What a client sends: the pick lists may be left out. */
+export type TradeProposalInput = z.input<typeof TradeProposalSchema>;
 
 export const TradeEvaluationSchema = z.object({
   /** The trade is legal: rosters, the hard ceiling and salary matching. */
@@ -704,3 +804,493 @@ export const ShopResponseSchema = z.object({
   ),
 });
 export type ShopResponse = z.infer<typeof ShopResponseSchema>;
+
+/** How a team plays: what the coach sets (docs/DESIGN.md, "Strategy and lineups"). */
+export const TeamStrategySchema = z.object({
+  pace: z.enum(PACE_LEVELS),
+  threePointFocus: z.enum(THREE_POINT_FOCUS_LEVELS),
+  defense: z.enum(DEFENSE_STYLES),
+});
+export type TeamStrategyView = z.infer<typeof TeamStrategySchema>;
+
+/** GET /api/v1/leagues/:leagueId/strategy?team=: your team's strategy, starters and roster. */
+export const StrategyResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  strategy: TeamStrategySchema,
+  /** Five player ids, or none when the best player at each position starts. */
+  starters: z.array(z.uuid()),
+  /** How many players the coach uses (7 to 12), or null for everyone. */
+  rotation: z.number().int().nullable(),
+  /** Your head coach and what he adds to every player in your games; null with no head coach. */
+  coach: z
+    .object({
+      name: z.string(),
+      rating: z.number().int(),
+      bonus: z.number(),
+    })
+    .nullable(),
+  roster: z.array(
+    z.object({
+      id: z.uuid(),
+      name: z.string(),
+      position: z.enum(POSITIONS),
+      overall: z.number().int(),
+      /** Days he is still out hurt (0 when fit). */
+      injuryDays: z.number().int(),
+    }),
+  ),
+});
+export type StrategyResponse = z.infer<typeof StrategyResponseSchema>;
+
+/** PATCH /api/v1/leagues/:leagueId/strategy: set the strategy and starters. */
+export const UpdateStrategyRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  strategy: TeamStrategySchema,
+  /** How many players the coach uses, 7 to 12; leave out or null for everyone. */
+  rotation: z.number().int().min(7).max(12).nullable().optional(),
+  /** Five different players of the team, or empty for the automatic five. */
+  starters: z
+    .array(z.uuid())
+    .refine(
+      (s) => s.length === 0 || (s.length === 5 && new Set(s).size === 5),
+      {
+        message:
+          "Pick five different players, or leave the starters automatic.",
+      },
+    ),
+});
+export type UpdateStrategyRequest = z.infer<typeof UpdateStrategyRequestSchema>;
+
+/** A player named in the history pages. */
+const HistoryPlayerSchema = z.object({
+  playerId: z.uuid(),
+  name: z.string(),
+  position: z.string(),
+  teamId: z.uuid(),
+});
+
+/**
+ * GET /api/v1/leagues/:leagueId/history: every archived season's champion and
+ * awards, the teams' titles and the record book (docs/DESIGN.md, "Awards and
+ * history").
+ */
+export const HistoryResponseSchema = z.object({
+  /** Newest first. */
+  seasons: z.array(
+    z.object({
+      year: z.number().int(),
+      championId: z.uuid().nullable(),
+      finalistId: z.uuid().nullable(),
+      /** The season's All-Star Game, if one was played. */
+      allStar: z
+        .object({
+          nameA: z.string(),
+          nameB: z.string(),
+          scoreA: z.number().int(),
+          scoreB: z.number().int(),
+          mvpName: z.string().nullable(),
+        })
+        .nullable(),
+      /** The individual awards, in the order the page lists them. */
+      awards: z.array(
+        HistoryPlayerSchema.extend({ award: z.string(), label: z.string() }),
+      ),
+      /** The three all-league teams (empty if there was no season to judge). */
+      allLeague: z.array(
+        z.object({
+          team: z.number().int(),
+          players: z.array(HistoryPlayerSchema),
+        }),
+      ),
+    }),
+  ),
+  /** Titles by team, most first. */
+  titles: z.array(
+    z.object({
+      teamId: z.uuid(),
+      titles: z.number().int(),
+      finals: z.number().int(),
+    }),
+  ),
+  records: z.object({
+    /** The best single game in each category. */
+    game: z.array(
+      z.object({
+        label: z.string(),
+        value: z.number().int(),
+        playerId: z.uuid(),
+        name: z.string(),
+        teamId: z.uuid(),
+        year: z.number().int(),
+        day: z.number().int(),
+        opponentId: z.uuid(),
+      }),
+    ),
+    /** The most in a season (regular season totals). */
+    season: z.array(
+      z.object({
+        label: z.string(),
+        value: z.number().int(),
+        playerId: z.uuid(),
+        name: z.string(),
+        teamId: z.uuid(),
+        year: z.number().int(),
+      }),
+    ),
+    /** The best team records. */
+    teams: z.array(
+      z.object({
+        teamId: z.uuid(),
+        year: z.number().int(),
+        wins: z.number().int(),
+        losses: z.number().int(),
+      }),
+    ),
+  }),
+});
+export type HistoryResponse = z.infer<typeof HistoryResponseSchema>;
+
+/** One thing that happened to your team (docs/DESIGN.md, "The inbox"). */
+export const INBOX_KINDS = [
+  "injury",
+  "move",
+  "trade",
+  "award",
+  "offer",
+  "reminder",
+] as const;
+
+export const InboxItemSchema = z.object({
+  id: z.string(),
+  year: z.number().int(),
+  /** The season's day, 0 in the offseason; 998 and up come after the season's games. */
+  day: z.number().int(),
+  kind: z.enum(INBOX_KINDS),
+  text: z.string(),
+  /** A page to look at it on, if there is one. */
+  href: z.string().nullable(),
+});
+export type InboxItem = z.infer<typeof InboxItemSchema>;
+
+/** GET /api/v1/leagues/:leagueId/inbox?team=: what happened to your team, newest first. */
+export const InboxResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  items: z.array(InboxItemSchema),
+});
+export type InboxResponse = z.infer<typeof InboxResponseSchema>;
+
+export const NEWS_KINDS = [
+  "move",
+  "trade",
+  "injury",
+  "retirement",
+  "award",
+] as const;
+
+export const NewsItemSchema = z.object({
+  id: z.string(),
+  year: z.number().int(),
+  /** The season's day, 0 in the offseason; 998 and up come after the season's games. */
+  day: z.number().int(),
+  kind: z.enum(NEWS_KINDS),
+  text: z.string(),
+  /** A page to look at it on, if there is one. */
+  href: z.string().nullable(),
+});
+export type NewsItem = z.infer<typeof NewsItemSchema>;
+
+/** GET /api/v1/leagues/:leagueId/news: what has happened around the league, newest first. */
+export const NewsResponseSchema = z.object({ items: z.array(NewsItemSchema) });
+export type NewsResponse = z.infer<typeof NewsResponseSchema>;
+
+/**
+ * GET /api/v1/leagues/:leagueId/stats?phase=: the league's leaders for the
+ * season being played (docs/DESIGN.md, "Statistics").
+ */
+export const StatsResponseSchema = z.object({
+  season: z
+    .object({
+      year: z.number().int(),
+      day: z.number().int(),
+      phase: z.string(),
+    })
+    .nullable(),
+  /** Whether these are playoff numbers. */
+  playoffs: z.boolean(),
+  /** The most games any player has played, which sets how many it takes to be ranked. */
+  games: z.number().int(),
+  boards: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      unit: z.enum(["per game", "percent"]),
+      leaders: z.array(
+        z.object({
+          rank: z.number().int(),
+          playerId: z.uuid(),
+          name: z.string(),
+          position: z.string(),
+          teamId: z.uuid(),
+          games: z.number().int(),
+          /** Per game, or a percentage. */
+          value: z.number(),
+          /** The season total, or the makes for a percentage. */
+          total: z.number().int(),
+        }),
+      ),
+    }),
+  ),
+});
+export type StatsResponse = z.infer<typeof StatsResponseSchema>;
+
+/** GET /api/v1/leagues/:leagueId/award-race: who is leading each award on the season so far (docs/DESIGN.md, "The award race"). */
+export const AwardRaceResponseSchema = z.object({
+  season: z
+    .object({
+      year: z.number().int(),
+      day: z.number().int(),
+      phase: z.string(),
+    })
+    .nullable(),
+  /** The most games any player has played. */
+  games: z.number().int(),
+  races: z.array(
+    z.object({
+      award: z.string(),
+      label: z.string(),
+      candidates: z.array(
+        z.object({
+          rank: z.number().int(),
+          playerId: z.uuid(),
+          name: z.string(),
+          position: z.string(),
+          teamId: z.uuid(),
+          games: z.number().int(),
+          points: z.number(),
+          rebounds: z.number(),
+          assists: z.number(),
+          /** The score the award's rules give him, so the gaps can be seen. */
+          score: z.number(),
+        }),
+      ),
+    }),
+  ),
+});
+export type AwardRaceResponse = z.infer<typeof AwardRaceResponseSchema>;
+
+/** GET /api/v1/leagues/:leagueId/hall-of-fame: the retired players inducted into the Hall of Fame (docs/DESIGN.md, "The Hall of Fame"). */
+export const HallOfFameResponseSchema = z.object({
+  /** The season the Hall is as of; null before any season. */
+  year: z.number().int().nullable(),
+  /** Retired players in all, inducted or not. */
+  retired: z.number().int(),
+  members: z.array(
+    z.object({
+      playerId: z.uuid(),
+      name: z.string(),
+      position: z.string(),
+      retiredYear: z.number().int(),
+      inductedYear: z.number().int(),
+      seasons: z.number().int(),
+      games: z.number().int(),
+      /** Career averages per game in the league. */
+      points: z.number(),
+      rebounds: z.number(),
+      assists: z.number(),
+      titles: z.number().int(),
+      allStars: z.number().int(),
+      honors: z.array(z.object({ label: z.string(), count: z.number().int() })),
+      /** The career score the rules gave him. */
+      score: z.number(),
+    }),
+  ),
+});
+export type HallOfFameResponse = z.infer<typeof HallOfFameResponseSchema>;
+
+const WinLossSchema = z.object({
+  wins: z.number().int(),
+  losses: z.number().int(),
+});
+
+/** GET /api/v1/leagues/:leagueId/teams/:teamId/head-to-head: a team's all-time record against each opponent (docs/DESIGN.md, "Head to head"). */
+export const HeadToHeadResponseSchema = z.object({
+  teamId: z.uuid(),
+  opponents: z.array(
+    z.object({
+      opponentId: z.uuid(),
+      regular: WinLossSchema,
+      playoffs: WinLossSchema,
+      /** The latest meeting, from this team's side. */
+      last: z.object({
+        year: z.number().int(),
+        won: z.boolean(),
+        score: z.string(),
+        playoff: z.boolean(),
+      }),
+      /** Whether their playoff meetings have made them rivals. */
+      rival: z.boolean(),
+    }),
+  ),
+});
+export type HeadToHeadResponse = z.infer<typeof HeadToHeadResponseSchema>;
+
+/** A player of your team who can be given a new contract (docs/DESIGN.md, "Extending a contract"). */
+export const ExtensionCandidateSchema = z.object({
+  player: OffseasonPlayerSchema,
+  /** His contract now: salary and the last season it covers. */
+  salary: z.number().int(),
+  expires: z.number().int(),
+  yearsLeft: z.number().int(),
+  /** What he asks, and for how long. */
+  askSalary: z.number().int(),
+  askYears: z.number().int(),
+  /** The longest contract his age allows. */
+  maxYears: z.number().int(),
+  /** The least salary he signs for, because of how he sees your team. */
+  minimum: z.number().int(),
+  mood: z.enum(["eager", "willing", "reluctant"]),
+});
+export type ExtensionCandidate = z.infer<typeof ExtensionCandidateSchema>;
+
+/** GET /api/v1/leagues/:leagueId/extensions?team=: who can be extended, and the cap figures. */
+export const ExtensionsResponseSchema = z.object({
+  teamId: z.uuid().nullable(),
+  open: z.boolean(),
+  figures: CapFiguresSchema.nullable(),
+  candidates: z.array(ExtensionCandidateSchema),
+});
+export type ExtensionsResponse = z.infer<typeof ExtensionsResponseSchema>;
+
+/** POST /api/v1/leagues/:leagueId/extensions: offer a new contract. */
+export const ExtendRequestSchema = z.object({
+  teamId: z.uuid().optional(),
+  playerId: z.uuid(),
+  /** In thousands of dollars a year. */
+  salary: z.number().int().positive(),
+  years: z.number().int().min(1).max(5),
+});
+export type ExtendRequest = z.infer<typeof ExtendRequestSchema>;
+
+export const ExtendResultSchema = z.object({
+  /** Whether he signed. */
+  done: z.boolean(),
+  /** What the offer was worth to him as a share of his ask. */
+  worth: z.number(),
+  /** Why not, in words, when he didn't. */
+  reason: z.string().nullable(),
+  extensions: ExtensionsResponseSchema,
+});
+export type ExtendResult = z.infer<typeof ExtendResultSchema>;
+
+/** A player in the All-Star Game, with his line. */
+export const AllStarPlayerSchema = z.object({
+  playerId: z.uuid(),
+  name: z.string(),
+  position: z.string(),
+  /** The team he played for when he was picked. */
+  teamId: z.uuid().nullable(),
+  starter: z.boolean(),
+  captain: z.boolean(),
+  minutes: z.number().int(),
+  points: z.number().int(),
+  rebounds: z.number().int(),
+  assists: z.number().int(),
+  steals: z.number().int(),
+  blocks: z.number().int(),
+});
+
+export const AllStarGameSchema = z.object({
+  year: z.number().int(),
+  /** The season's day it was played before. */
+  day: z.number().int(),
+  overtimes: z.number().int(),
+  winner: z.enum(["a", "b"]),
+  mvp: z.object({ playerId: z.uuid(), name: z.string() }).nullable(),
+  squads: z.array(
+    z.object({
+      squad: z.enum(["a", "b"]),
+      name: z.string(),
+      score: z.number().int(),
+      players: z.array(AllStarPlayerSchema),
+    }),
+  ),
+});
+export type AllStarGame = z.infer<typeof AllStarGameSchema>;
+
+/** GET /api/v1/leagues/:leagueId/all-star?year=: a season's All-Star Game (the latest by default); null before the first. */
+export const AllStarResponseSchema = z.object({
+  game: AllStarGameSchema.nullable(),
+});
+export type AllStarResponse = z.infer<typeof AllStarResponseSchema>;
+
+/** A game in a team's recent results or upcoming games. */
+export const TeamGameSchema = z.object({
+  gameId: z.uuid(),
+  day: z.number().int(),
+  opponentId: z.uuid(),
+  home: z.boolean(),
+  /** For a played game: whether the team won, and its score first ("101-96"). */
+  won: z.boolean().nullable(),
+  score: z.string().nullable(),
+  /** The playoff round, for a playoff game. */
+  round: z.number().int().nullable(),
+});
+
+/**
+ * GET /api/v1/leagues/:leagueId/teams/:teamId/overview: how a team's season is
+ * going (docs/DESIGN.md, "The team page").
+ */
+export type TeamGame = z.infer<typeof TeamGameSchema>;
+
+export const TeamOverviewSchema = z.object({
+  teamId: z.uuid(),
+  /** Null before there is a season. */
+  season: z.object({ year: z.number().int(), phase: z.string() }).nullable(),
+  /** The regular-season record and where it stands; null before a game is played. */
+  record: z
+    .object({
+      rank: z.number().int(),
+      teams: z.number().int(),
+      wins: z.number().int(),
+      losses: z.number().int(),
+      pointsFor: z.number(),
+      pointsAgainst: z.number(),
+      streak: z.string(),
+      lastTen: z.string(),
+    })
+    .nullable(),
+  /** How the team plays, in words, and whether the owner set it. */
+  style: z.object({
+    pace: z.enum(["slow", "normal", "fast"]),
+    threePointFocus: z.enum(["low", "normal", "high"]),
+    defense: z.enum(["balanced", "perimeter", "interior"]),
+    words: z.string(),
+    setByOwner: z.boolean(),
+  }),
+  /** The latest five results, newest first, and the next three games. */
+  recent: z.array(TeamGameSchema),
+  upcoming: z.array(TeamGameSchema),
+  /** The team's best player in points, rebounds and assists per game, this season so far. */
+  leaders: z.array(
+    z.object({
+      category: z.enum(["points", "rebounds", "assists"]),
+      playerId: z.uuid(),
+      name: z.string(),
+      perGame: z.number(),
+    }),
+  ),
+});
+export type TeamOverview = z.infer<typeof TeamOverviewSchema>;
+
+/** GET /api/v1/leagues/:leagueId/export: a backup of the whole league, as one file. */
+const ExportRows = z.array(z.record(z.string(), z.unknown()));
+export const LeagueExportSchema = z.object({
+  /** The layout of this file; changes when a table or a field's meaning does. */
+  format: z.literal(2),
+  exportedAt: z.iso.datetime(),
+  /** The league's own row. */
+  league: z.record(z.string(), z.unknown()),
+  /** Every table that belongs to the league, by name. */
+  tables: z.record(z.string(), ExportRows),
+});
+export type LeagueExport = z.infer<typeof LeagueExportSchema>;

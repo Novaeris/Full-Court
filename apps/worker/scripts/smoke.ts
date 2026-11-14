@@ -199,6 +199,7 @@ async function main(): Promise<void> {
       pollMs: 100,
       staleAfterMs: 60_000,
       once: true,
+      onlyLeague: undefined,
     });
     const run = () =>
       work(db, {

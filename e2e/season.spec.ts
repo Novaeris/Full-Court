@@ -45,7 +45,7 @@ test.describe("simulation and season pages", () => {
     await expect(page.getByRole("status")).toContainText("Queued");
 
     // A worker picks it up; the page follows along and refreshes.
-    runWorker();
+    runWorker(league.id);
     await expect(page.getByText("Simulated 7 days.")).toBeVisible({
       timeout: 30_000,
     });
@@ -108,7 +108,7 @@ test.describe("simulation and season pages", () => {
     test.setTimeout(180_000);
     const { user, api, league } = await startedLeague("seasonlayout");
     await api.leagues.simulate(league.id, { kind: "week" });
-    runWorker();
+    runWorker(league.id);
     const { games } = await api.leagues.schedule(league.id, {
       team: league.userTeamId as string,
     });
@@ -183,7 +183,7 @@ test.describe("season API", () => {
     });
 
     await api.leagues.simulate(league.id, { kind: "week" });
-    runWorker();
+    runWorker(league.id);
 
     // The schedule.
     const mine = await api.leagues.schedule(league.id, {

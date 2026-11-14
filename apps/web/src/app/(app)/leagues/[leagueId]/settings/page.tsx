@@ -8,6 +8,8 @@ import {
   RenameStructureForm,
 } from "@/components/leagues/league-forms";
 import { LeagueRules } from "@/components/leagues/league-rules";
+import { ReplaceLeagueForm } from "@/components/leagues/replace-league-form";
+import { SeasonRulesForm } from "@/components/leagues/season-rules-form";
 import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { loadLeague } from "@/server/leagues/load";
 import { getSettings } from "@/server/services/leagues";
@@ -44,11 +46,41 @@ async function Settings({
         <RenameLeagueForm leagueId={league.id} current={league.name} />
       </SettingsCard>
       <SettingsCard
+        title="Back up this league"
+        description="Save everything in it (teams, players, seasons, games and awards) as one file on your computer."
+      >
+        <a
+          href={`/api/v1/leagues/${league.id}/export`}
+          download="full-court-league.json"
+          className="inline-flex min-h-11 items-center rounded-md border border-border px-4 font-semibold"
+        >
+          Download a backup
+        </a>
+      </SettingsCard>
+      <SettingsCard
+        title="Restore a backup over this league"
+        description="Replace this league with a backup you downloaded. The league you have now is removed, but only once the backup has been restored. To keep it, restore into a new league from the Leagues page instead."
+      >
+        <ReplaceLeagueForm leagueId={league.id} name={league.name} />
+      </SettingsCard>
+      <SettingsCard
         title="League rules"
         description="The rules this league was created with."
       >
         <LeagueRules settings={settings} structure={structure} />
       </SettingsCard>
+      {settings.legacy ? null : (
+        <SettingsCard
+          title="Rules for the next season"
+          description="The season length and the playoff format. The season being played keeps the rules it began with; changes start when the next season is created."
+        >
+          <SeasonRulesForm
+            leagueId={league.id}
+            settings={settings}
+            structure={structure}
+          />
+        </SettingsCard>
+      )}
       <SettingsCard
         title="Conferences and divisions"
         description="Rename them whenever you like. Only the names change: teams, schedules and records stay exactly as they are."

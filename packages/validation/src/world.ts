@@ -51,6 +51,9 @@ export const PlayerSchema = z.object({
   overall: rating,
   potential: rating,
   ratings: RatingsSchema,
+  /** Days he is still out hurt (0 when fit), and what is wrong. */
+  injuryDays: z.number().int(),
+  injuryKind: z.string().nullable(),
 });
 export type Player = z.infer<typeof PlayerSchema>;
 

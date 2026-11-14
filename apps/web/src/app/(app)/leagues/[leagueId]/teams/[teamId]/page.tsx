@@ -1,5 +1,5 @@
 import { formatHeight } from "@fullcourt/game-rules";
-import type { Player } from "@fullcourt/validation";
+import type { Player, TeamGame } from "@fullcourt/validation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,7 +9,9 @@ import { TeamBadge, teamName } from "@/components/leagues/team-badge";
 import { ResponsiveTable, type Column } from "@/components/ui/responsive-table";
 import { ApiError } from "@/server/api/handler";
 import { loadLeague } from "@/server/leagues/load";
-import { getTeam } from "@/server/services/world";
+import { getHeadToHead } from "@/server/services/head-to-head";
+import { getTeamOverview } from "@/server/services/team-overview";
+import { getTeam, listTeams } from "@/server/services/world";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -39,6 +41,32 @@ async function TeamRoster({
     throw error;
   });
   const { team, players } = detail;
+  const [overview, allTeams, h2h] = await Promise.all([
+    getTeamOverview(ctx, league.id, teamId),
+    listTeams(ctx, league.id),
+    getHeadToHead(ctx, league.id, teamId),
+  ]);
+  const opponent = (id: string) => {
+    const t = allTeams.find((x) => x.id === id);
+    return t ? t.abbreviation : "?";
+  };
+  const gameLine = (g: TeamGame, upcoming: boolean) => (
+    <li
+      key={g.gameId}
+      className="flex flex-wrap justify-between gap-x-3 border-t border-border py-1.5 first:border-t-0"
+    >
+      <Link
+        href={`/leagues/${league.id}/games/${g.gameId}`}
+        className="inline-flex min-h-touch items-center text-accent underline underline-offset-4"
+      >
+        Day {g.day}: {g.home ? "vs" : "at"} {opponent(g.opponentId)}
+        {g.round ? " (playoffs)" : ""}
+      </Link>
+      <span className="tabular-nums">
+        {upcoming ? "" : `${g.won ? "W" : "L"} ${g.score}`}
+      </span>
+    </li>
+  );
   const control = controlLabel(team.localPlayerSlot, league.localPlayerCount);
 
   const columns: Column<Player>[] = [
@@ -58,6 +86,19 @@ async function TeamRoster({
       ),
     },
     { key: "pos", header: "Position", abbr: "Pos", cell: (p) => p.position },
+    {
+      key: "status",
+      header: "Status",
+      cell: (p) =>
+        p.injuryDays > 0 ? (
+          <span className="font-semibold text-danger">
+            Out {p.injuryDays} {p.injuryDays === 1 ? "day" : "days"}
+            <span className="sr-only">: {p.injuryKind}</span>
+          </span>
+        ) : (
+          <span className="text-text-muted">Fit</span>
+        ),
+    },
     {
       key: "ovr",
       header: "Overall",
@@ -156,6 +197,130 @@ async function TeamRoster({
           </p>
         </div>
       </section>
+      <section
+        aria-labelledby="overview-heading"
+        className="rounded-lg border border-border bg-surface p-5"
+      >
+        <h3 id="overview-heading" className="text-lg font-bold">
+          {overview.season ? `${overview.season.year} season` : "This season"}
+        </h3>
+        {overview.record ? (
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 tablet:grid-cols-5">
+            {[
+              ["Record", `${overview.record.wins}-${overview.record.losses}`],
+              ["Rank", `${overview.record.rank} of ${overview.record.teams}`],
+              [
+                "Points",
+                `${overview.record.pointsFor.toFixed(1)} for, ${overview.record.pointsAgainst.toFixed(1)} against`,
+              ],
+              ["Streak", overview.record.streak || "-"],
+              ["Last 10", overview.record.lastTen || "-"],
+            ].map(([label, value]) => (
+              <div key={label} className="flex flex-col">
+                <dt className="text-sm text-text-muted">{label}</dt>
+                <dd className="font-bold tabular-nums">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="mt-2 text-text-muted">No games played yet.</p>
+        )}
+        <p className="mt-3">
+          <span className="font-semibold">How they play:</span>{" "}
+          {overview.style.words}{" "}
+          <span className="text-sm text-text-muted">
+            (
+            {overview.style.setByOwner
+              ? "set by the owner"
+              : "chosen to suit the roster"}
+            )
+          </span>
+        </p>
+        {overview.leaders.length > 0 ? (
+          <p className="mt-2 text-sm">
+            <span className="font-semibold">Leaders:</span>{" "}
+            {overview.leaders.map((l, i) => (
+              <span key={l.category}>
+                {i > 0 ? " · " : ""}
+                <Link
+                  href={`/leagues/${league.id}/players/${l.playerId}`}
+                  className="text-accent underline underline-offset-4"
+                >
+                  {l.name}
+                </Link>{" "}
+                {l.perGame.toFixed(1)}{" "}
+                {l.category === "points"
+                  ? "pts"
+                  : l.category === "rebounds"
+                    ? "reb"
+                    : "ast"}
+              </span>
+            ))}
+          </p>
+        ) : null}
+        {overview.recent.length + overview.upcoming.length > 0 ? (
+          <div className="mt-3 grid gap-4 tablet:grid-cols-2">
+            {overview.recent.length > 0 ? (
+              <div>
+                <h4 className="font-semibold">Latest results</h4>
+                <ul>{overview.recent.map((g) => gameLine(g, false))}</ul>
+              </div>
+            ) : null}
+            {overview.upcoming.length > 0 ? (
+              <div>
+                <h4 className="font-semibold">Next games</h4>
+                <ul>{overview.upcoming.map((g) => gameLine(g, true))}</ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+      {h2h.opponents.length > 0 ? (
+        <section
+          aria-labelledby="h2h-heading"
+          className="rounded-lg border border-border bg-surface p-5"
+        >
+          <h3 id="h2h-heading" className="text-lg font-bold">
+            Head to head
+          </h3>
+          <p className="text-sm text-text-muted">
+            All-time record against each opponent, most games first. A rivalry
+            is a pair that has played at least six playoff games.
+          </p>
+          <ul className="mt-2">
+            {h2h.opponents.map((o) => {
+              const other = allTeams.find((x) => x.id === o.opponentId);
+              return (
+                <li
+                  key={o.opponentId}
+                  className="flex flex-col gap-0.5 border-t border-border py-2 first:border-t-0"
+                >
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <Link
+                      href={`/leagues/${league.id}/teams/${o.opponentId}`}
+                      className="inline-flex min-h-touch items-center font-semibold text-accent underline underline-offset-4"
+                    >
+                      {other ? teamName(other) : "Unknown team"}
+                    </Link>
+                    <span className="font-bold tabular-nums">
+                      {o.regular.wins}-{o.regular.losses}
+                    </span>
+                  </p>
+                  <p className="text-sm text-text-muted">
+                    {o.rival ? "Rivalry · " : ""}
+                    {o.playoffs.wins + o.playoffs.losses > 0
+                      ? `Playoffs ${o.playoffs.wins}-${o.playoffs.losses} · `
+                      : ""}
+                    Last: {o.last.won ? "won" : "lost"} {o.last.score} (
+                    {o.last.year}
+                    {o.last.playoff ? ", playoffs" : ""})
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
       <ResponsiveTable
         caption={`${teamName(team)} roster`}
         columns={columns}

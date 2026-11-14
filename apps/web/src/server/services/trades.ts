@@ -1,9 +1,17 @@
 import "server-only";
-import { shopPlayers } from "@fullcourt/game-engine";
+import {
+  createRng,
+  proposeAiTrades,
+  proposeOwnerOffers,
+  seedState,
+  shopPlayers,
+} from "@fullcourt/game-engine";
 import {
   answerTrade,
   dealWords,
   hardCeiling,
+  pickValue,
+  teamWorstness,
   tradeDeadlineDay,
   tradeProblems,
   tradeValue,
@@ -11,18 +19,29 @@ import {
 } from "@fullcourt/game-rules";
 import type { Position } from "@fullcourt/game-types";
 import type {
+  OfferAnswer,
   OffseasonPlayer,
   ShopRequest,
   ShopResponse,
   TradeEvaluation,
   TradePartnerResponse,
+  TradeOffer,
+  TradePick,
   TradePlayer,
   TradeProposal,
   TradeRecord,
   TradeResult,
   TradesResponse,
+  TradingBlockRequest,
 } from "@fullcourt/validation";
-import { applyTrade } from "@/server/admin/offseason";
+import {
+  acceptTradeOffer,
+  applyTrade,
+  declineTradeOffer,
+  ensurePickRights,
+  replaceTradeOffers,
+  setTradingBlock,
+} from "@/server/admin/offseason";
 import { ApiError } from "@/server/api/handler";
 import type { UserContext } from "@/server/auth/session";
 import { getLeague, parseLeagueId } from "./leagues";
@@ -103,6 +122,85 @@ function tradePlayer(r: Row, season: SeasonRow): TradePlayer {
     salary: a.salary,
     yearsLeft: a.yearsLeft,
     value: Math.round(tradeValue(a, season.salary_cap)),
+  };
+}
+
+type PickRow = {
+  id: string;
+  season_year: number;
+  round: number;
+  original_team_id: string;
+  team_id: string;
+};
+
+/** Every pick still to be drafted, made if it didn't exist yet. */
+async function pickRows(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+): Promise<PickRow[]> {
+  await ensurePickRights(season.id);
+  const { data, error } = await ctx.supabase
+    .from("pick_rights")
+    .select("id, season_year, round, original_team_id, team_id")
+    .eq("league_id", leagueId)
+    .gt("season_year", season.year)
+    .order("season_year")
+    .order("round");
+  if (error) throw error;
+  return data;
+}
+
+/** How weak each team is: 0 for the strongest, 1 for the weakest (its best eight players). */
+function worstnessOf(rows: readonly Row[]): Map<string, number> {
+  const overalls = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!r.team_id) continue;
+    overalls.set(r.team_id, [...(overalls.get(r.team_id) ?? []), r.overall]);
+  }
+  return teamWorstness(
+    [...overalls.entries()].map(([id, list]) => ({ id, overalls: list })),
+  );
+}
+
+/** The picks each team holds, valued, for the computer's trades. */
+function picksByTeam(
+  picks: readonly PickRow[],
+  season: SeasonRow,
+  worst: ReadonlyMap<string, number>,
+): Map<string, { id: string; value: number }[]> {
+  const held = new Map<string, { id: string; value: number }[]>();
+  for (const p of picks) {
+    const list = held.get(p.team_id) ?? [];
+    list.push({ id: p.id, value: pickWorth(p, season, worst) });
+    held.set(p.team_id, list);
+  }
+  return held;
+}
+
+function pickWorth(
+  p: PickRow,
+  season: SeasonRow,
+  worst: ReadonlyMap<string, number>,
+): number {
+  return pickValue({
+    round: p.round,
+    yearsAway: p.season_year - season.year,
+    worstness: worst.get(p.original_team_id) ?? 0.5,
+  });
+}
+
+function pickView(
+  p: PickRow,
+  season: SeasonRow,
+  worst: ReadonlyMap<string, number>,
+): TradePick {
+  return {
+    id: p.id,
+    seasonYear: p.season_year,
+    round: p.round,
+    originalTeamId: p.original_team_id,
+    value: Math.round(pickWorth(p, season, worst)),
   };
 }
 
@@ -192,7 +290,9 @@ export async function getTrades(
 
   const trades = await ctx.supabase
     .from("trades")
-    .select("id, season_year, day, team_a, team_b, gave_a, gave_b")
+    .select(
+      "id, season_year, day, team_a, team_b, gave_a, gave_b, gave_picks_a, gave_picks_b",
+    )
     .eq("league_id", league.id)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -214,6 +314,33 @@ export async function getTrades(
       const p = byId.get(id);
       return p ? [p] : [];
     });
+  const pickIds = [
+    ...new Set(
+      trades.data.flatMap((t) => [...t.gave_picks_a, ...t.gave_picks_b]),
+    ),
+  ];
+  const tradedPicks = pickIds.length
+    ? await ctx.supabase
+        .from("pick_rights")
+        .select("id, season_year, round, original_team_id")
+        .eq("league_id", league.id)
+        .in("id", pickIds)
+    : { data: [], error: null };
+  if (tradedPicks.error) throw tradedPicks.error;
+  const pickById = new Map(tradedPicks.data.map((p) => [p.id, p]));
+  const namedPicks = (list: string[]) =>
+    list.flatMap((id) => {
+      const p = pickById.get(id);
+      return p
+        ? [
+            {
+              seasonYear: p.season_year,
+              round: p.round,
+              originalTeamId: p.original_team_id,
+            },
+          ]
+        : [];
+    });
   const history: TradeRecord[] = trades.data.map((t) => ({
     id: t.id,
     seasonYear: t.season_year,
@@ -222,7 +349,18 @@ export async function getTrades(
     teamB: t.team_b,
     gaveA: named(t.gave_a),
     gaveB: named(t.gave_b),
+    picksA: namedPicks(t.gave_picks_a),
+    picksB: namedPicks(t.gave_picks_b),
   }));
+
+  const offers = await openOffers(ctx, league.id, season, teamId, rows, w);
+  const worst = worstnessOf(rows);
+  const myPicks =
+    season && teamId
+      ? (await pickRows(ctx, league.id, season))
+          .filter((p) => p.team_id === teamId)
+          .map((p) => pickView(p, season, worst))
+      : [];
 
   return {
     teamId,
@@ -247,6 +385,9 @@ export async function getTrades(
         size: rows.filter((r) => r.team_id === t.id).length,
       })),
     history,
+    block: owned.find((t) => t.id === teamId)?.block ?? [],
+    picks: myPicks,
+    offers,
   };
 }
 
@@ -276,12 +417,16 @@ export async function getTradePartner(
       "That isn't a team you can trade with.",
     );
   }
+  const worst = worstnessOf(await rosterRows(ctx, league.id));
   return {
     teamId: partnerId,
     payroll: payrollOf(rows, partnerId),
     roster: rows
       .map((r) => tradePlayer(r, season))
       .sort((a, b) => b.value - a.value),
+    picks: (await pickRows(ctx, league.id, season))
+      .filter((p) => p.team_id === partnerId)
+      .map((p) => pickView(p, season, worst)),
   };
 }
 
@@ -301,7 +446,7 @@ async function judge(
   if (!w.open)
     throw new ApiError(409, "trades_closed", w.reason ?? "Trades are closed.");
 
-  const rows = await rosterRows(ctx, leagueId, [mine, input.partnerId]);
+  const rows = await rosterRows(ctx, leagueId);
   const mineRows = rows.filter((r) => r.team_id === mine);
   const theirRows = rows.filter((r) => r.team_id === input.partnerId);
   if (theirRows.length === 0) {
@@ -324,6 +469,27 @@ async function judge(
   const sum = (list: readonly Row[]) =>
     list.reduce((s, r) => s + (r.salary ?? 0), 0);
   const assets = (list: readonly Row[]) => list.map((r) => assetOf(r, season));
+
+  const picks = await pickRows(ctx, leagueId, season);
+  const givePicks = picks.filter(
+    (p) => p.team_id === mine && input.givePicks.includes(p.id),
+  );
+  const getPicks = picks.filter(
+    (p) => p.team_id === input.partnerId && input.getPicks.includes(p.id),
+  );
+  if (
+    givePicks.length !== input.givePicks.length ||
+    getPicks.length !== input.getPicks.length
+  ) {
+    throw new ApiError(
+      422,
+      "pick_not_on_team",
+      "Every pick has to belong to the team that gives it.",
+    );
+  }
+  const worst = worstnessOf(rows);
+  const pickTotal = (list: readonly PickRow[]) =>
+    list.reduce((s, p) => s + pickWorth(p, season, worst), 0);
 
   const problems = tradeProblems({
     a: {
@@ -348,6 +514,8 @@ async function judge(
     receives: assets(give),
     cap,
     inSeason: w.inSeason,
+    picksGiven: pickTotal(getPicks),
+    picksReceived: pickTotal(givePicks),
   });
   return {
     mine,
@@ -399,6 +567,8 @@ export async function proposeTrade(
       teamB: input.partnerId,
       fromA: input.give,
       fromB: input.get,
+      picksA: input.givePicks,
+      picksB: input.getPicks,
     });
   } catch (error) {
     const message = (error as { message?: string }).message;
@@ -406,7 +576,8 @@ export async function proposeTrade(
       message === "trades_closed" ||
       message === "invalid_rosters" ||
       message === "over_ceiling" ||
-      message === "player_not_on_team"
+      message === "player_not_on_team" ||
+      message === "pick_not_on_team"
     ) {
       throw new ApiError(
         409,
@@ -478,4 +649,320 @@ export async function shopTradePlayers(
       deal: dealWords(o.receives, o.gives),
     })),
   };
+}
+
+/** The most trades the computer teams make in one round. */
+const AI_TRADES_PER_ROUND = 2;
+
+/**
+ * One round of trades between computer teams (and owner teams whose AI Assist
+ * _trades_ switch is on), in whatever window is open. The round is seeded from
+ * the league, the year, the stage and `round`, so it is the same however the
+ * days are batched. A trade the database refuses is skipped, never fatal.
+ */
+export async function runComputerTrades(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+  round: number,
+): Promise<number> {
+  const w = window(season);
+  if (!w.open) return 0;
+  const owned = await ownedTeams(ctx, leagueId);
+  const held = new Set(owned.filter((t) => !t.assist.trades).map((t) => t.id));
+  const rows = await rosterRows(ctx, leagueId);
+  const heldPicks = picksByTeam(
+    await pickRows(ctx, leagueId, season),
+    season,
+    worstnessOf(rows),
+  );
+  const teamIds = [
+    ...new Set(rows.flatMap((r) => (r.team_id ? [r.team_id] : []))),
+  ]
+    .filter((id) => !held.has(id))
+    .sort();
+  const trades = proposeAiTrades(
+    createRng(
+      seedState(
+        `${leagueId}:ai-trades:${season.year}:${season.stage ?? season.phase}:${round}`,
+      ),
+    ),
+    {
+      teams: teamIds.map((id) => ({
+        id,
+        payroll: payrollOf(rows, id),
+        roster: rows
+          .filter((r) => r.team_id === id)
+          .map((r) => assetOf(r, season)),
+        picks: heldPicks.get(id) ?? [],
+      })),
+      cap: season.salary_cap,
+      inSeason: w.inSeason,
+      most: AI_TRADES_PER_ROUND,
+    },
+  );
+  let made = 0;
+  for (const t of trades) {
+    try {
+      await applyTrade({
+        seasonId: season.id,
+        teamA: t.teamA,
+        teamB: t.teamB,
+        fromA: t.fromA,
+        fromB: t.fromB,
+        picksA: t.picksA,
+        picksB: t.picksB,
+      });
+      made++;
+    } catch {
+      // The database holds the limits; a refused trade just doesn't happen.
+    }
+  }
+  await refreshTradeOffers(ctx, leagueId, season, round);
+  return made;
+}
+
+/** Open offers to a team, each checked again against the rosters as they are now. */
+async function openOffers(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow | null,
+  teamId: string | null,
+  rows: readonly Row[],
+  w: ReturnType<typeof window>,
+): Promise<TradeOffer[]> {
+  if (!season || !teamId) return [];
+  const found = await ctx.supabase
+    .from("trade_offers")
+    .select("id, day, team_id, partner_id, give, get, get_picks")
+    .eq("league_id", leagueId)
+    .eq("season_id", season.id)
+    .eq("team_id", teamId)
+    .eq("status", "open")
+    .order("created_at");
+  if (found.error) throw found.error;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const wanted = found.data.some((o) => o.get_picks.length > 0);
+  const pickById = new Map(
+    (wanted ? await pickRows(ctx, leagueId, season) : []).map((p) => [p.id, p]),
+  );
+  const worst = worstnessOf(rows);
+  const sum = (list: readonly Row[]) =>
+    list.reduce((s, r) => s + (r.salary ?? 0), 0);
+  const cap = season.salary_cap;
+  return found.data.map((o) => {
+    const give = o.give.flatMap((id) => byId.get(id) ?? []);
+    const get = o.get.flatMap((id) => byId.get(id) ?? []);
+    const mine = rows.filter((r) => r.team_id === o.team_id);
+    const theirs = rows.filter((r) => r.team_id === o.partner_id);
+    const getPicks = o.get_picks.flatMap((id) => pickById.get(id) ?? []);
+    const problems: string[] = [];
+    if (!w.open) problems.push(w.reason ?? "Trades are closed.");
+    if (
+      getPicks.length !== o.get_picks.length ||
+      getPicks.some((p) => p.team_id !== o.partner_id)
+    ) {
+      problems.push("A pick in this offer has moved.");
+    }
+    if (
+      give.length !== o.give.length ||
+      get.length !== o.get.length ||
+      give.some((r) => r.team_id !== o.team_id) ||
+      get.some((r) => r.team_id !== o.partner_id)
+    ) {
+      problems.push("A player in this offer has moved.");
+    } else {
+      problems.push(
+        ...tradeProblems({
+          a: {
+            payroll: sum(mine),
+            size: mine.length,
+            out: give.map((r) => assetOf(r, season)),
+            in: get.map((r) => assetOf(r, season)),
+          },
+          b: {
+            payroll: sum(theirs),
+            size: theirs.length,
+            out: get.map((r) => assetOf(r, season)),
+            in: give.map((r) => assetOf(r, season)),
+          },
+          cap,
+          ceiling: hardCeiling(cap),
+          inSeason: w.inSeason,
+        }),
+      );
+    }
+    return {
+      id: o.id,
+      day: o.day,
+      teamId: o.team_id,
+      partnerId: o.partner_id,
+      give: give.map((r) => tradePlayer(r, season)),
+      get: get.map((r) => tradePlayer(r, season)),
+      getPicks: getPicks.map((p) => pickView(p, season, worst)),
+      problems,
+    };
+  });
+}
+
+/** Accepts or declines an offer from a computer team. */
+export async function answerTradeOffer(
+  ctx: UserContext,
+  leagueIdParam: string,
+  input: OfferAnswer,
+): Promise<TradesResponse> {
+  const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
+  const found = await ctx.supabase
+    .from("trade_offers")
+    .select("id, team_id, status")
+    .eq("league_id", league.id)
+    .eq("id", input.offerId)
+    .maybeSingle();
+  if (found.error) throw found.error;
+  if (!found.data) {
+    throw new ApiError(404, "offer_not_found", "That offer isn't there.");
+  }
+  if (found.data.status !== "open") {
+    throw new ApiError(409, "offer_not_open", "That offer is no longer open.");
+  }
+  const teamId = found.data.team_id;
+  if (input.action === "decline") {
+    await declineTradeOffer(input.offerId);
+    return getTrades(ctx, leagueIdParam, teamId);
+  }
+  const before = await getTrades(ctx, leagueIdParam, teamId);
+  const offer = before.offers.find((o) => o.id === input.offerId);
+  if (!offer || offer.problems.length > 0) {
+    throw new ApiError(
+      409,
+      "offer_unavailable",
+      offer?.problems[0] ?? "That offer can't be accepted now.",
+    );
+  }
+  try {
+    await acceptTradeOffer(input.offerId);
+  } catch (error) {
+    const message = (error as { message?: string }).message;
+    if (
+      message === "trades_closed" ||
+      message === "invalid_rosters" ||
+      message === "over_ceiling" ||
+      message === "player_not_on_team" ||
+      message === "pick_not_on_team" ||
+      message === "offer_not_open"
+    ) {
+      throw new ApiError(
+        409,
+        message,
+        "That offer can't be accepted as things stand.",
+      );
+    }
+    throw error;
+  }
+  return getTrades(ctx, leagueIdParam, teamId);
+}
+
+/** The most offers one owner team has open at once. */
+const OFFERS_PER_TEAM = 2;
+
+/**
+ * Replaces the open offers with new ones from the computer teams, for every
+ * owner team that has not handed trades to AI Assist. Seeded like a round.
+ */
+export async function refreshTradeOffers(
+  ctx: UserContext,
+  leagueId: string,
+  season: SeasonRow,
+  round: number,
+): Promise<void> {
+  const w = window(season);
+  const owned = await ownedTeams(ctx, leagueId);
+  const targets = owned.filter((t) => !t.assist.trades);
+  if (targets.length === 0) return;
+  if (!w.open) {
+    await replaceTradeOffers({ seasonId: season.id, offers: [] });
+    return;
+  }
+  const ownedIds = new Set(owned.map((t) => t.id));
+  const rows = await rosterRows(ctx, leagueId);
+  const teamIds = [
+    ...new Set(
+      rows.flatMap((r) =>
+        r.team_id && !ownedIds.has(r.team_id) ? [r.team_id] : [],
+      ),
+    ),
+  ].sort();
+  const heldPicks = picksByTeam(
+    await pickRows(ctx, leagueId, season),
+    season,
+    worstnessOf(rows),
+  );
+  const computer = teamIds.map((id) => ({
+    id,
+    payroll: payrollOf(rows, id),
+    roster: rows.filter((r) => r.team_id === id).map((r) => assetOf(r, season)),
+    picks: heldPicks.get(id) ?? [],
+  }));
+  const offers = targets.flatMap((t) =>
+    proposeOwnerOffers(
+      createRng(
+        seedState(
+          `${leagueId}:offers:${t.id}:${season.year}:${season.stage ?? season.phase}:${round}`,
+        ),
+      ),
+      {
+        owner: {
+          payroll: payrollOf(rows, t.id),
+          roster: rows
+            .filter((r) => r.team_id === t.id)
+            .map((r) => assetOf(r, season)),
+        },
+        block: t.block,
+        teams: computer,
+        cap: season.salary_cap,
+        inSeason: w.inSeason,
+        most: OFFERS_PER_TEAM,
+      },
+    ).map((o) => ({
+      team_id: t.id,
+      partner_id: o.partnerId,
+      give: o.give,
+      get: o.get,
+      get_picks: o.getPicks,
+    })),
+  );
+  await replaceTradeOffers({ seasonId: season.id, offers });
+}
+
+/** Puts up to five of your players on the trading block; the computer teams then make offers for them. */
+export async function setBlock(
+  ctx: UserContext,
+  leagueIdParam: string,
+  input: TradingBlockRequest,
+): Promise<TradesResponse> {
+  const league = await getLeague(ctx, parseLeagueId(leagueIdParam));
+  const mine = await resolveTeam(ctx, league.id, input.teamId);
+  try {
+    await setTradingBlock({ teamId: mine, playerIds: input.playerIds });
+  } catch (error) {
+    if ((error as { message?: string }).message === "invalid_block") {
+      throw new ApiError(
+        422,
+        "invalid_block",
+        "The block can hold up to five different players from your own roster.",
+      );
+    }
+    throw error;
+  }
+  // New offers for the new block, at once, if trades are open.
+  const season = await latestSeason(ctx, league.id);
+  if (season && window(season).open) {
+    await refreshTradeOffers(
+      ctx,
+      league.id,
+      season,
+      season.phase === "offseason" ? season.fa_day : season.day,
+    );
+  }
+  return getTrades(ctx, leagueIdParam, mine);
 }

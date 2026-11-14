@@ -84,6 +84,60 @@ test.describe("trades and roster moves", () => {
       expect(before.history).toHaveLength(0);
     }
 
+    // Draft picks are assets: each team holds its next two drafts' picks.
+    const held = await api.leagues.trades(league.id);
+    expect(held.picks).toHaveLength(4);
+    expect(new Set(held.picks.map((p) => p.seasonYear)).size).toBe(2);
+    expect(held.picks.every((p) => p.value > 0)).toBe(true);
+    const picksOf = await api.leagues.tradePartner(league.id, partner.teamId);
+    expect(picksOf.picks).toHaveLength(4);
+    const rank = [
+      "not enough",
+      "close",
+      "good for them",
+      "very generous",
+      "a gift",
+    ];
+    const target = picksOf.roster[4]!;
+    const plain = await api.leagues.evaluateTrade(league.id, {
+      partnerId: partner.teamId,
+      give: [held.roster[held.roster.length - 1]!.id],
+      get: [target.id],
+    });
+    const sweetened = await api.leagues.evaluateTrade(league.id, {
+      partnerId: partner.teamId,
+      give: [held.roster[held.roster.length - 1]!.id],
+      get: [target.id],
+      givePicks: held.picks.map((p) => p.id),
+    });
+    expect(rank.indexOf(sweetened.deal)).toBeGreaterThanOrEqual(
+      rank.indexOf(plain.deal),
+    );
+    if (sweetened.legal && sweetened.accepts) {
+      const done = await api.leagues.proposeTrade(league.id, {
+        partnerId: partner.teamId,
+        give: [held.roster[held.roster.length - 1]!.id],
+        get: [target.id],
+        givePicks: held.picks.map((p) => p.id),
+      });
+      expect(done.done).toBe(true);
+      expect((await api.leagues.trades(league.id)).picks).toHaveLength(0);
+      const theirNow = await api.leagues.tradePartner(
+        league.id,
+        partner.teamId,
+      );
+      expect(theirNow.picks).toHaveLength(8);
+    }
+    // A pick that isn't the giving team's is refused.
+    await expect(
+      api.leagues.proposeTrade(league.id, {
+        partnerId: partner.teamId,
+        give: [],
+        get: [],
+        givePicks: [picksOf.picks[0]!.id],
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "pick_not_on_team" });
+
     // Trading with your own team, or with a player who is not on the team, is refused.
     await expect(
       api.leagues.proposeTrade(league.id, {

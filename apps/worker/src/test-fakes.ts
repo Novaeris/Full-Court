@@ -6,6 +6,7 @@ import {
   type PlayerRow,
   type SeasonRow,
   type SimJobRow,
+  type StoredInjury,
   type WorkerDb,
 } from "./db";
 
@@ -31,6 +32,7 @@ export function fakePlayers(rosterSize = 8): PlayerRow[] {
       speed: 58,
       strength: 55,
       stamina: 60 + i,
+      injury_days: 0,
     })),
   );
 }
@@ -51,6 +53,13 @@ export type FakeOptions = {
   commitError?: { onCall: number; error: Error };
   loadDayError?: Error;
   seasonPhase?: string;
+  /** Leave out `applyInjuries`, as a database without it would. */
+  withInjuries?: boolean;
+  injuryError?: Error;
+  /** Throw on this many claims (then work normally), as a dropped connection would. */
+  claimFailures?: number;
+  /** Throw on this many requeue checks. */
+  requeueFailures?: number;
 };
 
 /** An in-memory season, job and league that behaves like the database functions. */
@@ -75,17 +84,28 @@ export function fakeDb(options: FakeOptions = {}) {
   let rngState = [11, 22, 33, 44];
   const commits: DayCommit[] = [];
   const failures: { jobId: string; message: string }[] = [];
+  const injuryCalls: { day: number; injuries: StoredInjury[] }[] = [];
   let claimed = false;
   let requeueCalls = 0;
+  let claimsFailed = 0;
+  let requeuesFailed = 0;
   let commitCalls = 0;
 
   const db: WorkerDb = {
     async claimJob() {
+      if (claimsFailed < (options.claimFailures ?? 0)) {
+        claimsFailed++;
+        throw new TypeError("fetch failed");
+      }
       if (claimed) return null;
       claimed = true;
       return { ...job };
     },
     async requeueStale() {
+      if (requeuesFailed < (options.requeueFailures ?? 0)) {
+        requeuesFailed++;
+        throw new TypeError("fetch failed");
+      }
       requeueCalls++;
       return 0;
     },
@@ -134,6 +154,18 @@ export function fakeDb(options: FakeOptions = {}) {
     async failJob(jobId, message) {
       failures.push({ jobId, message });
     },
+    ...(options.withInjuries === false
+      ? {}
+      : {
+          async applyInjuries(
+            _seasonId: string,
+            day: number,
+            injuries: StoredInjury[],
+          ) {
+            if (options.injuryError) throw options.injuryError;
+            injuryCalls.push({ day, injuries });
+          },
+        }),
   };
 
   return {
@@ -142,6 +174,7 @@ export function fakeDb(options: FakeOptions = {}) {
     season,
     commits,
     failures,
+    injuryCalls,
     requeueCalls: () => requeueCalls,
   };
 }

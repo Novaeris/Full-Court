@@ -36,6 +36,11 @@ export {
 export { generateSchedule, type ScheduleOptions } from "./season/schedule";
 export { simulateGame } from "./season/game";
 export {
+  developPlayers,
+  type Developed,
+  type DevelopingPlayer,
+} from "./season/development";
+export {
   simulateDay,
   type SimulateDayInput,
   type SimulateDayResult,
@@ -100,7 +105,14 @@ export {
   type Progressed,
   type Rookie,
 } from "./offseason/offseason";
-export { coverRoster, fillRosters, type RosterMove } from "./offseason/rosters";
+export {
+  coverRoster,
+  fillRosters,
+  getsNewContract,
+  payrollOf,
+  shedPayroll,
+  type RosterMove,
+} from "./offseason/rosters";
 export {
   chooseCamp,
   runCamp,
@@ -128,3 +140,21 @@ export {
   type FaTeam,
 } from "./offseason/freeagency";
 export { shopPlayers, type ShopOffer, type ShopTeam } from "./offseason/trades";
+export {
+  proposeAiTrades,
+  proposeOwnerOffers,
+  type OwnerOffer,
+  AI_TRADE_EDGE,
+  type AiTrade,
+  type AiTradeTeam,
+  type PickAsset,
+} from "./offseason/ai-trades";
+export {
+  INJURY_RATE_PER_MINUTE,
+  MIN_HEALTHY,
+  injuryDetails,
+  sitOut,
+  type Injury,
+  type InjuryDetails,
+  type InjurySeverity,
+} from "./season/injuries";

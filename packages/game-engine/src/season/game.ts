@@ -16,6 +16,7 @@ import { cos, pow15, sin } from "../rng/dmath";
 import { normalSum, pick, weighted } from "../rng/helpers";
 import type { Rng } from "../rng/rng";
 import { buildBoxScore } from "./boxscore";
+import { INJURY_RATE_PER_MINUTE, injuryDetails, type Injury } from "./injuries";
 import type { Lineups, SimPlayer, SimTeam, SimulatedGame } from "./types";
 
 /** Mean seconds a fresh trip down the court takes, by pace. */
@@ -69,6 +70,10 @@ type Side = {
   fouls: Map<string, number>;
   periodFouls: number;
   score: number;
+  /** Players hurt in this game: out for the rest of it. */
+  injured: Set<string>;
+  /** The players the coach uses, or null for everyone. */
+  rotation: Set<string> | null;
 };
 
 const clamp = (n: number, lo: number, hi: number): number =>
@@ -103,6 +108,7 @@ export function simulateGame(
   };
 
   const plays: PlayEvent[] = [];
+  const injuries: Injury[] = [];
   let period = 0;
   let clock = 0;
 
@@ -173,10 +179,8 @@ export function simulateGame(
   /** A rested player who is clearly better replaces the weakest on court. */
   const bringBackBest = (side: Side): void => {
     for (;;) {
-      const candidates = side.bench.filter(
-        (p) =>
-          (side.fouls.get(p.id) ?? 0) < FOUL_OUT &&
-          (side.energy.get(p.id) ?? 1) >= FRESH,
+      const candidates = availableBench(side).filter(
+        (p) => (side.energy.get(p.id) ?? 1) >= FRESH,
       );
       if (candidates.length === 0) return;
       const best = candidates.reduce((a, p) =>
@@ -194,9 +198,7 @@ export function simulateGame(
     bringBackBest(side);
     // Fouled-out players leave first, then tired ones.
     for (;;) {
-      const eligible = side.bench.filter(
-        (p) => (side.fouls.get(p.id) ?? 0) < FOUL_OUT,
-      );
+      const eligible = availableBench(side);
       if (eligible.length === 0) return;
       const out = [...side.onCourt]
         .sort((a, b) => stayScore(side, a) - stayScore(side, b))
@@ -219,6 +221,37 @@ export function simulateGame(
         playerId: incoming.id,
         outPlayerId: out.id,
       });
+    }
+  };
+
+  /**
+   * After a trip that took `seconds`, everyone on the court may be hurt, the
+   * more likely the longer the trip. A hurt player leaves at once and doesn't
+   * return; with nobody to replace him he plays on, un-hurt. Every player on
+   * the court takes one draw whatever happens, so the rest of the game is
+   * the same stream either way.
+   */
+  const rollInjuries = (seconds: number): void => {
+    for (const side of sides) {
+      for (const player of [...side.onCourt]) {
+        const hurt =
+          rng.next() < (INJURY_RATE_PER_MINUTE * Math.max(0, seconds)) / 60;
+        if (!hurt) continue;
+        const details = injuryDetails(rng);
+        const eligible = availableBench(side);
+        if (eligible.length === 0) continue;
+        const incoming = eligible.reduce((best, p) =>
+          value(side, p) > value(side, best) ? p : best,
+        );
+        side.injured.add(player.id);
+        emit("injury", side, { playerId: player.id });
+        swap(side, player, incoming);
+        injuries.push({
+          playerId: player.id,
+          teamId: side.team.id,
+          ...details,
+        });
+      }
     }
   };
 
@@ -518,7 +551,9 @@ export function simulateGame(
     let origin: Origin = OTHER;
     while (clock > 0) {
       const defense = offense === homeSide ? awaySide : homeSide;
+      const before = clock;
       const outcome = trip(offense, defense, continuation, origin);
+      rollInjuries(before - clock);
       continuation = !outcome.deadBall && outcome.next === offense;
       origin = outcome.origin;
       offense = outcome.next;
@@ -546,6 +581,7 @@ export function simulateGame(
     plays,
     boxScore: buildBoxScore(game.id, plays, starters, teamOf),
     starters,
+    injuries,
   };
 }
 
@@ -563,7 +599,7 @@ const RESTED = 0.75;
 // ---- Helpers ----
 
 function makeSide(team: SimTeam, home: boolean): Side {
-  const starters = chooseStarters(team.players);
+  const starters = pickedStarters(team) ?? chooseStarters(team.players);
   const ids = new Set(starters.map((p) => p.id));
   return {
     team,
@@ -574,7 +610,50 @@ function makeSide(team: SimTeam, home: boolean): Side {
     fouls: new Map(),
     periodFouls: 0,
     score: 0,
+    injured: new Set(),
+    rotation: rotationOf(team, starters),
   };
+}
+
+/** The starters and the best of the rest, up to the size the coach asked for. */
+function rotationOf(
+  team: SimTeam,
+  starters: readonly SimPlayer[],
+): Set<string> | null {
+  const size = team.rotation;
+  if (!size || size >= team.players.length) return null;
+  const chosen = new Set(starters.map((p) => p.id));
+  const rest = team.players
+    .filter((p) => !chosen.has(p.id))
+    .sort((a, b) => b.overall - a.overall || (a.id < b.id ? -1 : 1));
+  for (const p of rest) {
+    if (chosen.size >= size) break;
+    chosen.add(p.id);
+  }
+  return chosen;
+}
+
+/**
+ * Who can come off the bench: nobody fouled out or hurt, and those the coach
+ * uses; if the rotation has nobody left, everyone else who can play.
+ */
+function availableBench(side: Side): SimPlayer[] {
+  const able = side.bench.filter(
+    (p) => (side.fouls.get(p.id) ?? 0) < FOUL_OUT && !side.injured.has(p.id),
+  );
+  if (!side.rotation) return able;
+  const rotation = side.rotation;
+  const inRotation = able.filter((p) => rotation.has(p.id));
+  return inRotation.length > 0 ? inRotation : able;
+}
+
+/** The coach's own five, if the team names five different players it has. */
+function pickedStarters(team: SimTeam): SimPlayer[] | null {
+  const named = team.starters;
+  if (!named || named.length !== 5 || new Set(named).size !== 5) return null;
+  const byId = new Map(team.players.map((p) => [p.id, p]));
+  const chosen = named.map((id) => byId.get(id));
+  return chosen.every((p) => p !== undefined) ? (chosen as SimPlayer[]) : null;
 }
 
 /** The best player at each position, then the best of the rest. */
@@ -597,7 +676,7 @@ function chooseStarters(players: readonly SimPlayer[]): SimPlayer[] {
 /** A rating after fatigue: a spent player plays up to 12 points worse. */
 function effective(side: Side, player: SimPlayer, key: RatingKey): number {
   const energy = side.energy.get(player.id) ?? 1;
-  return player.ratings[key] - 12 * (1 - energy);
+  return player.ratings[key] - 12 * (1 - energy) + (side.team.coachBonus ?? 0);
 }
 
 function avg(side: Side, key: RatingKey): number {
