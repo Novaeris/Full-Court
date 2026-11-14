@@ -13,6 +13,7 @@ import {
   HistoryResponseSchema,
   LeagueExportSchema,
   InboxResponseSchema,
+  NewsResponseSchema,
   ExtendResultSchema,
   ExtensionsResponseSchema,
   AllStarResponseSchema,
@@ -47,6 +48,7 @@ import {
   type HistoryResponse,
   type LeagueExport,
   type InboxResponse,
+  type NewsResponse,
   type ExtendRequest,
   type ExtendResult,
   type ExtensionsResponse,
@@ -576,6 +578,11 @@ export function createApiClient(options: ApiClientOptions) {
             teamId ? `?team=${encodeURIComponent(teamId)}` : ""
           }`,
           (b) => InboxResponseSchema.parse(b),
+        ),
+      /** What has happened around the league, newest first. */
+      news: (id: string): Promise<NewsResponse> =>
+        request("GET", `/leagues/${encodeURIComponent(id)}/news`, (b) =>
+          NewsResponseSchema.parse(b),
         ),
       /** A backup of the whole league: teams, players, seasons, games, awards. */
       exportLeague: (id: string): Promise<LeagueExport> =>

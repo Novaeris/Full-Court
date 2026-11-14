@@ -979,6 +979,30 @@ export const InboxResponseSchema = z.object({
 });
 export type InboxResponse = z.infer<typeof InboxResponseSchema>;
 
+export const NEWS_KINDS = [
+  "move",
+  "trade",
+  "injury",
+  "retirement",
+  "award",
+] as const;
+
+export const NewsItemSchema = z.object({
+  id: z.string(),
+  year: z.number().int(),
+  /** The season's day, 0 in the offseason; 998 and up come after the season's games. */
+  day: z.number().int(),
+  kind: z.enum(NEWS_KINDS),
+  text: z.string(),
+  /** A page to look at it on, if there is one. */
+  href: z.string().nullable(),
+});
+export type NewsItem = z.infer<typeof NewsItemSchema>;
+
+/** GET /api/v1/leagues/:leagueId/news: what has happened around the league, newest first. */
+export const NewsResponseSchema = z.object({ items: z.array(NewsItemSchema) });
+export type NewsResponse = z.infer<typeof NewsResponseSchema>;
+
 /**
  * GET /api/v1/leagues/:leagueId/stats?phase=: the league's leaders for the
  * season being played (docs/DESIGN.md, "Statistics").

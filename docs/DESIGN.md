@@ -114,6 +114,15 @@ _All amounts are tunable._ Salaries are in thousands of dollars a year. Everythi
 - **The rookie scale.** A first-round pick signs for three years at a salary that falls with the pick (the first pick earns 8% of the cap); a second-round pick signs for two years at the minimum.
 - **The minimum and the maximum.** The minimum salary is 0.8% of the cap and the maximum 30%.
 
+### League news
+
+The **News** tab lists what has happened around the league, newest first, so the other teams' moves can be seen, not only your own.
+
+- **What is in it.** Signings, re-signings, extensions and releases (by any team, the owner's included: your own moves appear in it too, exactly as the other teams' do), trades between any two teams, injuries that keep a player out three weeks or more, retirements, each season's champion and most valuable player.
+- **Same for everyone.** It is built from the league's records (the same ones that back the inbox, the history and the backup), so a computer team's move is shown in the same words and at the same time as the owner's. Nothing is announced that the records don't hold.
+- **How much.** The newest hundred items, with at most sixty of any one kind from the records behind them. Draft picks and contracts that simply ran out are left out, to keep it readable: the draft has its own page.
+- **Not yet:** filtering by team or kind, rumours, and reading older seasons' news beyond the newest hundred.
+
 ### League backup and restore
 
 On the league's Settings page, **Download a backup** saves the league as one JSON file (`full-court-league.json`). On the Leagues page, **Restore a backup** turns such a file back into a league.

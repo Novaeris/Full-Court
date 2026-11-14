@@ -13,6 +13,7 @@ const TABS = [
   { segment: "playoffs", label: "Playoffs" },
   { segment: "history", label: "History" },
   { segment: "inbox", label: "Inbox" },
+  { segment: "news", label: "News" },
   { segment: "moves", label: "Moves" },
   { segment: "offseason", label: "Offseason" },
   { segment: "settings", label: "Settings" },
